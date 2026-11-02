@@ -241,3 +241,15 @@ fn heavy_directories_are_where_files_live() {
     assert!(!heavy.contains(&f.home.join("code").to_str().unwrap()));
     assert!(!heavy.contains(&f.home.to_str().unwrap()));
 }
+
+#[test]
+fn measure_matches_the_scanner_and_ignores_symlinks() {
+    let f = fixture();
+    let o = run(&f);
+    let web = f.home.join("code/web");
+    std::os::unix::fs::symlink(f.home.join("Downloads"), web.join("link")).unwrap();
+    let measured = diskpilot_lib::scanner::measure(&web);
+    let scanned = o.index[&web].bytes;
+    // The new symlink adds at most one small entry; the 400 KB target is not followed.
+    assert!(measured >= scanned && measured < scanned + 50_000, "{scanned} vs {measured}");
+}

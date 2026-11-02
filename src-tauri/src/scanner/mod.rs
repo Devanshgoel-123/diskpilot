@@ -623,3 +623,35 @@ pub fn heavy_directories(index: &DirIndex, root: &Path, limit: usize) -> Vec<(Pa
     heavy.truncate(limit);
     heavy
 }
+
+/// Allocated size of one file or folder tree, measured on demand. Same rules
+/// as the scanner: no symlinks followed, one volume, hard links once.
+/// Unreadable entries are skipped.
+pub fn measure(path: &Path) -> u64 {
+    let Ok(root_meta) = fs::symlink_metadata(path) else {
+        return 0;
+    };
+    if !root_meta.is_dir() {
+        return allocated_bytes(&root_meta);
+    }
+    let dev = root_meta.dev();
+    let mut seen = HashSet::new();
+    let mut total = allocated_bytes(&root_meta);
+    let mut stack = vec![path.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&dir) else { continue };
+        for entry in entries.flatten() {
+            let Ok(meta) = entry.metadata() else { continue };
+            let ft = meta.file_type();
+            if ft.is_dir() {
+                if meta.dev() == dev {
+                    total += allocated_bytes(&meta);
+                    stack.push(entry.path());
+                }
+            } else if meta.nlink() <= 1 || seen.insert((meta.dev(), meta.ino())) {
+                total += allocated_bytes(&meta);
+            }
+        }
+    }
+    total
+}
