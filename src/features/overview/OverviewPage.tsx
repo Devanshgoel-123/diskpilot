@@ -1,4 +1,4 @@
-import { FolderSearch, ShieldCheck } from "lucide-react";
+import { FileStack, Files, FolderSearch, HardDrive, Recycle, ShieldCheck } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -74,6 +74,8 @@ export function OverviewPage() {
             <>
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                 <StatTile
+                  icon={HardDrive}
+                  tint="var(--accent)"
                   label="Scanned"
                   value={formatBytes(summary.totalBytes)}
                   hint={
@@ -83,16 +85,22 @@ export function OverviewPage() {
                   }
                 />
                 <StatTile
+                  icon={Files}
+                  tint="var(--cat-developer-tools)"
                   label="Files"
                   value={formatCount(summary.fileCount)}
                   hint={`${formatCount(summary.dirCount)} folders`}
                 />
                 <StatTile
+                  icon={Recycle}
+                  tint="var(--tier-safe)"
                   label="Potentially reclaimable"
                   value={formatBytes(regenerable)}
                   hint="Cache and build artifacts. An upper bound, not a promise: each item still needs review."
                 />
                 <StatTile
+                  icon={FileStack}
+                  tint="var(--cat-build-artifacts)"
                   label="Largest file"
                   value={formatBytes(summary.largestFiles[0]?.bytes ?? 0)}
                   hint={
@@ -115,7 +123,7 @@ export function OverviewPage() {
                   {consumers.length ? (
                     <LocationList locations={consumers} />
                   ) : (
-                    <p className="text-muted-foreground px-4 pb-4 text-xs">
+                    <p className="px-4 pb-4 text-xs text-muted-foreground">
                       No known developer or app storage was detected in this folder.
                     </p>
                   )}
@@ -131,7 +139,7 @@ export function OverviewPage() {
                   {worthReviewing.length ? (
                     <LocationList locations={worthReviewing} />
                   ) : (
-                    <p className="text-muted-foreground px-4 pb-4 text-xs">
+                    <p className="px-4 pb-4 text-xs text-muted-foreground">
                       No large caches or build artifacts among the top consumers.
                     </p>
                   )}

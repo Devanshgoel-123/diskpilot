@@ -10,7 +10,7 @@ import { SizeBar } from "@/components/shared/SizeBar";
 import { SortHeader } from "@/components/shared/SortHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ALL_CATEGORIES } from "@/lib/categories";
+import { ALL_CATEGORIES, CATEGORY_META } from "@/lib/categories";
 import { basename, formatBytes, formatCount, formatRelative, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { Category, Classification } from "@/lib/types";
@@ -112,11 +112,11 @@ export function LargeFilesPage() {
       />
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="border-border flex shrink-0 items-center gap-2 border-b px-4 py-2">
+          <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2">
             <div
               role="tablist"
               aria-label="Show"
-              className="border-border-strong flex rounded-md border p-0.5"
+              className="flex rounded-md border border-border-strong p-0.5"
             >
               {(["files", "folders"] as const).map((v) => (
                 <button
@@ -131,7 +131,7 @@ export function LargeFilesPage() {
                   className={cn(
                     "h-6 rounded px-2.5 text-xs",
                     view === v
-                      ? "bg-hover text-foreground font-medium"
+                      ? "bg-hover font-medium text-foreground"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -139,13 +139,13 @@ export function LargeFilesPage() {
                 </button>
               ))}
             </div>
-            <p className="text-muted-foreground tabular text-xs">
+            <p className="tabular text-xs text-muted-foreground">
               {formatCount(visible.length)} items · {formatBytes(total)}
             </p>
             <div className="ml-auto flex items-center gap-2">
               <div className="relative w-56">
                 <Search
-                  className="text-subtle-foreground pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2"
+                  className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-subtle-foreground"
                   aria-hidden
                 />
                 <Input
@@ -160,15 +160,15 @@ export function LargeFilesPage() {
             </div>
           </div>
           {view === "folders" ? (
-            <p className="border-border bg-panel text-muted-foreground shrink-0 border-b px-4 py-2 text-xs">
+            <p className="shrink-0 border-b border-border bg-panel px-4 py-2 text-xs text-muted-foreground">
               Folders that hold most of their data in their own files rather than in subfolders:
               where storage actually accumulates.
             </p>
           ) : null}
           <div className="min-h-0 flex-1 overflow-auto">
             <table className="w-full table-fixed border-collapse text-[13px]">
-              <thead className="bg-background sticky top-0 z-10">
-                <tr className="border-border text-muted-foreground border-b text-left text-xs">
+              <thead className="sticky top-0 z-10 bg-background">
+                <tr className="border-b border-border text-left text-xs text-muted-foreground">
                   <SortHeader
                     label="Name"
                     k="name"
@@ -208,7 +208,7 @@ export function LargeFilesPage() {
                     onClick={() => setSelected(r.path)}
                     onKeyDown={(e) => e.key === "Enter" && setSelected(r.path)}
                     className={cn(
-                      "border-border/60 hover:bg-hover/60 focus-visible:bg-hover h-8 border-b outline-none",
+                      "h-8 border-b border-border/60 outline-none hover:bg-hover/60 focus-visible:bg-hover",
                       selected === r.path && "bg-accent-soft hover:bg-accent-soft",
                     )}
                   >
@@ -216,23 +216,28 @@ export function LargeFilesPage() {
                       {r.name}
                     </td>
                     <td
-                      className="text-2xs text-subtle-foreground truncate px-2 font-mono"
+                      className="truncate px-2 font-mono text-2xs text-subtle-foreground"
                       title={r.path}
                     >
                       {tildify(view === "files" ? parentOf(r.path) : r.path, home)}
                     </td>
                     <td className="px-2">
                       <div className="flex items-center gap-2">
-                        <SizeBar value={r.bytes} max={max} className="w-16" />
+                        <SizeBar
+                          value={r.bytes}
+                          max={max}
+                          color={CATEGORY_META[r.classification.category].color}
+                          className="w-16"
+                        />
                         <span className="tabular ml-auto">{formatBytes(r.bytes)}</span>
                       </div>
                     </td>
                     {view === "files" ? (
-                      <td className="text-muted-foreground truncate px-2 text-xs">
+                      <td className="truncate px-2 text-xs text-muted-foreground">
                         {formatRelative(r.modifiedMs)}
                       </td>
                     ) : (
-                      <td className="text-muted-foreground tabular px-2 text-right text-xs">
+                      <td className="tabular px-2 text-right text-xs text-muted-foreground">
                         {formatCount(r.fileCount)}
                       </td>
                     )}
@@ -244,9 +249,9 @@ export function LargeFilesPage() {
               </tbody>
             </table>
             {visible.length === 0 ? (
-              <p className="text-muted-foreground px-4 py-6 text-xs">No items match the filter.</p>
+              <p className="px-4 py-6 text-xs text-muted-foreground">No items match the filter.</p>
             ) : (
-              <p className="text-2xs text-subtle-foreground px-4 py-3">
+              <p className="px-4 py-3 text-2xs text-subtle-foreground">
                 {view === "files"
                   ? `The ${formatCount(summary.largestFiles.length)} largest files found by the scan.`
                   : `The ${formatCount(summary.heavyDirectories.length)} largest such folders found by the scan.`}

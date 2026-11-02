@@ -28,6 +28,25 @@
   --warning: #a86a00;
   --critical: #c9302c;
   --ring: #2f6fdf;
+  /*
+   * Category hues: 8 validated categorical slots (CVD + normal-vision
+   * separation checked against each surface) plus 3 neutrals for low-signal
+   * categories. Identity is always also carried by icon + label.
+   */
+  --cat-application-data: #2a78d6;
+  --cat-build-artifacts: #e0601f;
+  --cat-docker-storage: #13906f;
+  --cat-cache: #b07f00;
+  --cat-user-data: #d24b84;
+  --cat-downloads: #2d8a3a;
+  --cat-developer-tools: #6a52d9;
+  --cat-logs: #d33d3d;
+  --cat-binary-data: #8a7f73;
+  --cat-system-files: #6b7280;
+  --cat-unknown: #a1a1aa;
+  --tier-safe: #19803a;
+  --tier-review: #b26b00;
+  --tier-keep: #64748b;
   color-scheme: light;
 }
 
@@ -51,6 +70,20 @@
   --warning: #d9a03f;
   --critical: #ef5d58;
   --ring: #5b8def;
+  --cat-application-data: #3b8ef0;
+  --cat-build-artifacts: #e0692a;
+  --cat-docker-storage: #18a88a;
+  --cat-cache: #b8870c;
+  --cat-user-data: #d9578f;
+  --cat-downloads: #3fa34d;
+  --cat-developer-tools: #8b6cf0;
+  --cat-logs: #e05555;
+  --cat-binary-data: #9a8f84;
+  --cat-system-files: #7c8494;
+  --cat-unknown: #5b5f68;
+  --tier-safe: #3fb46a;
+  --tier-review: #e0a43a;
+  --tier-keep: #8391a7;
   color-scheme: dark;
 }
 
@@ -77,6 +110,9 @@
   --color-warning: var(--warning);
   --color-critical: var(--critical);
   --color-ring: var(--ring);
+  --color-tier-safe: var(--tier-safe);
+  --color-tier-review: var(--tier-review);
+  --color-tier-keep: var(--tier-keep);
 
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;
@@ -134,5 +170,13 @@
 @layer utilities {
   .tabular {
     font-variant-numeric: tabular-nums;
+  }
+  /* Tinted surface for an element carrying `--tint` (a category or tier color). */
+  .tinted {
+    background: color-mix(in oklab, var(--tint) 13%, transparent);
+    border-color: color-mix(in oklab, var(--tint) 30%, transparent);
+  }
+  .tint-text {
+    color: color-mix(in oklab, var(--tint) 75%, var(--foreground));
   }
 }

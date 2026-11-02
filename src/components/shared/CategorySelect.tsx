@@ -19,7 +19,7 @@ export function CategorySelect({
         value={value}
         onChange={(e) => onChange(e.target.value as Category | "all")}
         aria-label="Filter by category"
-        className="border-border-strong bg-panel text-foreground focus-visible:border-accent h-7 appearance-none rounded-md border pr-7 pl-2.5 text-[13px] focus-visible:outline-none"
+        className="h-7 appearance-none rounded-md border border-border-strong bg-panel pr-7 pl-2.5 text-[13px] text-foreground focus-visible:border-accent focus-visible:outline-none"
       >
         <option value="all">All categories</option>
         {options.map((c) => (
@@ -29,7 +29,7 @@ export function CategorySelect({
         ))}
       </select>
       <ChevronDown
-        className="text-subtle-foreground pointer-events-none absolute top-1/2 right-2 size-3.5 -translate-y-1/2"
+        className="pointer-events-none absolute top-1/2 right-2 size-3.5 -translate-y-1/2 text-subtle-foreground"
         aria-hidden
       />
     </div>

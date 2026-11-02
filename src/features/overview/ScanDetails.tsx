@@ -9,7 +9,7 @@ import type { ScanSummary } from "@/lib/types";
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-1.5">
-      <dt className="text-muted-foreground text-xs">{label}</dt>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="tabular min-w-0 truncate text-right text-xs">{value}</dd>
     </div>
   );
@@ -20,7 +20,7 @@ export function ScanDetails({ summary, home }: { summary: ScanSummary; home: str
   return (
     <Panel>
       <PanelHeader title="Last scan" description={formatRelative(summary.finishedAtMs)} />
-      <dl className="divide-border divide-y px-4 pb-2">
+      <dl className="divide-y divide-border px-4 pb-2">
         <Row
           label="Folder"
           value={<span className="font-mono">{tildify(summary.root, home)}</span>}
@@ -37,7 +37,7 @@ export function ScanDetails({ summary, home }: { summary: ScanSummary; home: str
           label="Unreadable items"
           value={
             summary.errorCount > 0 ? (
-              <span className="text-warning inline-flex items-center gap-1">
+              <span className="inline-flex items-center gap-1 text-warning">
                 <AlertTriangle className="size-3" aria-hidden />
                 {formatCount(summary.errorCount)}
               </span>
@@ -48,8 +48,8 @@ export function ScanDetails({ summary, home }: { summary: ScanSummary; home: str
         />
       </dl>
       {summary.errorCount > 0 ? (
-        <div className="border-border border-t px-4 py-2.5">
-          <p className="text-2xs text-subtle-foreground leading-snug">
+        <div className="border-t border-border px-4 py-2.5">
+          <p className="text-2xs leading-snug text-subtle-foreground">
             Usually folders protected by macOS privacy settings. Their sizes are not included.
           </p>
           <Button
@@ -64,7 +64,7 @@ export function ScanDetails({ summary, home }: { summary: ScanSummary; home: str
             <ul className="selectable mt-1 max-h-48 space-y-1 overflow-y-auto">
               {summary.errorSamples.map((e, i) => (
                 <li key={`${e.path}-${i}`} className="text-2xs">
-                  <p className="text-muted-foreground truncate font-mono" title={e.path}>
+                  <p className="truncate font-mono text-muted-foreground" title={e.path}>
                     {tildify(e.path, home)}
                   </p>
                   <p className="text-subtle-foreground">{e.message}</p>

@@ -57,7 +57,7 @@ export function DeveloperToolsPage() {
                   />
                   <LocationList locations={g.locations.slice(0, 6)} />
                   {g.locations.length > 6 ? (
-                    <p className="border-border text-2xs text-subtle-foreground border-t px-4 py-2">
+                    <p className="border-t border-border px-4 py-2 text-2xs text-subtle-foreground">
                       +{g.locations.length - 6} more locations
                     </p>
                   ) : null}

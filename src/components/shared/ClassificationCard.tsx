@@ -21,7 +21,7 @@ export function ClassificationCard({
       ? classification.matchedPath
       : null;
   return (
-    <div className="border-border bg-panel-raised rounded-md border p-3">
+    <div className="rounded-md border border-border bg-panel-raised p-3">
       <div className="flex flex-wrap items-center gap-1.5">
         <CategoryBadge category={classification.category} />
         <span className="text-2xs text-subtle-foreground">
@@ -29,18 +29,18 @@ export function ClassificationCard({
         </span>
       </div>
       <p className="mt-2 text-[13px] font-medium">{classification.label}</p>
-      <p className="selectable text-muted-foreground mt-1 text-xs leading-relaxed">
+      <p className="selectable mt-1 text-xs leading-relaxed text-muted-foreground">
         {classification.explanation}
       </p>
       {inherited ? (
-        <p className="text-2xs text-subtle-foreground mt-2 flex items-start gap-1">
+        <p className="mt-2 flex items-start gap-1 text-2xs text-subtle-foreground">
           <CornerDownRight className="mt-px size-3 shrink-0" aria-hidden />
           <span className="min-w-0 break-all">
             Inherited from <span className="font-mono">{tildify(inherited, home)}</span>
           </span>
         </p>
       ) : null}
-      <p className="text-2xs text-subtle-foreground mt-2 font-mono">
+      <p className="mt-2 font-mono text-2xs text-subtle-foreground">
         rule: {classification.ruleId}
       </p>
     </div>

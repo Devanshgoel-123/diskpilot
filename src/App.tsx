@@ -33,7 +33,7 @@ function StatusBanner() {
   return (
     <div
       role="alert"
-      className="border-border bg-panel text-critical flex items-center gap-2 border-b px-6 py-2 text-xs"
+      className="flex items-center gap-2 border-b border-border bg-panel px-6 py-2 text-xs text-critical"
     >
       <AlertCircle className="size-3.5 shrink-0" aria-hidden />
       <span className="selectable min-w-0 flex-1">{message}</span>

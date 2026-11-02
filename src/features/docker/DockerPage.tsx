@@ -33,7 +33,7 @@ export function DockerPage() {
             {docker && docker.locations.length > 0 ? (
               <LocationList locations={docker.locations} />
             ) : (
-              <p className="text-muted-foreground px-4 pb-4 text-xs">
+              <p className="px-4 pb-4 text-xs text-muted-foreground">
                 {summary
                   ? "No Docker Desktop, OrbStack or Colima data was found in the scanned folder."
                   : "Run a scan to see how much space Docker's data uses."}

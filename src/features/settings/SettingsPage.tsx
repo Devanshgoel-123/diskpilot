@@ -17,8 +17,8 @@ const REPO_URL = "https://github.com/Devanshgoel-123/diskpilot";
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h2 className="text-muted-foreground mb-2 text-xs font-medium">{title}</h2>
-      <Panel className="divide-border divide-y">{children}</Panel>
+      <h2 className="mb-2 text-xs font-medium text-muted-foreground">{title}</h2>
+      <Panel className="divide-y divide-border">{children}</Panel>
     </section>
   );
 }
@@ -37,7 +37,7 @@ function Setting({
       <div className="min-w-0">
         <p className="text-[13px]">{label}</p>
         {description ? (
-          <div className="text-muted-foreground mt-0.5 text-xs leading-relaxed">{description}</div>
+          <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{description}</div>
         ) : null}
       </div>
       <div className="shrink-0">{control}</div>
@@ -80,7 +80,7 @@ export function SettingsPage() {
                 <div
                   role="radiogroup"
                   aria-label="Theme"
-                  className="border-border-strong flex rounded-md border p-0.5"
+                  className="flex rounded-md border border-border-strong p-0.5"
                 >
                   {THEMES.map((t) => (
                     <button
@@ -92,7 +92,7 @@ export function SettingsPage() {
                       className={cn(
                         "flex h-6 items-center gap-1.5 rounded px-2.5 text-xs",
                         theme === t.id
-                          ? "bg-hover text-foreground font-medium"
+                          ? "bg-hover font-medium text-foreground"
                           : "text-muted-foreground hover:text-foreground",
                       )}
                     >
@@ -110,7 +110,7 @@ export function SettingsPage() {
               label="Folder to scan"
               description={
                 <>
-                  <span className="text-foreground font-mono">
+                  <span className="font-mono text-foreground">
                     {tildify(scanRoot ?? home ?? "~", home)}
                   </span>
                   {scanRoot ? null : " (your home folder)"}. macOS may ask for permission to read
@@ -147,7 +147,7 @@ export function SettingsPage() {
               label="Read-only mode"
               description="This version cannot modify or delete files. Cleanup will arrive with previews, explicit confirmation and a central safety gate."
               control={
-                <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Lock className="size-3" aria-hidden />
                   Always on
                 </span>

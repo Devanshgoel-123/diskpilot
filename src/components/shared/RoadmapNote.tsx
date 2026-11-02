@@ -12,15 +12,15 @@ export function RoadmapNote({
   children: React.ReactNode;
 }) {
   return (
-    <div className="border-border-strong rounded-lg border border-dashed px-4 py-3.5">
+    <div className="rounded-lg border border-dashed border-border-strong px-4 py-3.5">
       <p className="flex items-center gap-2 text-xs font-medium">
-        <Milestone className="text-subtle-foreground size-3.5" aria-hidden />
+        <Milestone className="size-3.5 text-subtle-foreground" aria-hidden />
         {title}
-        <span className="bg-panel-raised text-2xs text-muted-foreground rounded px-1.5 py-px font-normal">
+        <span className="rounded bg-panel-raised px-1.5 py-px text-2xs font-normal text-muted-foreground">
           {phase}
         </span>
       </p>
-      <div className="text-muted-foreground mt-1.5 text-xs leading-relaxed">{children}</div>
+      <div className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{children}</div>
     </div>
   );
 }

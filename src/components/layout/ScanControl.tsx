@@ -17,11 +17,11 @@ export function ScanControl() {
       <div className="flex items-center gap-3">
         <div className="text-right">
           <p className="tabular flex items-center justify-end gap-1.5 text-xs font-medium">
-            <Loader2 className="text-accent size-3 animate-spin" aria-hidden />
+            <Loader2 className="size-3 animate-spin text-accent" aria-hidden />
             {formatCount(progress?.filesScanned ?? 0)} files ·{" "}
             {formatBytes(progress?.bytesScanned ?? 0)}
           </p>
-          <p className="text-2xs text-subtle-foreground max-w-[260px] truncate font-mono">
+          <p className="max-w-[260px] truncate font-mono text-2xs text-subtle-foreground">
             {progress ? tildify(progress.currentPath, env?.homeDir) : "Starting…"}
           </p>
         </div>

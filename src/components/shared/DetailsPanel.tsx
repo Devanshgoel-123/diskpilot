@@ -13,7 +13,7 @@ import { ClassificationCard } from "./ClassificationCard";
 function Row({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3 py-1">
-      <dt className="text-muted-foreground shrink-0 text-xs">{label}</dt>
+      <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
       <dd className="selectable tabular min-w-0 text-right text-xs">{value}</dd>
     </div>
   );
@@ -46,9 +46,9 @@ function DetailsBody({ path, onClose }: { path: string; onClose: () => void }) {
   };
 
   return (
-    <aside className="border-border bg-panel flex w-80 shrink-0 flex-col border-l">
-      <div className="border-border flex items-center justify-between gap-2 border-b px-4 py-2.5">
-        <p className="text-muted-foreground text-xs font-medium">Details</p>
+    <aside className="flex w-80 shrink-0 flex-col border-l border-border bg-panel">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+        <p className="text-xs font-medium text-muted-foreground">Details</p>
         <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close details">
           <X />
         </Button>
@@ -57,15 +57,15 @@ function DetailsBody({ path, onClose }: { path: string; onClose: () => void }) {
         <p className="selectable text-[13px] font-medium break-all">
           {details?.name ?? path.split("/").pop()}
         </p>
-        <p className="selectable text-2xs text-subtle-foreground mt-0.5 font-mono break-all">
+        <p className="selectable mt-0.5 font-mono text-2xs break-all text-subtle-foreground">
           {tildify(path, home)}
         </p>
 
-        {error ? <p className="text-critical mt-3 text-xs">{error}</p> : null}
+        {error ? <p className="mt-3 text-xs text-critical">{error}</p> : null}
 
         {details ? (
           <>
-            <dl className="divide-border mt-3 divide-y">
+            <dl className="mt-3 divide-y divide-border">
               <Row label="Size on disk" value={formatBytes(details.bytes)} />
               {details.logicalBytes != null ? (
                 <Row label="Logical size" value={formatBytes(details.logicalBytes)} />
@@ -97,7 +97,7 @@ function DetailsBody({ path, onClose }: { path: string; onClose: () => void }) {
           </div>
         ) : null}
       </div>
-      <div className="border-border border-t p-3">
+      <div className="border-t border-border p-3">
         <Button variant="secondary" className="w-full" onClick={reveal}>
           <FolderOpen />
           Reveal in Finder

@@ -33,7 +33,7 @@ export function HistoryPage() {
               title="Cleanup actions"
               description="Executed actions, affected paths, commands, reclaimed space and errors will be recorded here."
             />
-            <p className="text-muted-foreground px-4 pb-4 text-xs">
+            <p className="px-4 pb-4 text-xs text-muted-foreground">
               No cleanup actions have been executed. This version of DiskPilot is read-only.
             </p>
           </Panel>
@@ -47,7 +47,7 @@ export function HistoryPage() {
             ) : (
               <table className="w-full table-fixed text-[13px]">
                 <thead>
-                  <tr className="border-border text-muted-foreground border-y text-left text-xs">
+                  <tr className="border-y border-border text-left text-xs text-muted-foreground">
                     <th className="px-4 py-2 font-normal">Started</th>
                     <th className="px-2 py-2 font-normal">Folder</th>
                     <th className="w-24 px-2 py-2 text-right font-normal">Size</th>
@@ -58,18 +58,18 @@ export function HistoryPage() {
                 </thead>
                 <tbody>
                   {history.map((r) => (
-                    <tr key={r.id} className="border-border/60 h-8 border-b last:border-0">
+                    <tr key={r.id} className="h-8 border-b border-border/60 last:border-0">
                       <td className="truncate px-4 text-xs">{formatDate(r.startedAtMs)}</td>
-                      <td className="text-2xs text-muted-foreground truncate px-2 font-mono">
+                      <td className="truncate px-2 font-mono text-2xs text-muted-foreground">
                         {tildify(r.root, home)}
                       </td>
                       <td className="tabular px-2 text-right">
                         {r.status === "completed" ? formatBytes(r.totalBytes) : "—"}
                       </td>
-                      <td className="text-muted-foreground tabular px-2 text-right text-xs">
+                      <td className="tabular px-2 text-right text-xs text-muted-foreground">
                         {r.status === "completed" ? formatCount(r.fileCount) : "—"}
                       </td>
-                      <td className="text-muted-foreground tabular px-2 text-right text-xs">
+                      <td className="tabular px-2 text-right text-xs text-muted-foreground">
                         {formatDuration(r.durationMs)}
                       </td>
                       <td className="px-2 pr-4">

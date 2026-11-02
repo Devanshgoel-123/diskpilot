@@ -1,4 +1,13 @@
-import { Bar, BarChart, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  Bar,
+  BarChart,
+  Cell,
+  LabelList,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { CATEGORY_META } from "@/lib/categories";
@@ -7,6 +16,7 @@ import type { CategoryTotal } from "@/lib/types";
 
 interface Row {
   label: string;
+  color: string;
   description: string;
   bytes: number;
   fileCount: number;
@@ -24,20 +34,24 @@ function ChartTooltip({
   const row = payload?.[0]?.payload;
   if (!active || !row) return null;
   return (
-    <div className="border-border-strong bg-panel-raised max-w-[240px] rounded-md border px-2.5 py-2 text-xs shadow-lg shadow-black/20">
-      <p className="font-medium">{row.label}</p>
-      <p className="text-foreground tabular mt-0.5">
+    <div className="max-w-[240px] rounded-md border border-border-strong bg-panel-raised px-2.5 py-2 text-xs shadow-lg shadow-black/20">
+      <p className="flex items-center gap-1.5 font-medium">
+        <span className="size-2 rounded-[3px]" style={{ background: row.color }} aria-hidden />
+        {row.label}
+      </p>
+      <p className="tabular mt-0.5 text-foreground">
         {formatBytes(row.bytes)} · {formatPercent(row.bytes, total)} · {formatCount(row.fileCount)}{" "}
         files
       </p>
-      <p className="text-muted-foreground mt-1 leading-snug">{row.description}</p>
+      <p className="mt-1 leading-snug text-muted-foreground">{row.description}</p>
     </div>
   );
 }
 
 /**
- * Ranked, single-hue bars: the job is comparing magnitudes across eleven
- * categories, which a pie or a multi-color palette would obscure.
+ * Ranked bars: the job is comparing magnitudes, so they are sorted and
+ * labeled directly. Color repeats each category's identity from badges
+ * elsewhere in the app; the axis label is the primary key.
  */
 export function CategoryBreakdown({ categories }: { categories: CategoryTotal[] }) {
   const total = categories.reduce((a, c) => a + c.bytes, 0);
@@ -45,6 +59,7 @@ export function CategoryBreakdown({ categories }: { categories: CategoryTotal[] 
     .sort((a, b) => b.bytes - a.bytes)
     .map((c) => ({
       label: CATEGORY_META[c.category].label,
+      color: CATEGORY_META[c.category].color,
       description: CATEGORY_META[c.category].description,
       bytes: c.bytes,
       fileCount: c.fileCount,
@@ -77,13 +92,10 @@ export function CategoryBreakdown({ categories }: { categories: CategoryTotal[] 
               content={<ChartTooltip total={total} />}
               isAnimationActive={false}
             />
-            <Bar
-              dataKey="bytes"
-              fill="var(--accent)"
-              radius={[0, 4, 4, 0]}
-              barSize={12}
-              isAnimationActive={false}
-            >
+            <Bar dataKey="bytes" radius={[0, 4, 4, 0]} barSize={12} isAnimationActive={false}>
+              {rows.map((r) => (
+                <Cell key={r.label} fill={r.color} />
+              ))}
               <LabelList
                 dataKey="bytes"
                 position="right"

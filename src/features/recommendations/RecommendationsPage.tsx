@@ -54,7 +54,7 @@ export function RecommendationsPage() {
                   <t.icon className={`size-4 ${t.tone}`} aria-hidden />
                   {t.title}
                 </p>
-                <p className="text-muted-foreground mt-2 text-xs leading-relaxed">{t.text}</p>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{t.text}</p>
               </Panel>
             ))}
           </div>
@@ -63,7 +63,7 @@ export function RecommendationsPage() {
             <ol className="mt-3 space-y-2">
               {PIPELINE.map(([name, text], i) => (
                 <li key={name} className="flex gap-3 text-xs">
-                  <span className="border-border-strong text-2xs text-muted-foreground tabular flex size-5 shrink-0 items-center justify-center rounded-full border">
+                  <span className="tabular flex size-5 shrink-0 items-center justify-center rounded-full border border-border-strong text-2xs text-muted-foreground">
                     {i + 1}
                   </span>
                   <span>
@@ -73,7 +73,7 @@ export function RecommendationsPage() {
                 </li>
               ))}
             </ol>
-            <p className="text-muted-foreground mt-3 text-xs">
+            <p className="mt-3 text-xs text-muted-foreground">
               Nothing is deleted without your explicit approval of the exact paths. Deleted data
               cannot always be restored.
             </p>

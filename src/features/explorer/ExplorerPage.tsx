@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
-import { ALL_CATEGORIES } from "@/lib/categories";
+import { ALL_CATEGORIES, CATEGORY_META } from "@/lib/categories";
 import { formatBytes, formatCount, formatPercent, formatRelative, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { Category, DirectoryEntry, DirectoryListing } from "@/lib/types";
@@ -52,7 +52,7 @@ function Breadcrumbs({
         return (
           <span key={c.path} className="flex min-w-0 items-center gap-0.5">
             {i > 0 ? (
-              <ChevronRight className="text-subtle-foreground size-3 shrink-0" aria-hidden />
+              <ChevronRight className="size-3 shrink-0 text-subtle-foreground" aria-hidden />
             ) : null}
             <button
               type="button"
@@ -156,7 +156,7 @@ export function ExplorerPage() {
       />
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="border-border flex shrink-0 items-center gap-2 border-b px-4 py-2">
+          <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2">
             <Button
               variant="ghost"
               size="icon"
@@ -170,7 +170,7 @@ export function ExplorerPage() {
             <div className="ml-auto flex shrink-0 items-center gap-2">
               <div className="relative w-48">
                 <Search
-                  className="text-subtle-foreground pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2"
+                  className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-subtle-foreground"
                   aria-hidden
                 />
                 <Input
@@ -186,9 +186,9 @@ export function ExplorerPage() {
           </div>
 
           {listing ? (
-            <div className="border-border bg-panel text-muted-foreground flex shrink-0 items-center gap-4 border-b px-4 py-2 text-xs">
+            <div className="flex shrink-0 items-center gap-4 border-b border-border bg-panel px-4 py-2 text-xs text-muted-foreground">
               <span>
-                <span className="text-foreground tabular font-medium">
+                <span className="tabular font-medium text-foreground">
                   {formatBytes(listing.bytes)}
                 </span>{" "}
                 in this folder
@@ -202,7 +202,7 @@ export function ExplorerPage() {
           ) : null}
 
           <div className="min-h-0 flex-1 overflow-auto">
-            {error ? <p className="text-critical px-4 py-6 text-xs">{error.message}</p> : null}
+            {error ? <p className="px-4 py-6 text-xs text-critical">{error.message}</p> : null}
             {loading && !listing ? (
               <div className="space-y-2 p-4">
                 {Array.from({ length: 8 }, (_, i) => (
@@ -212,8 +212,8 @@ export function ExplorerPage() {
             ) : null}
             {listing ? (
               <table className="w-full table-fixed border-collapse text-[13px]">
-                <thead className="bg-background sticky top-0 z-10">
-                  <tr className="border-border text-muted-foreground border-b text-left text-xs">
+                <thead className="sticky top-0 z-10 bg-background">
+                  <tr className="border-b border-border text-left text-xs text-muted-foreground">
                     <SortHeader
                       label="Name"
                       k="name"
@@ -264,7 +264,7 @@ export function ExplorerPage() {
                         }
                       }}
                       className={cn(
-                        "border-border/60 hover:bg-hover/60 focus-visible:bg-hover h-8 border-b outline-none",
+                        "h-8 border-b border-border/60 outline-none hover:bg-hover/60 focus-visible:bg-hover",
                         selected === e.path && "bg-accent-soft hover:bg-accent-soft",
                       )}
                     >
@@ -278,17 +278,22 @@ export function ExplorerPage() {
                       </td>
                       <td className="px-2">
                         <div className="flex items-center gap-2">
-                          <SizeBar value={e.bytes} max={maxBytes} className="w-16" />
+                          <SizeBar
+                            value={e.bytes}
+                            max={maxBytes}
+                            color={CATEGORY_META[e.classification.category].color}
+                            className="w-16"
+                          />
                           <span className="tabular ml-auto">{formatBytes(e.bytes)}</span>
                         </div>
                       </td>
-                      <td className="text-muted-foreground tabular px-2 text-right text-xs">
+                      <td className="tabular px-2 text-right text-xs text-muted-foreground">
                         {e.bytes != null && parentBytes ? formatPercent(e.bytes, parentBytes) : "—"}
                       </td>
-                      <td className="text-muted-foreground tabular px-2 text-right text-xs">
+                      <td className="tabular px-2 text-right text-xs text-muted-foreground">
                         {e.kind === "directory" ? formatCount(e.fileCount) : ""}
                       </td>
-                      <td className="text-muted-foreground truncate px-2 text-xs">
+                      <td className="truncate px-2 text-xs text-muted-foreground">
                         {formatRelative(e.modifiedMs)}
                       </td>
                       <td className="px-2 pr-4" title={e.classification.label}>
@@ -300,12 +305,12 @@ export function ExplorerPage() {
               </table>
             ) : null}
             {listing && entries.length === 0 ? (
-              <p className="text-muted-foreground px-4 py-6 text-xs">
+              <p className="px-4 py-6 text-xs text-muted-foreground">
                 {listing.entries.length ? "No items match the filter." : "This folder is empty."}
               </p>
             ) : null}
             {listing && listing.omittedCount > 0 ? (
-              <p className="text-subtle-foreground px-4 py-3 text-xs">
+              <p className="px-4 py-3 text-xs text-subtle-foreground">
                 {formatCount(listing.omittedCount)} smaller items (
                 {formatBytes(listing.omittedBytes)}) are not listed.
               </p>

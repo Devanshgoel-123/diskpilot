@@ -28,7 +28,7 @@ export function SortHeader<K extends string>({
         type="button"
         onClick={() => onSort(k)}
         className={cn(
-          "hover:text-foreground inline-flex w-full items-center gap-0.5",
+          "inline-flex w-full items-center gap-0.5 hover:text-foreground",
           align === "right" && "justify-end",
           active && "text-foreground",
         )}

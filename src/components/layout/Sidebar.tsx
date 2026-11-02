@@ -55,7 +55,7 @@ function NavButton({ item }: { item: NavItem }) {
       className={cn(
         "group flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] transition-colors",
         active
-          ? "bg-hover text-foreground font-medium"
+          ? "bg-hover font-medium text-foreground"
           : "text-muted-foreground hover:bg-hover/60 hover:text-foreground",
       )}
     >
@@ -64,7 +64,7 @@ function NavButton({ item }: { item: NavItem }) {
         aria-hidden
       />
       <span className="truncate">{item.label}</span>
-      {item.soon ? <span className="text-2xs text-subtle-foreground ml-auto">Soon</span> : null}
+      {item.soon ? <span className="ml-auto text-2xs text-subtle-foreground">Soon</span> : null}
     </button>
   );
 }
@@ -72,7 +72,7 @@ function NavButton({ item }: { item: NavItem }) {
 export function Sidebar() {
   const readOnly = useApp((s) => s.env?.readOnly ?? true);
   return (
-    <nav className="border-border bg-sidebar flex w-[212px] shrink-0 flex-col border-r">
+    <nav className="flex w-[212px] shrink-0 flex-col border-r border-border bg-sidebar">
       {/* Space for the macOS traffic lights; doubles as a window drag handle. */}
       <div data-tauri-drag-region className="h-[46px] shrink-0" />
       <div className="flex items-center gap-2 px-4 pb-4">
@@ -82,7 +82,7 @@ export function Sidebar() {
       <div className="flex-1 space-y-5 overflow-y-auto px-2.5">
         {SECTIONS.map((section) => (
           <div key={section.title}>
-            <p className="text-2xs text-subtle-foreground px-2 pb-1 font-medium tracking-wide uppercase">
+            <p className="px-2 pb-1 text-2xs font-medium tracking-wide text-subtle-foreground uppercase">
               {section.title}
             </p>
             <div className="space-y-px">
@@ -96,10 +96,10 @@ export function Sidebar() {
       <div className="space-y-2 px-2.5 pt-2 pb-3">
         {readOnly ? (
           <div
-            className="text-2xs text-muted-foreground flex items-center gap-2 rounded-md px-2 py-1.5"
+            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-2xs text-muted-foreground"
             title="This version of DiskPilot cannot modify or delete files."
           >
-            <ShieldCheck className="text-good size-3.5" aria-hidden />
+            <ShieldCheck className="size-3.5 text-good" aria-hidden />
             Read-only mode
           </div>
         ) : null}
