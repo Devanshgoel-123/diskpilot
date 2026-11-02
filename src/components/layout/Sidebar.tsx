@@ -1,4 +1,5 @@
 import {
+  Bot,
   Box,
   Code2,
   FileStack,
@@ -27,6 +28,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
       { id: "overview", label: "Overview", icon: LayoutDashboard },
       { id: "explorer", label: "Storage Explorer", icon: FolderTree },
       { id: "large-files", label: "Large Files", icon: FileStack },
+      { id: "assistant", label: "Assistant", icon: Bot },
     ],
   },
   {
