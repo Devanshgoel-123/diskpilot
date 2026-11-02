@@ -77,16 +77,20 @@ Selected recommendations are turned into a cleanup plan that lists every path to
 
 Dedicated analyzers inspect the on-disk layout of individual tools:
 
-| Tool               | What is analyzed                                                                                                                                            |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cursor and VS Code | Workspace storage per project, including storage for projects that no longer exist; installed extensions versus leftover extension folders; caches and logs |
-| AI coding agents   | Installed Claude Code and Cursor Agent CLI versions, with the current version identified from the launcher; agent data folders                              |
-| Node.js            | `node_modules` per project with the date its package files last changed; package manager caches; Node versions installed with nvm and the default version   |
-| Xcode              | DerivedData per project, including data for deleted projects; archives; device support; simulators, including unavailable ones                              |
-| Rust               | Toolchains and the default toolchain; `target` folders per project; Cargo caches                                                                            |
-| Python             | Virtual environments; pip, uv and Poetry caches; downloaded Hugging Face models                                                                             |
+| Tool               | What is analyzed                                                                                                                                                                                                                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Cursor and VS Code | Workspace storage per project, including storage for projects that no longer exist; installed extensions versus leftover extension folders; caches and logs; leftover update downloads; stale state database backups; the size and number of chats in Cursor's chat history database (read-only) |
+| Claude Code        | Installed versions, with the current version identified from the launcher; session transcripts per project, including sessions for folders that no longer exist; MCP and debug logs, shell snapshots, caches and edit checkpoints                                                                |
+| Claude app         | Chromium and WebGPU caches, the app cache, downloaded updates and logs                                                                                                                                                                                                                           |
+| Codex              | CLI and app logs, the app cache and downloaded updates; sessions and prompt history are listed but never recommended                                                                                                                                                                             |
+| GitHub Copilot     | Copilot CLI logs and sessions; Copilot extensions and their storage in VS Code and Cursor, including storage left behind after the extension was uninstalled                                                                                                                                     |
+| Other AI agents    | Cursor Agent CLI versions; Gemini CLI and Cursor agent data                                                                                                                                                                                                                                      |
+| Node.js            | `node_modules` per project with the date its package files last changed; package manager caches; Node versions installed with nvm and the default version                                                                                                                                        |
+| Xcode              | DerivedData per project, including data for deleted projects; archives; device support; simulators, including unavailable ones                                                                                                                                                                   |
+| Rust               | Toolchains and the default toolchain; `target` folders per project; Cargo caches                                                                                                                                                                                                                 |
+| Python             | Virtual environments; pip, uv and Poetry caches; downloaded Hugging Face models                                                                                                                                                                                                                  |
 
-Findings that can be cleaned up feed into the same recommendation and cleanup workflow.
+Findings that can be cleaned up feed into the same recommendation and cleanup workflow. For AI agents, caches, logs and downloaded updates are marked likely safe; edit checkpoints, stale backups and sessions for deleted projects need review; conversation history, sign-in and settings are never recommended. DiskPilot reads other applications' databases but never modifies them.
 
 ### Assistant (optional)
 
@@ -196,7 +200,7 @@ The interface communicates with the Rust engine only through typed commands. Slo
 | 1     | Application foundation, design system, Overview, scanning, folder sizes, classification, Storage Explorer, Large Files | Complete |
 | 2     | Cleanup recommendations, risk tiers, previews, safe executor, cleanup history                                          | Complete |
 | 3     | Docker Manager with previewed actions and diagnostics                                                                  | Complete |
-| 4     | Developer tools analysis for Cursor, VS Code, AI agents, Node.js, Xcode, Rust and Python                               | Complete |
+| 4     | Developer tools analysis for Cursor, VS Code, Claude Code, Codex, Copilot, Node.js, Xcode, Rust and Python             | Complete |
 | 5     | Optional assistant with read-only access to storage data                                                               | Complete |
 
 Planned next: signed and notarized release builds, persisting the scan index so the Explorer is available after a restart, incremental rescans, and additional analyzers (Homebrew, JetBrains IDEs, Android Studio).
