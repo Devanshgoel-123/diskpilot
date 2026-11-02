@@ -639,7 +639,9 @@ pub fn measure(path: &Path) -> u64 {
     let mut total = allocated_bytes(&root_meta);
     let mut stack = vec![path.to_path_buf()];
     while let Some(dir) = stack.pop() {
-        let Ok(entries) = fs::read_dir(&dir) else { continue };
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
         for entry in entries.flatten() {
             let Ok(meta) = entry.metadata() else { continue };
             let ft = meta.file_type();

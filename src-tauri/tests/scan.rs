@@ -251,5 +251,8 @@ fn measure_matches_the_scanner_and_ignores_symlinks() {
     let measured = diskpilot_lib::scanner::measure(&web);
     let scanned = o.index[&web].bytes;
     // The new symlink adds at most one small entry; the 400 KB target is not followed.
-    assert!(measured >= scanned && measured < scanned + 50_000, "{scanned} vs {measured}");
+    assert!(
+        measured >= scanned && measured < scanned + 50_000,
+        "{scanned} vs {measured}"
+    );
 }
