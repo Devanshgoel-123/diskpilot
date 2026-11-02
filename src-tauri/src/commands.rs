@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::assistant::{self, keychain, tools::ToolContext, AssistantReply, AssistantStatus};
 use crate::classifier::Classifier;
 use crate::cleanup::{executor, planner};
 use crate::devtools::{self, DevToolsReport};
@@ -486,4 +487,72 @@ pub async fn docker_diagnostics(
         Ok(actions::diagnostics(&o, vm_disk))
     })
     .await
+}
+
+// ---- Assistant (optional) ------------------------------------------------
+
+#[tauri::command]
+pub fn assistant_status() -> AssistantStatus {
+    let key = keychain::load();
+    AssistantStatus {
+        configured: key.is_some(),
+        key_source: key.map(|(_, source)| source.to_string()),
+        models: assistant::MODELS.iter().map(|m| m.to_string()).collect(),
+    }
+}
+
+/// Store the API key in the macOS Keychain. The key is never sent back to the UI.
+#[tauri::command]
+pub fn assistant_set_key(key: String) -> AppResult<AssistantStatus> {
+    keychain::store(&key).map_err(|e| AppError::Other(e.to_string()))?;
+    Ok(assistant_status())
+}
+
+#[tauri::command]
+pub fn assistant_clear_key(state: State<'_, AppState>) -> AppResult<AssistantStatus> {
+    keychain::clear().map_err(|e| AppError::Other(e.to_string()))?;
+    *state.assistant.lock().unwrap_or_else(|e| e.into_inner()) = Default::default();
+    Ok(assistant_status())
+}
+
+#[tauri::command]
+pub fn assistant_reset(state: State<'_, AppState>) {
+    *state.assistant.lock().unwrap_or_else(|e| e.into_inner()) = Default::default();
+}
+
+/// Ask the assistant a question. It reads DiskPilot's data through read-only
+/// tools; it cannot change anything.
+#[tauri::command]
+pub async fn assistant_ask(
+    state: State<'_, AppState>,
+    question: String,
+    model: String,
+) -> AppResult<AssistantReply> {
+    let question = question.trim().to_string();
+    if question.is_empty() {
+        return Err(AppError::Other("Ask a question first.".into()));
+    }
+    let (api_key, _) = keychain::load()
+        .ok_or_else(|| AppError::Other(assistant::AssistantError::NotConfigured.to_string()))?;
+    let ctx = {
+        let slot = state.slot();
+        ToolContext {
+            home: state.home.clone(),
+            scan: slot.last.clone(),
+            recommendations: slot.all_recommendations(),
+            devtools: slot.devtools.clone(),
+            disk: disk::disk_info(&state.home).ok(),
+        }
+    };
+    let mut convo = std::mem::take(&mut *state.assistant.lock().unwrap_or_else(|e| e.into_inner()));
+    let (convo, result) = tauri::async_runtime::spawn_blocking(move || {
+        let result = assistant::client::HttpTransport::new()
+            .map_err(assistant::AssistantError::from)
+            .and_then(|t| assistant::ask(&t, &api_key, &mut convo, &model, &question, &ctx));
+        (convo, result)
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("Background task failed: {e}")))?;
+    *state.assistant.lock().unwrap_or_else(|e| e.into_inner()) = convo;
+    result.map_err(|e| AppError::Other(e.to_string()))
 }

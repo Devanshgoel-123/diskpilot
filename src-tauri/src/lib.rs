@@ -45,6 +45,7 @@ pub fn run() {
                 scan: std::sync::Mutex::new(ScanSlot::default()),
                 plans: std::sync::Mutex::new(std::collections::HashMap::new()),
                 history: history.map(std::sync::Arc::new),
+                assistant: std::sync::Mutex::new(assistant::Conversation::default()),
             });
             Ok(())
         })
@@ -66,6 +67,11 @@ pub fn run() {
             commands::get_cleanup_history,
             commands::analyze_dev_tools,
             commands::get_dev_tools_report,
+            commands::assistant_status,
+            commands::assistant_set_key,
+            commands::assistant_clear_key,
+            commands::assistant_ask,
+            commands::assistant_reset,
             commands::docker_overview,
             commands::docker_preview,
             commands::docker_execute,

@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use crate::assistant::Conversation;
 use crate::devtools::DevToolsReport;
 use crate::history::History;
 use crate::model::{CleanupPlan, Recommendation};
@@ -61,6 +62,8 @@ pub struct AppState {
     pub plans: Mutex<HashMap<String, CleanupPlan>>,
     /// `None` if the history database could not be opened; the app still works.
     pub history: Option<Arc<History>>,
+    /// The assistant conversation (kept in memory only).
+    pub assistant: Mutex<Conversation>,
 }
 
 impl AppState {
