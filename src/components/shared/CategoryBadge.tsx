@@ -1,22 +1,24 @@
-import type { CSSProperties } from "react";
-
 import { CATEGORY_META } from "@/lib/categories";
 import type { Category } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+/** A category as a colored dot and plain text. Quiet by design: categories
+ * describe data, while tier tags are the only colored labels. */
 export function CategoryBadge({ category, className }: { category: Category; className?: string }) {
   const meta = CATEGORY_META[category];
-  const Icon = meta.icon;
   return (
     <span
       title={meta.description}
-      style={{ "--tint": meta.color } as CSSProperties}
       className={cn(
-        "tinted inline-flex items-center gap-1 rounded-[5px] border px-1.5 py-px text-2xs font-medium whitespace-nowrap text-foreground/90",
+        "inline-flex items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground",
         className,
       )}
     >
-      <Icon className="size-3 shrink-0" style={{ color: meta.color }} aria-hidden />
+      <span
+        className="size-[7px] shrink-0 rounded-full"
+        style={{ background: meta.color }}
+        aria-hidden
+      />
       {meta.label}
     </span>
   );

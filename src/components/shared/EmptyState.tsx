@@ -18,12 +18,10 @@ export function EmptyState({
 }) {
   return (
     <div className={cn("flex flex-col items-center px-6 py-12 text-center", className)}>
-      <div className="flex size-9 items-center justify-center rounded-lg border border-border-strong bg-panel-raised text-muted-foreground">
-        <Icon className="size-4" aria-hidden />
-      </div>
-      <p className="mt-3 text-[13px] font-medium">{title}</p>
+      <Icon className="size-6 text-subtle-foreground" strokeWidth={1.5} aria-hidden />
+      <p className="mt-3 text-[15px] font-semibold tracking-tight">{title}</p>
       {description ? (
-        <div className="mt-1 max-w-md text-xs leading-relaxed text-muted-foreground">
+        <div className="mt-1.5 max-w-md text-[13px] leading-relaxed text-muted-foreground">
           {description}
         </div>
       ) : null}
