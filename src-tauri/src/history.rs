@@ -1,11 +1,13 @@
-//! Scan history persisted in a local SQLite database.
+//! Scan and cleanup history persisted in a local SQLite database.
 
 use std::path::Path;
 use std::sync::Mutex;
 
 use rusqlite::{params, Connection};
 
-use crate::model::{ScanRecord, ScanStatus};
+use crate::model::{
+    ActionStatus, CleanupItemResult, CleanupRecord, ItemStatus, ScanRecord, ScanStatus,
+};
 
 pub struct History {
     conn: Mutex<Connection>,
@@ -25,6 +27,27 @@ CREATE TABLE IF NOT EXISTS scan_runs (
     status        TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS scan_runs_started ON scan_runs(started_at_ms DESC);
+CREATE TABLE IF NOT EXISTS cleanup_actions (
+    id             TEXT PRIMARY KEY,
+    kind           TEXT NOT NULL,
+    title          TEXT NOT NULL,
+    started_at_ms  INTEGER NOT NULL,
+    finished_at_ms INTEGER NOT NULL,
+    status         TEXT NOT NULL,
+    bytes_freed    INTEGER NOT NULL,
+    bytes_trashed  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS cleanup_actions_started ON cleanup_actions(started_at_ms DESC);
+CREATE TABLE IF NOT EXISTS cleanup_items (
+    action_id TEXT NOT NULL REFERENCES cleanup_actions(id) ON DELETE CASCADE,
+    position  INTEGER NOT NULL,
+    target    TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    bytes     INTEGER NOT NULL,
+    status    TEXT NOT NULL,
+    error     TEXT,
+    PRIMARY KEY (action_id, position)
+);
 ";
 
 fn to_i64(v: u64) -> i64 {
@@ -95,6 +118,87 @@ impl History {
         })?;
         rows.collect()
     }
+
+    pub fn record_cleanup(&self, r: &CleanupRecord) -> rusqlite::Result<()> {
+        let mut conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let tx = conn.transaction()?;
+        tx.execute(
+            "INSERT OR REPLACE INTO cleanup_actions
+             (id, kind, title, started_at_ms, finished_at_ms, status, bytes_freed, bytes_trashed)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                r.id,
+                r.kind,
+                r.title,
+                r.started_at_ms,
+                r.finished_at_ms,
+                r.status.as_str(),
+                to_i64(r.bytes_freed),
+                to_i64(r.bytes_trashed),
+            ],
+        )?;
+        tx.execute(
+            "DELETE FROM cleanup_items WHERE action_id = ?1",
+            params![r.id],
+        )?;
+        for (i, item) in r.items.iter().enumerate() {
+            tx.execute(
+                "INSERT INTO cleanup_items (action_id, position, target, operation, bytes, status, error)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    r.id,
+                    i64::try_from(i).unwrap_or(i64::MAX),
+                    item.target,
+                    item.operation,
+                    to_i64(item.bytes),
+                    item.status.as_str(),
+                    item.error,
+                ],
+            )?;
+        }
+        tx.commit()
+    }
+
+    pub fn recent_cleanups(&self, limit: u32) -> rusqlite::Result<Vec<CleanupRecord>> {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let mut stmt = conn.prepare(
+            "SELECT id, kind, title, started_at_ms, finished_at_ms, status, bytes_freed, bytes_trashed
+             FROM cleanup_actions ORDER BY started_at_ms DESC LIMIT ?1",
+        )?;
+        let mut records: Vec<CleanupRecord> = stmt
+            .query_map(params![limit], |row| {
+                Ok(CleanupRecord {
+                    id: row.get(0)?,
+                    kind: row.get(1)?,
+                    title: row.get(2)?,
+                    started_at_ms: row.get(3)?,
+                    finished_at_ms: row.get(4)?,
+                    status: ActionStatus::parse(&row.get::<_, String>(5)?),
+                    bytes_freed: to_u64(row.get(6)?),
+                    bytes_trashed: to_u64(row.get(7)?),
+                    items: Vec::new(),
+                })
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+        let mut items_stmt = conn.prepare(
+            "SELECT target, operation, bytes, status, error FROM cleanup_items
+             WHERE action_id = ?1 ORDER BY position",
+        )?;
+        for record in &mut records {
+            record.items = items_stmt
+                .query_map(params![record.id], |row| {
+                    Ok(CleanupItemResult {
+                        target: row.get(0)?,
+                        operation: row.get(1)?,
+                        bytes: to_u64(row.get(2)?),
+                        status: ItemStatus::parse(&row.get::<_, String>(3)?),
+                        error: row.get(4)?,
+                    })
+                })?
+                .collect::<rusqlite::Result<_>>()?;
+        }
+        Ok(records)
+    }
 }
 
 #[cfg(test)]
@@ -128,5 +232,42 @@ mod tests {
         );
         assert_eq!(rows[0].status, ScanStatus::Completed);
         assert_eq!(h.recent(1).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn records_cleanup_actions_with_items() {
+        let h = History::in_memory().unwrap();
+        let record = CleanupRecord {
+            id: "c1".into(),
+            kind: "files".into(),
+            title: "Move to Trash 2 items".into(),
+            started_at_ms: 10,
+            finished_at_ms: 20,
+            status: ActionStatus::Partial,
+            bytes_freed: 0,
+            bytes_trashed: 500,
+            items: vec![
+                CleanupItemResult {
+                    target: "/a".into(),
+                    operation: "Move to Trash: /a".into(),
+                    bytes: 500,
+                    status: ItemStatus::Succeeded,
+                    error: None,
+                },
+                CleanupItemResult {
+                    target: "/b".into(),
+                    operation: "Move to Trash: /b".into(),
+                    bytes: 0,
+                    status: ItemStatus::Failed,
+                    error: Some("Permission denied".into()),
+                },
+            ],
+        };
+        h.record_cleanup(&record).unwrap();
+        let rows = h.recent_cleanups(10).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].status, ActionStatus::Partial);
+        assert_eq!(rows[0].items.len(), 2);
+        assert_eq!(rows[0].items[1].error.as_deref(), Some("Permission denied"));
     }
 }
