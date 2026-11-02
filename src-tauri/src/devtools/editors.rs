@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+use super::agent_data::{self, Agent};
 use super::{
     app_version, exists, file_uri_to_path, modified_ms, name_of, outermost_total, subdirs, Ctx,
     ItemState, RecSpec, ToolItem, ToolReport, ToolSection,
@@ -14,6 +15,7 @@ use crate::model::{CleanupMethod, Recommendation, Tier};
 
 struct EditorPaths {
     id: &'static str,
+    extras: &'static Agent,
     name: &'static str,
     app_bundle: PathBuf,
     app_support: PathBuf,
@@ -25,6 +27,7 @@ pub fn cursor(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
         ctx,
         EditorPaths {
             id: "cursor",
+            extras: &agent_data::CURSOR_EXTRA,
             name: "Cursor",
             app_bundle: PathBuf::from("/Applications/Cursor.app"),
             app_support: ctx.home_path("Library/Application Support/Cursor"),
@@ -38,6 +41,7 @@ pub fn vscode(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
         ctx,
         EditorPaths {
             id: "vscode",
+            extras: &agent_data::VSCODE_EXTRA,
             name: "VS Code",
             app_bundle: PathBuf::from("/Applications/Visual Studio Code.app"),
             app_support: ctx.home_path("Library/Application Support/Code"),
@@ -312,10 +316,36 @@ fn analyze(ctx: &Ctx, p: EditorPaths) -> (ToolReport, Vec<Recommendation>) {
         });
     }
 
-    let total_bytes = outermost_total(&[
+    // ---- Chat database, update downloads, extra caches, backups ------------
+    let mut extras = agent_data::editor_extras(ctx, p.extras);
+    let chat = (p.id == "cursor")
+        .then(|| agent_data::cursor_chat_item(ctx, &p.app_support.join("User/globalStorage")))
+        .flatten();
+    if let Some(chat) = chat {
+        if let Some(kept) = extras
+            .sections
+            .iter_mut()
+            .find(|s| s.title == "History and settings")
+        {
+            kept.items.insert(0, chat);
+        } else {
+            extras.sections.push(ToolSection {
+                title: "History and settings".into(),
+                description: "Conversation history and settings. Listed for reference; never recommended for removal.".into(),
+                items: vec![chat],
+            });
+        }
+    }
+    let extra_count = extras.recs.len();
+    sections.append(&mut extras.sections);
+    recs.append(&mut extras.recs);
+    let mut roots = vec![
         (p.app_support.clone(), ctx.size(&p.app_support)),
         (p.extensions.clone(), ctx.size(&p.extensions)),
-    ]);
+    ];
+    roots.append(&mut extras.roots);
+
+    let total_bytes = outermost_total(&roots);
     let mut summary = format!(
         "{} workspaces, {} extension folders.",
         sections
@@ -338,6 +368,12 @@ fn analyze(ctx: &Ctx, p: EditorPaths) -> (ToolReport, Vec<Recommendation>) {
         summary.push_str(&format!(
             " {leftover} leftover extension folder{}.",
             if leftover == 1 { "" } else { "s" }
+        ));
+    }
+    if extra_count > 0 {
+        summary.push_str(&format!(
+            " {extra_count} cache, update or backup item{} to review.",
+            if extra_count == 1 { "" } else { "s" }
         ));
     }
 
