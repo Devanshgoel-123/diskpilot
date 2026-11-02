@@ -172,3 +172,205 @@ export interface AppError {
   kind: string;
   message: string;
 }
+
+// ---- Recommendations & cleanup (src-tauri/src/model.rs) -------------------
+
+export type Tier = "likelySafe" | "reviewFirst" | "keep";
+export type CleanupMethod = "trash" | "delete";
+
+export interface Recommendation {
+  id: string;
+  title: string;
+  path: string;
+  bytes: number;
+  fileCount: number;
+  tier: Tier;
+  confidence: Confidence;
+  classification: Classification;
+  detectedBecause: string;
+  safeBecause: string;
+  risks: string;
+  proposedAction: string;
+  /** Empty: DiskPilot offers no automated action for this item. */
+  methods: CleanupMethod[];
+  /** A command the user can run themselves; DiskPilot never runs it. */
+  alternative: string | null;
+  estimatedReclaimBytes: number;
+  lastActivityMs: number | null;
+  notes: string[];
+}
+
+export interface PlanItem {
+  recommendationId: string;
+  title: string;
+  path: string;
+  bytes: number;
+  fileCount: number;
+  tier: Tier;
+  operation: string;
+}
+
+export interface PlanRejection {
+  recommendationId: string;
+  path: string;
+  reason: string;
+}
+
+export interface CleanupPlan {
+  id: string;
+  createdAtMs: number;
+  method: CleanupMethod;
+  items: PlanItem[];
+  rejected: PlanRejection[];
+  totalBytes: number;
+  warnings: string[];
+}
+
+export type ItemStatus = "succeeded" | "failed" | "skipped";
+export type ActionStatus = "succeeded" | "partial" | "failed";
+
+export interface CleanupItemResult {
+  target: string;
+  operation: string;
+  bytes: number;
+  status: ItemStatus;
+  error: string | null;
+}
+
+export interface CleanupRecord {
+  id: string;
+  kind: "files" | "docker";
+  title: string;
+  startedAtMs: number;
+  finishedAtMs: number;
+  status: ActionStatus;
+  bytesFreed: number;
+  bytesTrashed: number;
+  items: CleanupItemResult[];
+}
+
+// ---- Docker (src-tauri/src/docker) ----------------------------------------
+
+export type DockerState = "notInstalled" | "notRunning" | "running";
+
+export interface DockerStatus {
+  state: DockerState;
+  cliPath: string | null;
+  clientVersion: string | null;
+  serverVersion: string | null;
+  platform: string | null;
+  message: string | null;
+}
+
+export interface UsageRow {
+  totalCount: number;
+  active: number;
+  sizeBytes: number;
+  reclaimableBytes: number;
+}
+
+export interface DockerUsage {
+  images: UsageRow;
+  containers: UsageRow;
+  volumes: UsageRow;
+  buildCache: UsageRow;
+}
+
+export interface DockerImage {
+  id: string;
+  shortId: string;
+  repository: string;
+  tag: string;
+  createdAtMs: number | null;
+  sizeBytes: number;
+  sharedBytes: number;
+  uniqueBytes: number;
+  usedBy: string[];
+  dangling: boolean;
+}
+
+export interface DockerContainer {
+  id: string;
+  shortId: string;
+  name: string;
+  image: string;
+  imageId: string | null;
+  state: string;
+  status: string;
+  running: boolean;
+  createdAtMs: number | null;
+  sizeBytes: number;
+  mounts: string[];
+  composeProject: string | null;
+}
+
+export interface DockerVolume {
+  name: string;
+  driver: string;
+  sizeBytes: number | null;
+  links: number | null;
+  usedBy: string[];
+  composeProject: string | null;
+}
+
+export interface BuildCacheEntry {
+  id: string;
+  cacheType: string;
+  description: string;
+  sizeBytes: number;
+  created: string;
+  lastUsed: string;
+  inUse: boolean;
+  shared: boolean;
+}
+
+export interface DockerOverview {
+  status: DockerStatus;
+  usage: DockerUsage;
+  images: DockerImage[];
+  containers: DockerContainer[];
+  volumes: DockerVolume[];
+  buildCache: BuildCacheEntry[];
+}
+
+export type DockerAction =
+  | { type: "startContainer"; id: string }
+  | { type: "stopContainer"; id: string }
+  | { type: "removeContainer"; id: string }
+  | { type: "removeImage"; id: string }
+  | { type: "pruneBuildCache" };
+
+export interface AffectedItem {
+  label: string;
+  detail: string;
+  bytes: number | null;
+}
+
+export interface DockerActionPreview {
+  action: DockerAction;
+  title: string;
+  command: string[];
+  destructive: boolean;
+  affected: AffectedItem[];
+  effects: string[];
+  warnings: string[];
+  blocked: string | null;
+  reclaimBytes: number | null;
+}
+
+export interface DockerActionResult {
+  preview: DockerActionPreview;
+  succeeded: boolean;
+  output: string;
+  error: string | null;
+  record: CleanupRecord | null;
+}
+
+export type FindingLevel = "info" | "suggestion" | "warning";
+
+export interface DiagnosticFinding {
+  level: FindingLevel;
+  title: string;
+  detail: string;
+  bytes: number | null;
+}

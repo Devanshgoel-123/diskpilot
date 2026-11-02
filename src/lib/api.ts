@@ -8,6 +8,15 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
   AppEnvironment,
+  CleanupMethod,
+  CleanupPlan,
+  CleanupRecord,
+  DiagnosticFinding,
+  DockerAction,
+  DockerActionPreview,
+  DockerActionResult,
+  DockerOverview,
+  Recommendation,
   DirectoryListing,
   DiskInfo,
   ItemDetails,
@@ -32,6 +41,24 @@ export const api = {
   revealInFinder: (path: string) => invoke<null>("reveal_in_finder", { path }),
   getScanHistory: (limit?: number) =>
     invoke<ScanRecord[]>("get_scan_history", { limit: limit ?? null }),
+
+  getRecommendations: () => invoke<Recommendation[]>("get_recommendations"),
+  createCleanupPlan: (ids: string[], method: CleanupMethod) =>
+    invoke<CleanupPlan>("create_cleanup_plan", { ids, method }),
+  discardCleanupPlan: (planId: string) => invoke<null>("discard_cleanup_plan", { planId }),
+  executeCleanupPlan: (planId: string) =>
+    invoke<CleanupRecord>("execute_cleanup_plan", { planId }),
+  getCleanupHistory: (limit?: number) =>
+    invoke<CleanupRecord[]>("get_cleanup_history", { limit: limit ?? null }),
+
+  dockerOverview: () => invoke<DockerOverview>("docker_overview"),
+  dockerPreview: (action: DockerAction) =>
+    invoke<DockerActionPreview>("docker_preview", { action }),
+  dockerExecute: (action: DockerAction) =>
+    invoke<DockerActionResult>("docker_execute", { action }),
+  dockerInspect: (kind: "container" | "image" | "volume", id: string) =>
+    invoke<string>("docker_inspect", { kind, id }),
+  dockerDiagnostics: () => invoke<DiagnosticFinding[]>("docker_diagnostics"),
 };
 
 export function onScanProgress(cb: (p: ScanProgress) => void): Promise<UnlistenFn> {

@@ -4,6 +4,8 @@ import { api, errorMessage, inDesktopApp, onScanFinished, onScanProgress } from 
 import { applyTheme, loadTheme, saveTheme, type ThemePreference } from "./theme";
 import type {
   AppEnvironment,
+  CleanupRecord,
+  Recommendation,
   DiskInfo,
   ScanProgress,
   ScanRecord,
@@ -38,6 +40,8 @@ interface AppState {
   disk: DiskInfo | null;
   summary: ScanSummary | null;
   history: ScanRecord[];
+  recommendations: Recommendation[];
+  cleanups: CleanupRecord[];
 
   scanning: boolean;
   progress: ScanProgress | null;
@@ -55,6 +59,7 @@ interface AppState {
   cancelScan: () => Promise<void>;
   refreshDisk: () => Promise<void>;
   refreshHistory: () => Promise<void>;
+  refreshRecommendations: () => Promise<void>;
   navigate: (page: PageId) => void;
   openInExplorer: (path: string) => void;
   /** Navigate within the Storage Explorer; `null` is the scan root. */
@@ -73,6 +78,8 @@ export const useApp = create<AppState>((set, get) => ({
   disk: null,
   summary: null,
   history: [],
+  recommendations: [],
+  cleanups: [],
   scanning: false,
   progress: null,
   lastStatus: null,
@@ -96,8 +103,11 @@ export const useApp = create<AppState>((set, get) => ({
       await onScanFinished(async (done) => {
         set({ scanning: false, lastStatus: { status: done.status, error: done.error } });
         if (done.status === "completed") {
-          const summary = await api.getScanSummary();
-          set({ summary, explorerPath: null });
+          const [summary, recommendations] = await Promise.all([
+            api.getScanSummary(),
+            api.getRecommendations(),
+          ]);
+          set({ summary, recommendations, explorerPath: null });
         }
         void get().refreshDisk();
         void get().refreshHistory();
@@ -105,14 +115,17 @@ export const useApp = create<AppState>((set, get) => ({
     }
 
     try {
-      const [env, disk, summary, scanning, history] = await Promise.all([
-        api.getEnvironment(),
-        api.getDiskInfo(),
-        api.getScanSummary(),
-        api.isScanRunning(),
-        api.getScanHistory(50),
-      ]);
-      set({ env, disk, summary, scanning, history, ready: true });
+      const [env, disk, summary, scanning, history, recommendations, cleanups] =
+        await Promise.all([
+          api.getEnvironment(),
+          api.getDiskInfo(),
+          api.getScanSummary(),
+          api.isScanRunning(),
+          api.getScanHistory(50),
+          api.getRecommendations(),
+          api.getCleanupHistory(50),
+        ]);
+      set({ env, disk, summary, scanning, history, recommendations, cleanups, ready: true });
     } catch (e) {
       set({ error: errorMessage(e), ready: true });
     }
@@ -146,7 +159,19 @@ export const useApp = create<AppState>((set, get) => ({
 
   refreshHistory: async () => {
     try {
-      set({ history: await api.getScanHistory(50) });
+      const [history, cleanups] = await Promise.all([
+        api.getScanHistory(50),
+        api.getCleanupHistory(50),
+      ]);
+      set({ history, cleanups });
+    } catch (e) {
+      set({ error: errorMessage(e) });
+    }
+  },
+
+  refreshRecommendations: async () => {
+    try {
+      set({ recommendations: await api.getRecommendations() });
     } catch (e) {
       set({ error: errorMessage(e) });
     }

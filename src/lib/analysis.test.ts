@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { groupByTool, isInside, outermost, regenerableBytes, topConsumers } from "./analysis";
+import {
+  groupByTool,
+  isInside,
+  outermost,
+  regenerableBytes,
+  summarizeSelection,
+  topConsumers,
+} from "./analysis";
 import type { DetectedLocation } from "./types";
 
 function loc(path: string, bytes: number, ruleId: string, container = false): DetectedLocation {
@@ -73,5 +80,24 @@ describe("groupByTool", () => {
     expect(node?.bytes).toBe(14);
     expect(node?.locations).toHaveLength(3);
     expect(groups[0]?.id).toBe("docker");
+  });
+});
+
+describe("summarizeSelection", () => {
+  const rec = (id: string, bytes: number, methods: ("trash" | "delete")[]) =>
+    ({ id, estimatedReclaimBytes: bytes, methods }) as unknown as import("./types").Recommendation;
+  const recs = [rec("a", 10, ["trash", "delete"]), rec("b", 5, ["trash"]), rec("c", 99, [])];
+
+  it("offers permanent delete only when every selected item allows it", () => {
+    expect(summarizeSelection(recs, new Set(["a"])).methods).toEqual(["trash", "delete"]);
+    expect(summarizeSelection(recs, new Set(["a", "b"])).methods).toEqual(["trash"]);
+  });
+  it("ignores non-actionable items in totals", () => {
+    const s = summarizeSelection(recs, new Set(["a", "b", "c"]));
+    expect(s.count).toBe(2);
+    expect(s.bytes).toBe(15);
+  });
+  it("handles an empty selection", () => {
+    expect(summarizeSelection(recs, new Set())).toEqual({ count: 0, bytes: 0, methods: [] });
   });
 });

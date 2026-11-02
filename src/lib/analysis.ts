@@ -2,7 +2,13 @@
  * Pure derivations over scan results. Kept separate from components so the
  * numbers shown in the UI are unit-tested.
  */
-import type { Category, CategoryTotal, DetectedLocation } from "./types";
+import type {
+  Category,
+  CategoryTotal,
+  CleanupMethod,
+  DetectedLocation,
+  Recommendation,
+} from "./types";
 
 /** True if `child` is strictly inside `parent` (component-wise). */
 export function isInside(child: string, parent: string): boolean {
@@ -114,4 +120,23 @@ export function groupByTool(locations: DetectedLocation[]): ToolGroup[] {
       bytes: sumBytes(outermost(matched)),
     };
   }).sort((a, b) => b.bytes - a.bytes);
+}
+
+export interface SelectionSummary {
+  count: number;
+  bytes: number;
+  /** Methods every selected item allows (permanent delete only if all do). */
+  methods: CleanupMethod[];
+}
+
+export function summarizeSelection(recs: Recommendation[], ids: Set<string>): SelectionSummary {
+  const selected = recs.filter((r) => ids.has(r.id) && r.methods.length > 0);
+  const methods: CleanupMethod[] = selected.length
+    ? (["trash", "delete"] as const).filter((m) => selected.every((r) => r.methods.includes(m)))
+    : [];
+  return {
+    count: selected.length,
+    bytes: sumBytes(selected.map((r) => ({ bytes: r.estimatedReclaimBytes }))),
+    methods,
+  };
 }
