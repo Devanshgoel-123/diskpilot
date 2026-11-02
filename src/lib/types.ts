@@ -376,3 +376,40 @@ export interface DiagnosticFinding {
   detail: string;
   bytes: number | null;
 }
+
+// ---- Developer tools analysis (src-tauri/src/devtools) ---------------------
+
+export type ItemState = "current" | "stale" | "orphaned" | "superseded" | "info";
+
+export interface ToolItem {
+  label: string;
+  path: string | null;
+  bytes: number;
+  detail: string;
+  state: ItemState;
+  lastUsedMs: number | null;
+  /** Present when the item can be cleaned up through Recommendations. */
+  recommendationId: string | null;
+}
+
+export interface ToolSection {
+  title: string;
+  description: string;
+  items: ToolItem[];
+}
+
+export interface ToolReport {
+  id: string;
+  name: string;
+  detected: boolean;
+  version: string | null;
+  totalBytes: number;
+  summary: string;
+  sections: ToolSection[];
+}
+
+export interface DevToolsReport {
+  generatedAtMs: number;
+  tools: ToolReport[];
+  reclaimableBytes: number;
+}

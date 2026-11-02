@@ -5,6 +5,7 @@ import { applyTheme, loadTheme, saveTheme, type ThemePreference } from "./theme"
 import type {
   AppEnvironment,
   CleanupRecord,
+  DevToolsReport,
   Recommendation,
   DiskInfo,
   ScanProgress,
@@ -42,6 +43,10 @@ interface AppState {
   history: ScanRecord[];
   recommendations: Recommendation[];
   cleanups: CleanupRecord[];
+  devtools: DevToolsReport | null;
+  analyzingDevTools: boolean;
+  /** Recommendation ids to preselect when the Recommendations page opens. */
+  preselect: string[] | null;
 
   scanning: boolean;
   progress: ScanProgress | null;
@@ -60,6 +65,9 @@ interface AppState {
   refreshDisk: () => Promise<void>;
   refreshHistory: () => Promise<void>;
   refreshRecommendations: () => Promise<void>;
+  analyzeDevTools: () => Promise<void>;
+  reviewInRecommendations: (ids: string[]) => void;
+  consumePreselect: () => string[] | null;
   navigate: (page: PageId) => void;
   openInExplorer: (path: string) => void;
   /** Navigate within the Storage Explorer; `null` is the scan root. */
@@ -80,6 +88,9 @@ export const useApp = create<AppState>((set, get) => ({
   history: [],
   recommendations: [],
   cleanups: [],
+  devtools: null,
+  analyzingDevTools: false,
+  preselect: null,
   scanning: false,
   progress: null,
   lastStatus: null,
@@ -125,6 +136,7 @@ export const useApp = create<AppState>((set, get) => ({
         api.getCleanupHistory(50),
       ]);
       set({ env, disk, summary, scanning, history, recommendations, cleanups, ready: true });
+      void api.getDevToolsReport().then((devtools) => set({ devtools }));
     } catch (e) {
       set({ error: errorMessage(e), ready: true });
     }
@@ -166,6 +178,28 @@ export const useApp = create<AppState>((set, get) => ({
     } catch (e) {
       set({ error: errorMessage(e) });
     }
+  },
+
+  analyzeDevTools: async () => {
+    if (get().analyzingDevTools) return;
+    set({ analyzingDevTools: true });
+    try {
+      const devtools = await api.analyzeDevTools();
+      const recommendations = await api.getRecommendations();
+      set({ devtools, recommendations });
+    } catch (e) {
+      set({ error: errorMessage(e) });
+    } finally {
+      set({ analyzingDevTools: false });
+    }
+  },
+
+  reviewInRecommendations: (ids) => set({ preselect: ids, page: "recommendations" }),
+
+  consumePreselect: () => {
+    const ids = get().preselect;
+    if (ids) set({ preselect: null });
+    return ids;
   },
 
   refreshRecommendations: async () => {

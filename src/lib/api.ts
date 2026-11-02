@@ -11,6 +11,7 @@ import type {
   CleanupMethod,
   CleanupPlan,
   CleanupRecord,
+  DevToolsReport,
   DiagnosticFinding,
   DockerAction,
   DockerActionPreview,
@@ -49,6 +50,9 @@ export const api = {
   executeCleanupPlan: (planId: string) => invoke<CleanupRecord>("execute_cleanup_plan", { planId }),
   getCleanupHistory: (limit?: number) =>
     invoke<CleanupRecord[]>("get_cleanup_history", { limit: limit ?? null }),
+
+  analyzeDevTools: () => invoke<DevToolsReport>("analyze_dev_tools"),
+  getDevToolsReport: () => invoke<DevToolsReport | null>("get_dev_tools_report"),
 
   dockerOverview: () => invoke<DockerOverview>("docker_overview"),
   dockerPreview: (action: DockerAction) =>
