@@ -44,9 +44,14 @@ Most contributions will be teaching DiskPilot about a new location. Rules live i
 
 A classification never decides that something is safe to delete. Keep explanations factual.
 
+## Adding a cleanup policy
+
+Recommendations come from `src-tauri/src/recommend/policies.rs`. A policy maps a classifier rule to a tier (`LikelySafe`, `ReviewFirst`, `Keep`), the methods DiskPilot may use (Trash, permanent delete, or none), why it may be safe, the risks, and optionally a command the user can run themselves. Permanent delete is only for data that is regenerable without user input. `Keep` policies must not be actionable (a test enforces this).
+
 ## Rules for code that touches files
 
-- Never call `fs::remove_*`, `fs::rename` or anything destructive outside the cleanup executor (not yet built). The executor must route every path through `safety::authorize_destructive`.
+- Never call `fs::remove_*`, `fs::rename`, `trash::delete` or anything destructive outside `cleanup/executor.rs`, which routes every path through `safety::authorize_destructive`.
+- Docker changes go only through the `DockerAction` enum in `docker/actions.rs`. Never add volume removal or `--force`.
 - Never build shell command strings. Use `Command::new(..).arg(..)`.
 - Never follow symlinks during scanning: use `symlink_metadata`.
 - Never show a number in the UI that did not come from the scanner or the OS.

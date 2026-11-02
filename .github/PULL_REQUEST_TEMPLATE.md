@@ -10,7 +10,8 @@
 
 ## Safety checklist
 
-- [ ] No new code path deletes, moves or modifies user files outside `safety::authorize_destructive` and the planned executor
+- [ ] No new code path deletes, moves or modifies user files outside `cleanup/executor.rs` (which uses `safety::authorize_destructive`)
+- [ ] Docker changes only through `DockerAction` (no `--force`, no volume removal)
 - [ ] No shell strings are built from paths (use `Command::arg`)
 - [ ] New classification rules include an explanation and a test
 - [ ] No metric is shown in the UI that does not come from the scanner or the OS

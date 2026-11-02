@@ -1,6 +1,6 @@
 # ADR 0002: Ship read-only first; one gate for destructive operations
 
-**Status:** accepted
+**Status:** accepted (Phase 1); cleanup shipped in Phase 2 per ADR 0005
 
 ## Context
 

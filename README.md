@@ -2,9 +2,9 @@
 
 **Understand your storage. Know what is safe. Clean it confidently.**
 
-DiskPilot is a free, open-source macOS app that shows what is using your disk, explains what each thing is, and (in an upcoming release) helps you clean it up safely. It is built for developers whose Macs fill up with Docker images, `node_modules`, Xcode DerivedData, AI coding tool data and package manager caches, and for anyone who wants to understand their storage without running terminal commands.
+DiskPilot is a free, open-source macOS app that shows what is using your disk, explains what each thing is, and helps you clean it up safely. It is built for developers whose Macs fill up with Docker images, `node_modules`, Xcode DerivedData, AI coding tool data and package manager caches, and for anyone who wants to understand their storage without running terminal commands.
 
-> **Status: early development (v0.1, read-only).** Scanning, classification and exploration work today. DiskPilot cannot delete anything yet; cleanup ships only once its safety layer is complete. See the [roadmap](#roadmap).
+> **Status: early development (v0.1).** Scanning, classification, explained cleanup recommendations with a Trash-first executor, and a Docker Manager work today. See the [roadmap](#roadmap).
 
 <!-- Screenshots: to be added. Please do not submit screenshots containing personal file names. -->
 
@@ -25,9 +25,15 @@ A 256 GB MacBook used for development fills up fast, and macOS's storage view mo
 - **Scan history** stored locally in SQLite.
 - Dark-first interface with light mode.
 
+- **Cleanup recommendations.** Every recommendation is tiered **Likely safe**, **Review first** or **Keep** and shows why it was detected, why it may be safe, what could go wrong, the confidence, the estimated reclaim, and the proposed action. Some items (pnpm store, nvm versions, simulators) are explained with a command you can run yourself; DiskPilot never runs those.
+- **Safe cleanup.** You select items and get a preview of the exact paths. Nothing happens until you confirm. Items go to the Trash by default; permanent deletion is offered only for regenerable data such as caches and build output. Every path is re-checked right before it is touched.
+- **Cleanup history.** Every action is recorded with the affected paths, the exact operation or command, space reclaimed, and per-item errors.
+- **Docker Manager.** Disk usage by images, containers, volumes and build cache; container start/stop; inspect anything; remove stopped containers, unused images and unused build cache through previews that show the exact `docker` command. Images in use explain which containers depend on them. Volumes are shown and inspectable but never removed. Diagnostics explain where Docker's space goes. Detects when Docker is not installed or not running.
+- Validated category color palette (colorblind-checked), dark-first with a tuned light theme.
+
 ### Not built yet
 
-Cleanup recommendations, any form of deletion, the Docker Manager (it does not talk to Docker yet), deep per-tool analysis, and the optional AI assistant. These screens exist in the app but say clearly that they are not implemented.
+Deep per-tool analysis (Cursor agent versions, per-project activity, simulator runtimes by OS), and the optional AI assistant.
 
 ## Installation
 
@@ -67,8 +73,10 @@ React UI (src/)  ──typed commands──▶  Rust engine (src-tauri/src/)
                                        ├─ explorer     folder listings from the scan index
                                        ├─ disk         capacity via statfs
                                        ├─ history      SQLite scan log
-                                       ├─ safety       the single gate for UI-supplied paths
-                                       └─ (Phase 2)    recommendations → planner → executor
+                                       ├─ recommend    policies → tiered, explained recommendations
+                                       ├─ cleanup      planner (preview) → executor (Trash / delete)
+                                       ├─ safety       the single gate for every path read or removed
+                                       └─ docker       CLI runner, parsers, previewed actions
 ```
 
 Stack: Tauri 2, React 19, TypeScript (strict), Vite, Tailwind CSS 4, shadcn/ui-style components on Radix, Lucide, Recharts, Rust, SQLite.
@@ -78,8 +86,9 @@ The full design, including data flow and module boundaries, is in [docs/ARCHITEC
 ## Security principles
 
 - **Local only.** No account, cloud backend, telemetry or API key.
-- **Read-only by default.** v0.1 contains no code that modifies or deletes your files.
-- **Strict pipeline separation.** The scanner and classifier cannot act. Future deletions must go planner → central safety gate → executor, with predefined operations, validated paths, protected system and home locations, no symlink following, no shell strings, an exact preview and your explicit confirmation.
+- **Strict pipeline separation.** The scanner, classifier and recommendation engine cannot act. Deletion only happens in the cleanup executor, for a single-use plan you previewed and confirmed, with every path re-authorized by the central safety gate (inside your home and the scanned folder, not a protected location, no symbolic links in the path).
+- **Trash first.** Items go to the macOS Trash unless you choose permanent deletion, which is only offered for regenerable data. DiskPilot never claims deleted data can always be restored.
+- **Predefined Docker operations only.** IDs are validated, commands run without a shell, there is no `-f`, no volume removal, and no prune without listing what it affects.
 - **Minimal permissions.** The UI has no generic filesystem or shell access, only DiskPilot's typed commands.
 - **No fake numbers.** Every metric comes from the scanner or the OS.
 
@@ -100,7 +109,9 @@ Known limitations in v0.1:
 - "Available" excludes purgeable space, so it can be lower than Finder's figure.
 - APFS clones are counted once per copy, so totals can exceed physical usage.
 - Folder listings show at most 1,000 entries (the rest are summarized).
-- The scan index lives in memory; reopening the app requires a rescan to browse.
+- The scan index lives in memory; reopening the app requires a rescan to browse or clean up.
+- After a cleanup, sizes reflect the last scan until you rescan; moved-to-Trash space is freed only when the Trash is emptied.
+- Docker actions are unit-tested against recorded CLI output; removal actions have not been exercised against every Docker distribution (OrbStack, Colima).
 
 ## Contributing
 
