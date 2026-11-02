@@ -17,6 +17,7 @@ import {
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
@@ -53,6 +54,16 @@ const TOOL_COLOR: Record<string, string> = {
   python: "var(--cat-cache)",
 };
 
+/** A folder owned by the tool, used to show the installed app's own icon. */
+const TOOL_APP_PATH: Record<string, string> = {
+  cursor: ".cursor",
+  vscode: ".vscode",
+  "claude-code": ".claude",
+  "claude-desktop": "Library/Application Support/Claude",
+  codex: ".codex",
+  xcode: "Library/Developer/Xcode",
+};
+
 const STATE_META: Record<ItemState, { label: string; color: string }> = {
   current: { label: "In use", color: "var(--tier-safe)" },
   stale: { label: "Inactive", color: "var(--tier-review)" },
@@ -86,6 +97,7 @@ function ToolCard({
   const home = useApp((s) => s.env?.homeDir);
   const [open, setOpen] = useState(false);
   const Icon = TOOL_ICON[tool.id] ?? Wrench;
+  const appPath = TOOL_APP_PATH[tool.id] && home ? `${home}/${TOOL_APP_PATH[tool.id]}` : null;
   const color = TOOL_COLOR[tool.id] ?? "var(--accent)";
   const items = tool.sections.flatMap((s) => s.items);
   const actionable = items.filter((i) => i.recommendationId && reviewable.has(i.recommendationId));
@@ -97,12 +109,18 @@ function ToolCard({
   return (
     <Panel className={cn(open && "md:col-span-2")}>
       <div className="flex items-start gap-3 px-4 py-3.5">
-        <span
-          className="tinted flex size-8 shrink-0 items-center justify-center rounded-lg border"
-          style={{ "--tint": color } as CSSProperties}
-        >
-          <Icon className="size-4" style={{ color }} aria-hidden />
-        </span>
+        <AppIcon
+          path={appPath}
+          className="size-8"
+          fallback={
+            <span
+              className="tinted flex size-8 shrink-0 items-center justify-center rounded-lg border"
+              style={{ "--tint": color } as CSSProperties}
+            >
+              <Icon className="size-4" style={{ color }} aria-hidden />
+            </span>
+          }
+        />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-3">
             <p className="truncate text-[13px] font-medium">

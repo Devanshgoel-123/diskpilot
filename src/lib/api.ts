@@ -7,6 +7,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
+  AppBadge,
   AppEnvironment,
   AssistantReply,
   AssistantStatus,
@@ -42,6 +43,8 @@ export const api = {
     invoke<DirectoryListing>("list_directory", { path: path ?? null }),
   getItemDetails: (path: string) => invoke<ItemDetails>("get_item_details", { path }),
   revealInFinder: (path: string) => invoke<null>("reveal_in_finder", { path }),
+  getAppBadges: (paths: string[]) => invoke<Record<string, AppBadge>>("get_app_badges", { paths }),
+
   getScanHistory: (limit?: number) =>
     invoke<ScanRecord[]>("get_scan_history", { limit: limit ?? null }),
 

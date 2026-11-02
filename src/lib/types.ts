@@ -434,3 +434,10 @@ export type ChatEntry =
   | { role: "user"; text: string }
   | { role: "assistant"; reply: AssistantReply }
   | { role: "error"; text: string };
+
+/** The installed app a folder belongs to, with its own icon. */
+export interface AppBadge {
+  name: string;
+  /** PNG data URL rendered from the installed app. */
+  icon: string;
+}

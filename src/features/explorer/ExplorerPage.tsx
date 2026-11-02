@@ -16,13 +16,20 @@ import { useApp } from "@/lib/store";
 import type { Category, DirectoryEntry, DirectoryListing } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+import { AppIcon } from "@/components/shared/AppIcon";
 import { CategorySelect } from "@/components/shared/CategorySelect";
 import { SortHeader } from "@/components/shared/SortHeader";
 import { type SortKey, sortEntries } from "./sorting";
 
 function EntryIcon({ entry }: { entry: DirectoryEntry }) {
   const cls = "size-3.5 shrink-0";
-  if (entry.kind === "directory") return <Folder className={cn(cls, "text-accent")} aria-hidden />;
+  if (entry.kind === "directory")
+    return (
+      <AppIcon
+        path={entry.path}
+        fallback={<Folder className={cn(cls, "text-accent")} aria-hidden />}
+      />
+    );
   if (entry.kind === "symlink")
     return <Link2 className={cn(cls, "text-subtle-foreground")} aria-hidden />;
   return <File className={cn(cls, "text-subtle-foreground")} aria-hidden />;

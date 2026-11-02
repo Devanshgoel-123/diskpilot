@@ -1,6 +1,7 @@
 import { ChevronDown, FolderOpen, FolderTree, Terminal } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { AppIcon } from "@/components/shared/AppIcon";
 import { CategoryBadge } from "@/components/shared/CategoryBadge";
 import { CopyButton } from "@/components/shared/CopyButton";
 import { SizeBar } from "@/components/shared/SizeBar";
@@ -74,6 +75,7 @@ export function RecommendationRow({
         >
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
+              <AppIcon path={rec.path} />
               <span className="truncate text-[13px] font-medium">{rec.title}</span>
               <CategoryBadge category={rec.classification.category} />
               {rec.source !== "scan" ? (

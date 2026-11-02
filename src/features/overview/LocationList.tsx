@@ -1,5 +1,6 @@
 import { ChevronRight } from "lucide-react";
 
+import { AppIcon } from "@/components/shared/AppIcon";
 import { CategoryBadge } from "@/components/shared/CategoryBadge";
 import { SizeBar } from "@/components/shared/SizeBar";
 import { CATEGORY_META } from "@/lib/categories";
@@ -24,6 +25,7 @@ export function LocationList({ locations }: { locations: DetectedLocation[] }) {
           >
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
+                <AppIcon path={l.path} />
                 <span className="truncate text-[13px]">{l.classification.label}</span>
                 <CategoryBadge category={l.classification.category} />
               </div>
