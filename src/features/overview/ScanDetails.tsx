@@ -2,15 +2,15 @@ import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Panel, PanelHeader } from "@/components/ui/panel";
+import { Section } from "@/components/ui/section";
 import { formatCount, formatDate, formatDuration, formatRelative, tildify } from "@/lib/format";
 import type { ScanSummary } from "@/lib/types";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-1.5">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="tabular min-w-0 truncate text-right text-xs">{value}</dd>
+      <dt className="text-[13px] text-muted-foreground">{label}</dt>
+      <dd className="tabular min-w-0 truncate text-right text-[13px]">{value}</dd>
     </div>
   );
 }
@@ -18,9 +18,8 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 export function ScanDetails({ summary, home }: { summary: ScanSummary; home: string | undefined }) {
   const [showIssues, setShowIssues] = useState(false);
   return (
-    <Panel>
-      <PanelHeader title="Last scan" description={formatRelative(summary.finishedAtMs)} />
-      <dl className="divide-y divide-border px-4 pb-2">
+    <Section title="Last scan" description={formatRelative(summary.finishedAtMs)}>
+      <dl className="divide-y divide-border">
         <Row
           label="Folder"
           value={<span className="font-mono">{tildify(summary.root, home)}</span>}
@@ -48,7 +47,7 @@ export function ScanDetails({ summary, home }: { summary: ScanSummary; home: str
         />
       </dl>
       {summary.errorCount > 0 ? (
-        <div className="border-t border-border px-4 py-2.5">
+        <div className="border-t border-border py-2.5">
           <p className="text-2xs leading-snug text-subtle-foreground">
             Usually folders protected by macOS privacy settings. Their sizes are not included.
           </p>
@@ -74,6 +73,6 @@ export function ScanDetails({ summary, home }: { summary: ScanSummary; home: str
           ) : null}
         </div>
       ) : null}
-    </Panel>
+    </Section>
   );
 }

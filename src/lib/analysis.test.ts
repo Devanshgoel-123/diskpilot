@@ -4,11 +4,13 @@ import {
   groupByTool,
   isInside,
   outermost,
+  pickStartHere,
+  recoverableByCategory,
   regenerableBytes,
   summarizeSelection,
   topConsumers,
 } from "./analysis";
-import type { DetectedLocation } from "./types";
+import type { Category, DetectedLocation, Recommendation, Tier } from "./types";
 
 function loc(path: string, bytes: number, ruleId: string, container = false): DetectedLocation {
   return {
@@ -99,5 +101,46 @@ describe("summarizeSelection", () => {
   });
   it("handles an empty selection", () => {
     expect(summarizeSelection(recs, new Set())).toEqual({ count: 0, bytes: 0, methods: [] });
+  });
+});
+
+function recOf(id: string, tier: Tier, bytes: number, category: Category, actionable = true) {
+  return {
+    id,
+    tier,
+    estimatedReclaimBytes: bytes,
+    methods: actionable ? ["trash"] : [],
+    classification: { category },
+  } as unknown as Recommendation;
+}
+
+describe("recoverableByCategory", () => {
+  it("counts only actionable Likely safe items, per category", () => {
+    const totals = recoverableByCategory([
+      recOf("a", "likelySafe", 10, "cache"),
+      recOf("b", "likelySafe", 5, "cache"),
+      recOf("c", "likelySafe", 7, "buildArtifacts"),
+      recOf("d", "reviewFirst", 100, "cache"),
+      recOf("e", "likelySafe", 50, "cache", false),
+    ]);
+    expect(totals.get("cache")).toBe(15);
+    expect(totals.get("buildArtifacts")).toBe(7);
+  });
+});
+
+describe("pickStartHere", () => {
+  it("leads with the largest Likely safe items and includes one Review first item", () => {
+    const picked = pickStartHere(
+      [
+        recOf("s1", "likelySafe", 10, "cache"),
+        recOf("s2", "likelySafe", 30, "cache"),
+        recOf("r1", "reviewFirst", 20, "cache"),
+        recOf("r2", "reviewFirst", 25, "cache"),
+        recOf("k", "keep", 999, "cache"),
+        recOf("m", "likelySafe", 500, "cache", false),
+      ],
+      3,
+    ).map((r) => r.id);
+    expect(picked).toEqual(["s2", "r2", "s1"]);
   });
 });

@@ -140,3 +140,27 @@ export function summarizeSelection(recs: Recommendation[], ids: Set<string>): Se
     methods,
   };
 }
+
+/** Bytes of Likely safe, actionable recommendations, per category. */
+export function recoverableByCategory(recs: Recommendation[]): Map<Category, number> {
+  const out = new Map<Category, number>();
+  for (const r of recs) {
+    if (r.tier !== "likelySafe" || r.methods.length === 0) continue;
+    const c = r.classification.category;
+    out.set(c, (out.get(c) ?? 0) + r.estimatedReclaimBytes);
+  }
+  return out;
+}
+
+/**
+ * The few items most worth a look: the largest actionable recommendations,
+ * Likely safe first, with the single largest Review first item included.
+ */
+export function pickStartHere(recs: Recommendation[], limit = 5): Recommendation[] {
+  const actionable = recs.filter((r) => r.methods.length > 0 && r.tier !== "keep");
+  const bySize = (x: Recommendation, y: Recommendation) =>
+    y.estimatedReclaimBytes - x.estimatedReclaimBytes;
+  const safe = actionable.filter((r) => r.tier === "likelySafe").sort(bySize);
+  const review = actionable.filter((r) => r.tier === "reviewFirst").sort(bySize);
+  return [...safe.slice(0, limit - 1), ...review.slice(0, 1)].sort(bySize).slice(0, limit);
+}
