@@ -25,6 +25,8 @@ export default defineConfig({
     target: "safari15",
     minify: process.env.TAURI_ENV_DEBUG ? false : "esbuild",
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
+    // Assets load from disk inside the app bundle; chunk size is not a network concern.
+    chunkSizeWarningLimit: 1500,
   },
   test: {
     globals: true,

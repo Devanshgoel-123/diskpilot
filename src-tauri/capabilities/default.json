@@ -3,5 +3,10 @@
   "identifier": "default",
   "description": "Minimal permissions for the main window. Filesystem access happens only through DiskPilot's own typed, validated Rust commands; the frontend gets no generic fs or shell plugin.",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:allow-open", "opener:allow-open-url"]
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "dialog:allow-open",
+    "opener:allow-open-url"
+  ]
 }
