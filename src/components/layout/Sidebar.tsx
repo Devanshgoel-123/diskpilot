@@ -18,8 +18,6 @@ interface NavItem {
   id: PageId;
   label: string;
   icon: LucideIcon;
-  /** Shown for modules that are not built yet. */
-  soon?: boolean;
 }
 
 const SECTIONS: { title: string; items: NavItem[] }[] = [
@@ -53,18 +51,23 @@ function NavButton({ item }: { item: NavItem }) {
       onClick={() => navigate(item.id)}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "group flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] transition-colors",
+        "group relative flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] transition-colors",
         active
-          ? "bg-hover font-medium text-foreground"
-          : "text-muted-foreground hover:bg-hover/60 hover:text-foreground",
+          ? "bg-accent-soft font-medium text-foreground"
+          : "text-muted-foreground hover:bg-hover hover:text-foreground",
       )}
     >
+      {active ? (
+        <span
+          className="absolute top-1.5 bottom-1.5 left-0 w-[2px] rounded-full bg-accent"
+          aria-hidden
+        />
+      ) : null}
       <Icon
         className={cn("size-[15px] shrink-0", active ? "text-accent" : "text-subtle-foreground")}
         aria-hidden
       />
       <span className="truncate">{item.label}</span>
-      {item.soon ? <span className="ml-auto text-2xs text-subtle-foreground">Soon</span> : null}
     </button>
   );
 }
