@@ -1,9 +1,9 @@
 //! DiskPilot engine.
 //!
 //! Module boundaries mirror the safety architecture:
-//! scanner (read-only) -> classifier (pure) -> [recommendations -> planner ->
-//! executor, Phase 2] with `safety` as the single gate for any path that comes
-//! from the UI.
+//! scanner (read-only) -> classifier (pure) -> recommend -> cleanup::planner ->
+//! cleanup::executor, with `safety` as the single gate for every path that is
+//! read from the UI or removed. Docker changes go through `docker::actions`.
 
 pub mod classifier;
 pub mod cleanup;
@@ -41,7 +41,8 @@ pub fn run() {
             app.manage(AppState {
                 home,
                 scan: std::sync::Mutex::new(ScanSlot::default()),
-                history,
+                plans: std::sync::Mutex::new(std::collections::HashMap::new()),
+                history: history.map(std::sync::Arc::new),
             });
             Ok(())
         })
@@ -56,6 +57,16 @@ pub fn run() {
             commands::get_item_details,
             commands::reveal_in_finder,
             commands::get_scan_history,
+            commands::get_recommendations,
+            commands::create_cleanup_plan,
+            commands::discard_cleanup_plan,
+            commands::execute_cleanup_plan,
+            commands::get_cleanup_history,
+            commands::docker_overview,
+            commands::docker_preview,
+            commands::docker_execute,
+            commands::docker_inspect,
+            commands::docker_diagnostics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DiskPilot");
