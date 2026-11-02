@@ -76,6 +76,9 @@ export function RecommendationRow({
             <div className="flex min-w-0 items-center gap-2">
               <span className="truncate text-[13px] font-medium">{rec.title}</span>
               <CategoryBadge category={rec.classification.category} />
+              {rec.source !== "scan" ? (
+                <span className="text-2xs text-subtle-foreground">via Developer Tools</span>
+              ) : null}
               {!actionable ? (
                 <span className="text-2xs text-subtle-foreground">
                   {rec.tier === "keep" ? "Keep" : "Manual"}

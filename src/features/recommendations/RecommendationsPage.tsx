@@ -1,5 +1,5 @@
 import { ListChecks, ShieldCheck, Sparkles } from "lucide-react";
-import { type CSSProperties, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -21,7 +21,14 @@ export function RecommendationsPage() {
   const { summary, recommendations, scanning, startScan, refreshRecommendations, refreshHistory } =
     useApp();
   const [filter, setFilter] = useState<Filter>("all");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const consumePreselect = useApp((s) => s.consumePreselect);
+  // Items handed over from another page (e.g. Developer Tools) start selected.
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(useApp.getState().preselect ?? []),
+  );
+  useEffect(() => {
+    consumePreselect();
+  }, [consumePreselect]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [dialog, setDialog] = useState<{ key: number; ids: string[] } | null>(null);
 
