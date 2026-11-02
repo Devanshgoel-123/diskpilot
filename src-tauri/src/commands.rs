@@ -26,7 +26,8 @@ use crate::model::{
 use crate::recommend;
 use crate::safety::{self, SafetyError};
 use crate::scanner::{self, now_ms, ScanError, ScanOptions, ScanOutcome};
-use crate::state::AppState;
+use crate::snapshot;
+use crate::state::{AppState, ScanSlot};
 
 pub const EVENT_SCAN_PROGRESS: &str = "scan://progress";
 pub const EVENT_SCAN_FINISHED: &str = "scan://finished";
@@ -124,6 +125,7 @@ fn run_scan(app: AppHandle, opts: ScanOptions, cancel: Arc<AtomicBool>) {
     });
 
     let state = app.state::<AppState>();
+    let mut saved: Option<Arc<ScanOutcome>> = None;
     let (status, error, record) = match result {
         Ok(outcome) => {
             let s = &outcome.summary;
@@ -139,16 +141,15 @@ fn run_scan(app: AppHandle, opts: ScanOptions, cancel: Arc<AtomicBool>) {
                 error_count: s.error_count,
                 status: ScanStatus::Completed,
             };
-            let classifier = Classifier::new(&opts.home);
-            let mut recs =
-                recommend::recommend(&outcome.summary, &outcome.index, &classifier, now_ms());
-            crate::apps::name_apps_in_titles(&opts.home, &mut recs);
+            let recs = scan_recommendations(&opts.home, &outcome);
+            let outcome = Arc::new(outcome);
             let mut slot = state.slot();
-            slot.last = Some(Arc::new(outcome));
+            slot.last = Some(outcome.clone());
             slot.recommendations = Arc::new(recs);
             slot.running = None;
             drop(slot);
             state.plans().clear();
+            saved = Some(outcome);
             (ScanStatus::Completed, None, record)
         }
         Err(err) => {
@@ -189,6 +190,62 @@ fn run_scan(app: AppHandle, opts: ScanOptions, cancel: Arc<AtomicBool>) {
             error,
         },
     );
+    // Save after telling the UI, so a large index doesn't delay the results.
+    if let (Some(outcome), Some(dir)) = (saved, &state.data_dir) {
+        if let Err(e) = snapshot::save(dir, &outcome) {
+            eprintln!("diskpilot: could not save scan results: {e}");
+        }
+    }
+}
+
+/// Recommendations derived from a scan. Recomputed for a restored scan too,
+/// so improvements to the rules apply to saved results.
+fn scan_recommendations(home: &Path, outcome: &ScanOutcome) -> Vec<Recommendation> {
+    let classifier = Classifier::new(home);
+    let mut recs = recommend::recommend(&outcome.summary, &outcome.index, &classifier, now_ms());
+    crate::apps::name_apps_in_titles(home, &mut recs);
+    recs
+}
+
+/// A scan slot filled from a saved scan.
+pub fn restored_slot(home: &Path, outcome: ScanOutcome) -> ScanSlot {
+    ScanSlot {
+        recommendations: Arc::new(scan_recommendations(home, &outcome)),
+        last: Some(Arc::new(outcome)),
+        ..Default::default()
+    }
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedScanInfo {
+    /// Size of the saved results file, if one exists.
+    pub file_bytes: Option<u64>,
+}
+
+#[tauri::command]
+pub fn get_saved_scan_info(state: State<'_, AppState>) -> SavedScanInfo {
+    SavedScanInfo {
+        file_bytes: state.data_dir.as_deref().and_then(snapshot::file_size),
+    }
+}
+
+/// Delete the saved results and forget the current ones. The next scan starts
+/// from nothing.
+#[tauri::command]
+pub fn clear_saved_scan(state: State<'_, AppState>) -> AppResult<()> {
+    let mut slot = state.slot();
+    if slot.running.is_some() {
+        return Err(AppError::ScanInProgress);
+    }
+    if let Some(dir) = &state.data_dir {
+        snapshot::remove(dir).map_err(|e| AppError::io(dir, &e))?;
+    }
+    slot.last = None;
+    slot.recommendations = Arc::new(Vec::new());
+    drop(slot);
+    state.plans().clear();
+    Ok(())
 }
 
 #[tauri::command]
@@ -337,15 +394,19 @@ pub fn get_dev_tools_report(state: State<'_, AppState>) -> Option<DevToolsReport
 /// Build a previewable plan. Paths come from the engine's recommendations,
 /// never from the UI. Nothing is changed.
 #[tauri::command]
-pub fn create_cleanup_plan(
+pub async fn create_cleanup_plan(
     state: State<'_, AppState>,
     ids: Vec<String>,
     method: CleanupMethod,
 ) -> AppResult<CleanupPlan> {
-    let recs = state.slot().all_recommendations();
+    let (recs, scanned_at) = {
+        let slot = state.slot();
+        let at = slot.last.as_ref().map(|o| o.summary.finished_at_ms);
+        (slot.all_recommendations(), at)
+    };
     let root = cleanup_root(&state);
     let now = now_ms();
-    let plan = planner::build_plan(
+    let mut plan = planner::build_plan(
         format!("cleanup-{now}"),
         &recs,
         &ids,
@@ -354,6 +415,15 @@ pub fn create_cleanup_plan(
         &state.home,
         now,
     );
+    if scanned_at.is_none_or(|at| now - at > planner::REMEASURE_AFTER_MS) {
+        plan = blocking(move || {
+            planner::refresh_sizes(&mut plan, |p| {
+                p.symlink_metadata().ok().map(|_| scanner::measure(p))
+            });
+            Ok(plan)
+        })
+        .await?;
+    }
     let mut plans = state.plans();
     plans.retain(|_, p| now - p.created_at_ms < planner::PLAN_TTL_MS);
     plans.insert(plan.id.clone(), plan.clone());

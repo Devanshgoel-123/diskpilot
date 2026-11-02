@@ -66,6 +66,8 @@ pub struct AppState {
     pub history: Option<Arc<History>>,
     /// The assistant conversation (kept in memory only).
     pub assistant: Mutex<Conversation>,
+    /// Where the last scan is saved between launches; `None` if unavailable.
+    pub data_dir: Option<PathBuf>,
 }
 
 impl AppState {

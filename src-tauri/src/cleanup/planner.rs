@@ -96,6 +96,31 @@ pub fn build_plan(
     }
 }
 
+/// Results older than this are re-measured when a preview is built.
+pub const REMEASURE_AFTER_MS: i64 = 10 * 60 * 1000;
+
+/// Replace scanned sizes with what is on disk now, so a preview built from
+/// older (for example, saved) results shows current figures. Items that no
+/// longer exist move to `rejected`. `measure` returns `None` for a missing
+/// path.
+pub fn refresh_sizes(plan: &mut CleanupPlan, measure: impl Fn(&Path) -> Option<u64>) {
+    let items = std::mem::take(&mut plan.items);
+    for mut item in items {
+        match measure(Path::new(&item.path)) {
+            Some(bytes) => {
+                item.bytes = bytes;
+                plan.items.push(item);
+            }
+            None => plan.rejected.push(PlanRejection {
+                recommendation_id: item.recommendation_id,
+                path: item.path,
+                reason: "No longer exists. It was moved or removed after the scan.".into(),
+            }),
+        }
+    }
+    plan.total_bytes = plan.items.iter().map(|i| i.bytes).sum();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -224,5 +249,33 @@ mod tests {
         );
         assert!(plan.items.is_empty(), "{:?}", plan.items);
         assert_eq!(plan.rejected.len(), 2);
+    }
+
+    #[test]
+    fn refresh_sizes_remeasures_and_drops_missing_items() {
+        let (_d, home) = fixture();
+        let nm = home.join("proj/node_modules").display().to_string();
+        let cache = home.join("Library/Caches/com.x").display().to_string();
+        let recs = vec![
+            rec(&nm, "node.node-modules", vec![CleanupMethod::Trash]),
+            rec(&cache, "library.caches", vec![CleanupMethod::Trash]),
+        ];
+        let ids = vec![nm.clone(), cache.clone()];
+        let mut plan = build_plan(
+            "p".into(),
+            &recs,
+            &ids,
+            CleanupMethod::Trash,
+            &home,
+            &home,
+            0,
+        );
+        assert_eq!(plan.items.len(), 2);
+        refresh_sizes(&mut plan, |p| (p == Path::new(&nm)).then_some(42));
+        assert_eq!(plan.items.len(), 1);
+        assert_eq!(plan.items[0].bytes, 42);
+        assert_eq!(plan.total_bytes, 42);
+        assert_eq!(plan.rejected.len(), 1);
+        assert_eq!(plan.rejected[0].path, cache);
     }
 }

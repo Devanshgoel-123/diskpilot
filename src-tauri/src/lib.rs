@@ -20,13 +20,14 @@ pub mod model;
 pub mod recommend;
 pub mod safety;
 pub mod scanner;
+pub mod snapshot;
 pub mod state;
 #[cfg(test)]
 pub mod test_support;
 
 use tauri::Manager;
 
-use state::{AppState, ScanSlot};
+use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -35,18 +36,29 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let home = dirs::home_dir().ok_or("Could not determine the home folder")?;
-            let history = app.path().app_data_dir().ok().and_then(|dir| {
-                std::fs::create_dir_all(&dir).ok()?;
+            let data_dir = app
+                .path()
+                .app_data_dir()
+                .ok()
+                .filter(|dir| std::fs::create_dir_all(dir).is_ok());
+            let history = data_dir.as_ref().and_then(|dir| {
                 history::History::open(&dir.join("diskpilot.sqlite3"))
                     .map_err(|e| eprintln!("diskpilot: history unavailable: {e}"))
                     .ok()
             });
+            // Results from the previous launch, shown until the next scan.
+            let slot = data_dir
+                .as_deref()
+                .and_then(snapshot::load)
+                .map(|outcome| commands::restored_slot(&home, outcome))
+                .unwrap_or_default();
             app.manage(AppState {
                 home,
-                scan: std::sync::Mutex::new(ScanSlot::default()),
+                scan: std::sync::Mutex::new(slot),
                 plans: std::sync::Mutex::new(std::collections::HashMap::new()),
                 history: history.map(std::sync::Arc::new),
                 assistant: std::sync::Mutex::new(assistant::Conversation::default()),
+                data_dir,
             });
             Ok(())
         })
@@ -57,6 +69,8 @@ pub fn run() {
             commands::cancel_scan,
             commands::is_scan_running,
             commands::get_scan_summary,
+            commands::get_saved_scan_info,
+            commands::clear_saved_scan,
             commands::list_directory,
             commands::get_item_details,
             commands::reveal_in_finder,
