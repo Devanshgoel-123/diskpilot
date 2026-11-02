@@ -1,11 +1,12 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ExternalLink, FolderOpen, Lock, Monitor, Moon, Sun } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
-import { errorMessage } from "@/lib/api";
-import { tildify } from "@/lib/format";
+import { api, errorMessage } from "@/lib/api";
+import { formatBytes, formatRelative, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { ThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,50 @@ const THEMES: { id: ThemePreference; label: string; icon: typeof Sun }[] = [
   { id: "light", label: "Light", icon: Sun },
   { id: "system", label: "System", icon: Monitor },
 ];
+
+function SavedResults() {
+  const { summary, scanning, forgetScan } = useApp();
+  const [fileBytes, setFileBytes] = useState<number | null>(null);
+  // Re-read after each scan (which saves) and after clearing.
+  useEffect(() => {
+    let live = true;
+    api
+      .getSavedScanInfo()
+      .then((info) => {
+        if (live) setFileBytes(info.fileBytes);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [summary]);
+
+  return (
+    <Setting
+      label="Saved results"
+      description={
+        fileBytes != null && summary ? (
+          <>
+            Results from the scan {formatRelative(summary.finishedAtMs)} are kept on this Mac (
+            {formatBytes(fileBytes)}) so they appear right away next time. They hold folder names
+            and sizes, never file contents. A new scan replaces them.
+          </>
+        ) : (
+          "The last scan is kept on this Mac so results appear right away next time. Nothing is saved yet."
+        )
+      }
+      control={
+        <Button
+          variant="secondary"
+          disabled={scanning || (fileBytes == null && !summary)}
+          onClick={() => void forgetScan().then(() => setFileBytes(null))}
+        >
+          Clear results
+        </Button>
+      }
+    />
+  );
+}
 
 export function SettingsPage() {
   const { theme, setTheme, scanRoot, setScanRoot, env, scanning } = useApp();
@@ -110,6 +155,7 @@ export function SettingsPage() {
               description="Symbolic links are never followed, other volumes are skipped, and hard-linked files are counted once. Sizes are space allocated on disk."
               control={null}
             />
+            <SavedResults />
           </Section>
 
           <AssistantSettings />

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { ResultsAge } from "@/components/shared/ResultsAge";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { summarizeSelection } from "@/lib/analysis";
@@ -86,6 +87,7 @@ export function RecommendationsPage() {
       />
       <div className="relative min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[1120px] space-y-6 px-6 pt-6 pb-24">
+          <ResultsAge />
           <div
             role="tablist"
             aria-label="Filter by tier"

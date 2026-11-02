@@ -178,6 +178,12 @@ export interface AppError {
 export type Tier = "likelySafe" | "reviewFirst" | "keep";
 export type CleanupMethod = "trash" | "delete";
 
+/** The scan saved between launches. */
+export interface SavedScanInfo {
+  /** Size of the saved results file; `null` when nothing is saved. */
+  fileBytes: number | null;
+}
+
 export interface Recommendation {
   id: string;
   title: string;

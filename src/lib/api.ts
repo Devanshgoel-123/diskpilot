@@ -22,6 +22,7 @@ import type {
   DockerActionResult,
   DockerOverview,
   Recommendation,
+  SavedScanInfo,
   DirectoryListing,
   DiskInfo,
   ItemDetails,
@@ -40,6 +41,8 @@ export const api = {
   cancelScan: () => invoke<boolean>("cancel_scan"),
   isScanRunning: () => invoke<boolean>("is_scan_running"),
   getScanSummary: () => invoke<ScanSummary | null>("get_scan_summary"),
+  getSavedScanInfo: () => invoke<SavedScanInfo>("get_saved_scan_info"),
+  clearSavedScan: () => invoke<null>("clear_saved_scan"),
   listDirectory: (path?: string) =>
     invoke<DirectoryListing>("list_directory", { path: path ?? null }),
   getItemDetails: (path: string) => invoke<ItemDetails>("get_item_details", { path }),

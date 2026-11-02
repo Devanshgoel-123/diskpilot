@@ -53,6 +53,11 @@ export function formatRelative(ms: number | null | undefined, now = Date.now()):
   return rtf.format(Math.round(diff / (365 * day)), "year");
 }
 
+/** Whether `ms` lies more than `ageMs` in the past. */
+export function isOlderThan(ms: number, ageMs: number, now = Date.now()): boolean {
+  return now - ms > ageMs;
+}
+
 export function formatDate(ms: number | null | undefined): string {
   if (ms == null) return "—";
   return new Date(ms).toLocaleString("en-US", {

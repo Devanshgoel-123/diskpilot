@@ -95,6 +95,8 @@ interface AppState {
   refreshDisk: () => Promise<void>;
   refreshHistory: () => Promise<void>;
   refreshRecommendations: () => Promise<void>;
+  /** Delete the saved scan and clear the results on screen. */
+  forgetScan: () => Promise<void>;
   analyzeDevTools: () => Promise<void>;
   reviewInRecommendations: (ids: string[]) => void;
   consumePreselect: () => string[] | null;
@@ -159,6 +161,8 @@ export const useApp = create<AppState>((set, get) => ({
             api.getRecommendations(),
           ]);
           set({ summary, recommendations, explorerPath: null });
+          // Version and per-tool checks feed Cleanup too, so refresh them now.
+          void get().analyzeDevTools();
         }
         void get().refreshDisk();
         void get().refreshHistory();
@@ -176,7 +180,10 @@ export const useApp = create<AppState>((set, get) => ({
         api.getCleanupHistory(50),
       ]);
       set({ env, disk, summary, scanning, history, recommendations, cleanups, ready: true });
-      void api.getDevToolsReport().then((devtools) => set({ devtools }));
+      // Results saved from the last launch: re-run the tool checks, which
+      // read current versions and installers rather than saved data.
+      if (summary) void get().analyzeDevTools();
+      else void api.getDevToolsReport().then((devtools) => set({ devtools }));
       void get().refreshAssistantStatus();
     } catch (e) {
       set({ error: errorMessage(e), ready: true });
@@ -287,6 +294,15 @@ export const useApp = create<AppState>((set, get) => ({
   refreshRecommendations: async () => {
     try {
       set({ recommendations: await api.getRecommendations() });
+    } catch (e) {
+      set({ error: errorMessage(e) });
+    }
+  },
+
+  forgetScan: async () => {
+    try {
+      await api.clearSavedScan();
+      set({ summary: null, explorerPath: null, recommendations: await api.getRecommendations() });
     } catch (e) {
       set({ error: errorMessage(e) });
     }

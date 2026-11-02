@@ -3,6 +3,7 @@ import { useMemo } from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { ResultsAge } from "@/components/shared/ResultsAge";
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -50,6 +51,7 @@ export function OverviewPage() {
       <PageHeader title="Overview" />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[1120px] space-y-8 px-6 pt-6 pb-10">
+          <ResultsAge />
           {disk ? (
             <StorageStrip
               disk={disk}
