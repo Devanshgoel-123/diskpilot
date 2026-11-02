@@ -1,49 +1,19 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ExternalLink, FolderOpen, Lock, Monitor, Moon, Sun } from "lucide-react";
-import type * as React from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Panel } from "@/components/ui/panel";
 import { errorMessage } from "@/lib/api";
 import { tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { ThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
+import { AssistantSettings } from "./AssistantSettings";
+import { Section, Setting } from "./parts";
+
 const REPO_URL = "https://github.com/Devanshgoel-123/diskpilot";
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section>
-      <h2 className="mb-2 text-xs font-medium text-muted-foreground">{title}</h2>
-      <Panel className="divide-y divide-border">{children}</Panel>
-    </section>
-  );
-}
-
-function Setting({
-  label,
-  description,
-  control,
-}: {
-  label: string;
-  description?: React.ReactNode;
-  control: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-6 px-4 py-3">
-      <div className="min-w-0">
-        <p className="text-[13px]">{label}</p>
-        {description ? (
-          <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{description}</div>
-        ) : null}
-      </div>
-      <div className="shrink-0">{control}</div>
-    </div>
-  );
-}
 
 const THEMES: { id: ThemePreference; label: string; icon: typeof Sun }[] = [
   { id: "dark", label: "Dark", icon: Moon },
@@ -141,6 +111,8 @@ export function SettingsPage() {
               control={null}
             />
           </Section>
+
+          <AssistantSettings />
 
           <Section title="Safety">
             <Setting
