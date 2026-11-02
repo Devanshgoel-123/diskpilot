@@ -13,6 +13,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::classifier::Classifier;
 use crate::cleanup::{executor, planner};
+use crate::devtools::{self, DevToolsReport};
 use crate::disk;
 use crate::docker::{self, actions, cli::DockerCli, DockerOverview, DockerState};
 use crate::error::{AppError, AppResult};
@@ -261,7 +262,47 @@ pub fn get_scan_history(
 
 #[tauri::command]
 pub fn get_recommendations(state: State<'_, AppState>) -> Vec<Recommendation> {
-    state.slot().recommendations.as_ref().clone()
+    state.slot().all_recommendations()
+}
+
+/// Cleanup is confined to the last scan's folder, or to the home folder when
+/// only the developer-tools analysis has run.
+fn cleanup_root(state: &AppState) -> PathBuf {
+    state
+        .slot()
+        .last
+        .as_ref()
+        .map(|o| PathBuf::from(&o.summary.root))
+        .unwrap_or_else(|| state.home.clone())
+}
+
+// ---- Developer tools -----------------------------------------------------
+
+#[tauri::command]
+pub async fn analyze_dev_tools(state: State<'_, AppState>) -> AppResult<DevToolsReport> {
+    let outcome = state.slot().last.clone();
+    let home = state.home.clone();
+    let (report, recs) = blocking(move || {
+        let ctx = devtools::Ctx {
+            home: &home,
+            index: outcome.as_ref().map(|o| &o.index),
+            summary: outcome.as_ref().map(|o| &o.summary),
+            classifier: Classifier::new(&home),
+            now_ms: now_ms(),
+        };
+        Ok(devtools::analyze(&ctx))
+    })
+    .await?;
+    let report = Arc::new(report);
+    let mut slot = state.slot();
+    slot.devtools = Some(report.clone());
+    slot.devtools_recommendations = Arc::new(recs);
+    Ok(report.as_ref().clone())
+}
+
+#[tauri::command]
+pub fn get_dev_tools_report(state: State<'_, AppState>) -> Option<DevToolsReport> {
+    state.slot().devtools.as_ref().map(|r| r.as_ref().clone())
 }
 
 /// Build a previewable plan. Paths come from the engine's recommendations,
@@ -272,15 +313,15 @@ pub fn create_cleanup_plan(
     ids: Vec<String>,
     method: CleanupMethod,
 ) -> AppResult<CleanupPlan> {
-    let outcome = last_scan(&state)?;
-    let recs = state.slot().recommendations.clone();
+    let recs = state.slot().all_recommendations();
+    let root = cleanup_root(&state);
     let now = now_ms();
     let plan = planner::build_plan(
         format!("cleanup-{now}"),
         &recs,
         &ids,
         method,
-        Path::new(&outcome.summary.root),
+        &root,
         &state.home,
         now,
     );
@@ -314,16 +355,11 @@ pub async fn execute_cleanup_plan(
     if plan.items.is_empty() {
         return Err(AppError::Other("Nothing to clean up in this plan.".into()));
     }
-    let outcome = last_scan(&state)?;
+    let root = cleanup_root(&state);
     let home = state.home.clone();
     let history = state.history.clone();
     let record = blocking(move || {
-        let record = executor::execute(
-            &plan,
-            Path::new(&outcome.summary.root),
-            &home,
-            &executor::RealFileOps,
-        );
+        let record = executor::execute(&plan, &root, &home, &executor::RealFileOps);
         if let Some(h) = history {
             h.record_cleanup(&record)?;
         }
@@ -332,20 +368,13 @@ pub async fn execute_cleanup_plan(
     .await?;
 
     // Drop recommendations that were acted on.
-    let done: std::collections::HashSet<&str> = record
+    let done: std::collections::HashSet<String> = record
         .items
         .iter()
         .filter(|i| i.status == ItemStatus::Succeeded)
-        .map(|i| i.target.as_str())
+        .map(|i| i.target.clone())
         .collect();
-    let mut slot = state.slot();
-    let remaining: Vec<Recommendation> = slot
-        .recommendations
-        .iter()
-        .filter(|r| !done.contains(r.path.as_str()))
-        .cloned()
-        .collect();
-    slot.recommendations = Arc::new(remaining);
+    state.slot().remove_paths(&done);
     Ok(record)
 }
 

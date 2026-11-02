@@ -63,6 +63,8 @@ pub fn run() {
             commands::discard_cleanup_plan,
             commands::execute_cleanup_plan,
             commands::get_cleanup_history,
+            commands::analyze_dev_tools,
+            commands::get_dev_tools_report,
             commands::docker_overview,
             commands::docker_preview,
             commands::docker_execute,
