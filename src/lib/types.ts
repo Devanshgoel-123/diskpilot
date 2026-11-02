@@ -198,6 +198,8 @@ export interface Recommendation {
   estimatedReclaimBytes: number;
   lastActivityMs: number | null;
   notes: string[];
+  /** "scan", or the id of the developer-tool analyzer that found it. */
+  source: string;
 }
 
 export interface PlanItem {

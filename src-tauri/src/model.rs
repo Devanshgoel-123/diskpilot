@@ -340,6 +340,8 @@ pub struct Recommendation {
     pub estimated_reclaim_bytes: u64,
     pub last_activity_ms: Option<i64>,
     pub notes: Vec<String>,
+    /// What produced it: "scan" or a developer-tool analyzer id.
+    pub source: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

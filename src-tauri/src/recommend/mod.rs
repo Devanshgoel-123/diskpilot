@@ -164,6 +164,7 @@ fn build(c: Candidate, now_ms: i64) -> Recommendation {
         },
         last_activity_ms: last_activity,
         notes,
+        source: "scan".into(),
     }
 }
 
@@ -215,13 +216,14 @@ fn downloads_installers(summary: &ScanSummary, classifier: &Classifier) -> Vec<R
             estimated_reclaim_bytes: f.bytes,
             last_activity_ms: f.modified_ms,
             notes: Vec::new(),
+            source: "scan".into(),
         })
         .collect()
 }
 
 /// An actionable item inside another actionable item would be counted and
 /// removed twice; keep only the outer one.
-fn drop_nested_actionable(recs: Vec<Recommendation>) -> Vec<Recommendation> {
+pub fn drop_nested_actionable(recs: Vec<Recommendation>) -> Vec<Recommendation> {
     let actionable: Vec<PathBuf> = recs
         .iter()
         .filter(|r| !r.methods.is_empty())

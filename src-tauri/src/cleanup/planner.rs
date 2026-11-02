@@ -127,6 +127,7 @@ mod tests {
             estimated_reclaim_bytes: 100,
             last_activity_ms: None,
             notes: vec![],
+            source: "scan".into(),
         }
     }
 
