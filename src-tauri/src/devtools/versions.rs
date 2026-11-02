@@ -15,7 +15,7 @@ use super::{
     modified_ms, name_of, outermost_total, subdirs, Ctx, ItemState, RecSpec, ToolItem, ToolReport,
     ToolSection, DAY_MS,
 };
-use crate::model::{CleanupMethod, MarkerKind, Recommendation, Tier};
+use crate::model::{CleanupMethod, Confidence, MarkerKind, Recommendation, Tier};
 
 const SOURCE: &str = "versions";
 const TRASH: &[CleanupMethod] = &[CleanupMethod::Trash];
@@ -155,6 +155,12 @@ impl Finding<'_> {
         }
         .build(ctx)
         .marked(kind, detail.clone());
+        // The evidence (a newer version next to it, a missing app, identical
+        // bytes) is direct, unlike a guess from the path alone.
+        let rec = Recommendation {
+            confidence: Confidence::High,
+            ..rec
+        };
         let item = ToolItem {
             label: self.title,
             path: Some(self.path.display().to_string()),
