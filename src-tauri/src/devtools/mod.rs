@@ -6,6 +6,7 @@
 //! exist, superseded versions, and so on. Analyzers only read; anything they
 //! recommend goes through the regular planner, safety gate and executor.
 
+pub mod agent_data;
 pub mod agents;
 pub mod editors;
 pub mod node;
@@ -234,6 +235,10 @@ pub fn analyze(ctx: &Ctx) -> (DevToolsReport, Vec<Recommendation>) {
     for (report, mut r) in [
         editors::cursor(ctx),
         editors::vscode(ctx),
+        agent_data::claude_code(ctx),
+        agent_data::claude_desktop(ctx),
+        agent_data::codex(ctx),
+        agent_data::copilot(ctx),
         agents::analyze(ctx),
         node::analyze(ctx),
         xcode::analyze(ctx),
