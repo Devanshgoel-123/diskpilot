@@ -48,6 +48,14 @@ A classification never decides that something is safe to delete. Keep explanatio
 
 Recommendations come from `src-tauri/src/recommend/policies.rs`. A policy maps a classifier rule to a tier (`LikelySafe`, `ReviewFirst`, `Keep`), the methods DiskPilot may use (Trash, permanent delete, or none), why it may be safe, the risks, and optionally a command the user can run themselves. Permanent delete is only for data that is regenerable without user input. `Keep` policies must not be actionable (a test enforces this).
 
+## Adding a developer tool analyzer
+
+Analyzers live in `src-tauri/src/devtools/`. An analyzer receives a `Ctx` (home folder, optional scan index and summary, classifier) and returns a `ToolReport` plus recommendations. Only recommend items you can show are unused (for example, data for a project that no longer exists), describe the risk honestly, and prefer `ReviewFirst` with the Trash as the method. Add a fixture-based test using `crate::test_support::sandbox()`.
+
+## Rules for the assistant
+
+Assistant tools in `src-tauri/src/assistant/tools.rs` must be read-only, must not read file contents, and must report paths relative to `~`. A test rejects tool names that suggest write access.
+
 ## Rules for code that touches files
 
 - Never call `fs::remove_*`, `fs::rename`, `trash::delete` or anything destructive outside `cleanup/executor.rs`, which routes every path through `safety::authorize_destructive`.

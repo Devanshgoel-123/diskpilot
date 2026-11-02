@@ -16,18 +16,20 @@ Include what you found, how to reproduce it, and the impact. We aim to acknowled
 - Command or argument injection in anything DiskPilot executes (`open`, the Docker CLI)
 - Any way to make a cleanup or Docker action affect something other than what its preview showed
 - Tauri capability or IPC misconfiguration that exposes more than the typed commands
-- Anything that sends local data off the machine
+- Anything that sends local data off the machine, other than the optional assistant's documented requests
+- Any way for the assistant (or content it reads) to cause an action, read file contents, or obtain the API key
 
 ## Security principles
 
-- **Local only.** No account, telemetry, or network access is needed to scan.
+- **Local by default.** No account, telemetry or network access is needed to scan, analyze or clean up. The optional assistant is the only networked feature; it is off by default and contacts only Anthropic's API.
+- **Assistant isolation.** The API key is stored in the macOS Keychain and used only by the Rust engine; it is never returned to the interface. The model can call only read-only tools, sees paths relative to the home folder and never file contents, and cannot trigger cleanup.
 - **One gate for destructive operations.** Every deletion passes `safety::authorize_destructive` when it is planned and again immediately before it runs: absolute paths only, no `.`/`..`, confined to the scanned folder and the home folder, protected system and home locations rejected, and no symbolic link in the target or its parents.
 - **Plans, not paths.** The UI sends recommendation ids; the paths come from the engine. Plans are single-use and expire after 10 minutes.
 - **Trash first.** Permanent deletion is only offered for regenerable data, and uses `std::fs::remove_dir_all`, which does not follow symbolic links.
 - **Docker.** Only predefined actions with validated ids. No `--force`, no volume removal, preconditions re-checked against fresh Docker state before running.
 - **No shell strings.** External programs are run with `std::process::Command` and individual arguments, never via a shell.
 - **Minimal Tauri capabilities.** The frontend has no generic filesystem or shell plugin; it can only call DiskPilot's typed commands, open a folder picker, and open URLs.
-- **No LLM-executed commands.** Any future AI feature can only explain and suggest; it can never run commands.
+- **No model-executed commands.** The assistant can explain and highlight recommendations; every action still goes through the preview and confirmation flow.
 
 ## Supported versions
 
