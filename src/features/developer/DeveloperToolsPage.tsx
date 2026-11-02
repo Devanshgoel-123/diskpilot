@@ -6,6 +6,7 @@ import {
   FileCode,
   Hammer,
   Hexagon,
+  History,
   Loader2,
   MousePointer2,
   RefreshCw,
@@ -38,6 +39,7 @@ const TOOL_ICON: Record<string, LucideIcon> = {
   xcode: Hammer,
   rust: Wrench,
   python: FileCode,
+  versions: History,
 };
 
 const TOOL_COLOR: Record<string, string> = {
@@ -52,6 +54,7 @@ const TOOL_COLOR: Record<string, string> = {
   xcode: "var(--cat-docker-storage)",
   rust: "var(--cat-build-artifacts)",
   python: "var(--cat-cache)",
+  versions: "var(--cat-system-files)",
 };
 
 /** A folder owned by the tool, used to show the installed app's own icon. */
@@ -67,7 +70,7 @@ const TOOL_APP_PATH: Record<string, string> = {
 const STATE_META: Record<ItemState, { label: string; color: string }> = {
   current: { label: "In use", color: "var(--tier-safe)" },
   stale: { label: "Inactive", color: "var(--tier-review)" },
-  orphaned: { label: "Project gone", color: "var(--tier-review)" },
+  orphaned: { label: "Leftover", color: "var(--tier-review)" },
   superseded: { label: "Superseded", color: "var(--tier-review)" },
   info: { label: "", color: "var(--tier-keep)" },
 };

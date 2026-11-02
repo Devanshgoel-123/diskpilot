@@ -4,11 +4,13 @@ import type { ReactNode } from "react";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { CategoryBadge } from "@/components/shared/CategoryBadge";
 import { CopyButton } from "@/components/shared/CopyButton";
+import { MarkerTag } from "@/components/shared/MarkerTag";
 import { SizeBar } from "@/components/shared/SizeBar";
 import { TierBadge } from "@/components/shared/TierBadge";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { CONFIDENCE_LABEL } from "@/lib/categories";
+import { MARKER_META } from "@/lib/markers";
 import { formatBytes, formatCount, formatRelative, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import { TIER_META } from "@/lib/tiers";
@@ -77,6 +79,7 @@ export function RecommendationRow({
             <div className="flex min-w-0 items-center gap-2">
               <AppIcon path={rec.path} />
               <span className="truncate text-[13px] font-medium">{rec.title}</span>
+              {rec.marker ? <MarkerTag marker={rec.marker} /> : null}
               <CategoryBadge category={rec.classification.category} />
               {rec.source !== "scan" ? (
                 <span className="text-xs text-subtle-foreground">via Developer Tools</span>
@@ -108,6 +111,9 @@ export function RecommendationRow({
       {expanded ? (
         <div className="animate-in pb-4 pl-10">
           <dl className="grid grid-cols-1 gap-x-10 gap-y-4 rounded-lg bg-panel-raised p-4 md:grid-cols-2">
+            {rec.marker ? (
+              <Fact label={MARKER_META[rec.marker.kind].label}>{rec.marker.detail}.</Fact>
+            ) : null}
             <Fact label="Why it was detected">{rec.detectedBecause}</Fact>
             {rec.safeBecause ? <Fact label="Why it may be safe">{rec.safeBecause}</Fact> : null}
             <Fact label="Risks">{rec.risks}</Fact>
@@ -132,10 +138,12 @@ export function RecommendationRow({
                 <span>{CONFIDENCE_LABEL[rec.confidence]}</span>
               </span>
               <span className="mt-1 block">
-                {formatCount(rec.fileCount)} files · estimated reclaim{" "}
-                {formatBytes(rec.estimatedReclaimBytes)}
+                {rec.fileCount ? `${formatCount(rec.fileCount)} files · ` : ""}
+                estimated reclaim {formatBytes(rec.estimatedReclaimBytes)}
                 {rec.lastActivityMs
-                  ? ` · project files changed ${formatRelative(rec.lastActivityMs)}`
+                  ? rec.source === "scan"
+                    ? ` · project files changed ${formatRelative(rec.lastActivityMs)}`
+                    : ` · last changed ${formatRelative(rec.lastActivityMs)}`
                   : ""}
               </span>
             </Fact>

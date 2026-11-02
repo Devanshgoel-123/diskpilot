@@ -206,6 +206,16 @@ export interface Recommendation {
   notes: string[];
   /** "scan", or the id of the developer-tool analyzer that found it. */
   source: string;
+  /** Older version, leftover, installer or duplicate, with the evidence. */
+  marker?: Marker | null;
+}
+
+export type MarkerKind = "olderVersion" | "leftover" | "installer" | "duplicate";
+
+export interface Marker {
+  kind: MarkerKind;
+  /** The evidence, e.g. "DataGrip 2025.2 is newer". */
+  detail: string;
 }
 
 export interface PlanItem {
