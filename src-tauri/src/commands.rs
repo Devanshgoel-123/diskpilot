@@ -51,6 +51,22 @@ pub async fn get_app_badges(
     blocking(move || Ok(crate::apps::badges(&home, &paths))).await
 }
 
+/// Storage per installed application and data left by uninstalled ones.
+#[tauri::command]
+pub async fn get_app_storage(
+    state: State<'_, AppState>,
+) -> AppResult<crate::apps::AppStorageReport> {
+    let home = state.home.clone();
+    let outcome = state.slot().last.clone();
+    blocking(move || {
+        Ok(crate::apps::app_storage(
+            &home,
+            outcome.as_ref().map(|o| &o.index),
+        ))
+    })
+    .await
+}
+
 #[tauri::command]
 pub fn get_environment(state: State<'_, AppState>) -> AppEnvironment {
     AppEnvironment {
@@ -124,8 +140,9 @@ fn run_scan(app: AppHandle, opts: ScanOptions, cancel: Arc<AtomicBool>) {
                 status: ScanStatus::Completed,
             };
             let classifier = Classifier::new(&opts.home);
-            let recs =
+            let mut recs =
                 recommend::recommend(&outcome.summary, &outcome.index, &classifier, now_ms());
+            crate::apps::name_apps_in_titles(&opts.home, &mut recs);
             let mut slot = state.slot();
             slot.last = Some(Arc::new(outcome));
             slot.recommendations = Arc::new(recs);

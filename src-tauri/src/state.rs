@@ -25,13 +25,15 @@ pub struct ScanSlot {
 
 impl ScanSlot {
     /// Scan and analyzer recommendations combined, without duplicates or
-    /// actionable items nested inside other actionable items.
+    /// actionable items nested inside other actionable items. When both found
+    /// the same path, the analyzer's version wins: it knows the tool and
+    /// explains the item more specifically.
     pub fn all_recommendations(&self) -> Vec<Recommendation> {
         let mut seen = std::collections::HashSet::new();
         let combined: Vec<Recommendation> = self
-            .recommendations
+            .devtools_recommendations
             .iter()
-            .chain(self.devtools_recommendations.iter())
+            .chain(self.recommendations.iter())
             .filter(|r| seen.insert(r.id.clone()))
             .cloned()
             .collect();
@@ -109,6 +111,18 @@ mod tests {
             notes: vec![],
             source: source.into(),
         }
+    }
+
+    #[test]
+    fn analyzer_version_of_a_path_wins() {
+        let slot = ScanSlot {
+            recommendations: Arc::new(vec![rec("/u/a", Tier::LikelySafe, "scan")]),
+            devtools_recommendations: Arc::new(vec![rec("/u/a", Tier::LikelySafe, "cursor")]),
+            ..Default::default()
+        };
+        let all = slot.all_recommendations();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].source, "cursor");
     }
 
     #[test]

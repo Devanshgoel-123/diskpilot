@@ -62,6 +62,7 @@ pub fn run() {
             commands::reveal_in_finder,
             commands::get_scan_history,
             commands::get_app_badges,
+            commands::get_app_storage,
             commands::get_recommendations,
             commands::create_cleanup_plan,
             commands::discard_cleanup_plan,
