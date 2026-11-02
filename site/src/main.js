@@ -42,3 +42,31 @@ tabs.forEach((tab, i) => {
     select(tabs[(i + step + tabs.length) % tabs.length], true);
   });
 });
+
+// Theme switcher: system, then light, then dark. The choice is remembered
+// in this browser only.
+const order = ["system", "light", "dark"];
+const toggle = document.getElementById("theme-toggle");
+
+function current() {
+  return document.documentElement.dataset.theme ?? "system";
+}
+
+function apply(theme) {
+  if (theme === "system") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = theme;
+  toggle.setAttribute("aria-label", `Theme: ${theme}. Switch theme`);
+  toggle.title = `Theme: ${theme}`;
+  try {
+    if (theme === "system") localStorage.removeItem("diskpilot-theme");
+    else localStorage.setItem("diskpilot-theme", theme);
+  } catch {
+    /* storage unavailable: the choice lasts for this page view */
+  }
+}
+
+toggle.setAttribute("aria-label", `Theme: ${current()}. Switch theme`);
+toggle.title = `Theme: ${current()}`;
+toggle.addEventListener("click", () => {
+  apply(order[(order.indexOf(current()) + 1) % order.length]);
+});
