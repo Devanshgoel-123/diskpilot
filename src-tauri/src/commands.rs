@@ -40,6 +40,17 @@ async fn blocking<T: Send + 'static>(
         .map_err(|e| AppError::Other(format!("Background task failed: {e}")))?
 }
 
+/// Installed-app names and icons for the given paths. Paths are only matched
+/// against the index of installed apps, never read.
+#[tauri::command]
+pub async fn get_app_badges(
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+) -> AppResult<std::collections::HashMap<String, crate::apps::AppBadge>> {
+    let home = state.home.clone();
+    blocking(move || Ok(crate::apps::badges(&home, &paths))).await
+}
+
 #[tauri::command]
 pub fn get_environment(state: State<'_, AppState>) -> AppEnvironment {
     AppEnvironment {
