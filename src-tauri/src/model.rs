@@ -281,3 +281,191 @@ pub struct ScanRecord {
     pub error_count: u64,
     pub status: ScanStatus,
 }
+
+/// Risk tier of a cleanup recommendation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Tier {
+    /// Low-risk, well-understood, regenerable. Still reviewed and confirmed.
+    LikelySafe,
+    /// Possibly disposable, but something may depend on it.
+    ReviewFirst,
+    /// Important or not understood well enough to suggest removal.
+    Keep,
+}
+
+/// How a planned file cleanup is carried out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CleanupMethod {
+    /// Move to the macOS Trash (recoverable until the Trash is emptied).
+    Trash,
+    /// Delete permanently. Offered only for regenerable data.
+    Delete,
+}
+
+impl CleanupMethod {
+    pub fn describe(self) -> &'static str {
+        match self {
+            CleanupMethod::Trash => "Move to Trash",
+            CleanupMethod::Delete => "Delete permanently",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Recommendation {
+    /// Stable within a scan: the item's path.
+    pub id: String,
+    pub title: String,
+    pub path: String,
+    pub bytes: u64,
+    pub file_count: u64,
+    pub tier: Tier,
+    pub confidence: Confidence,
+    pub classification: Classification,
+    /// What DiskPilot recognized and how.
+    pub detected_because: String,
+    /// Why removing it is likely fine (empty for "keep").
+    pub safe_because: String,
+    /// What could go wrong.
+    pub risks: String,
+    /// Human description of the proposed action.
+    pub proposed_action: String,
+    /// Methods DiskPilot can perform. Empty means "no automated action".
+    pub methods: Vec<CleanupMethod>,
+    /// A command the user can run themselves instead (never run by DiskPilot).
+    pub alternative: Option<String>,
+    pub estimated_reclaim_bytes: u64,
+    pub last_activity_ms: Option<i64>,
+    pub notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanItem {
+    pub recommendation_id: String,
+    pub title: String,
+    pub path: String,
+    pub bytes: u64,
+    pub file_count: u64,
+    pub tier: Tier,
+    /// Exactly what will be done, e.g. "Move to Trash".
+    pub operation: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanRejection {
+    pub recommendation_id: String,
+    pub path: String,
+    pub reason: String,
+}
+
+/// A previewable, single-use cleanup plan. Nothing happens until it is
+/// executed by id after explicit user confirmation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupPlan {
+    pub id: String,
+    pub created_at_ms: i64,
+    pub method: CleanupMethod,
+    pub items: Vec<PlanItem>,
+    pub rejected: Vec<PlanRejection>,
+    pub total_bytes: u64,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ItemStatus {
+    Succeeded,
+    Failed,
+    Skipped,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ActionStatus {
+    Succeeded,
+    Partial,
+    Failed,
+}
+
+impl ActionStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ActionStatus::Succeeded => "succeeded",
+            ActionStatus::Partial => "partial",
+            ActionStatus::Failed => "failed",
+        }
+    }
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "succeeded" => ActionStatus::Succeeded,
+            "partial" => ActionStatus::Partial,
+            _ => ActionStatus::Failed,
+        }
+    }
+    pub fn from_items(items: &[CleanupItemResult]) -> Self {
+        let ok = items
+            .iter()
+            .filter(|i| i.status == ItemStatus::Succeeded)
+            .count();
+        if ok == items.len() && ok > 0 {
+            ActionStatus::Succeeded
+        } else if ok > 0 {
+            ActionStatus::Partial
+        } else {
+            ActionStatus::Failed
+        }
+    }
+}
+
+impl ItemStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ItemStatus::Succeeded => "succeeded",
+            ItemStatus::Failed => "failed",
+            ItemStatus::Skipped => "skipped",
+        }
+    }
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "succeeded" => ItemStatus::Succeeded,
+            "skipped" => ItemStatus::Skipped,
+            _ => ItemStatus::Failed,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupItemResult {
+    /// A filesystem path, or a Docker object such as "image sha256:…".
+    pub target: String,
+    /// The exact operation or command executed.
+    pub operation: String,
+    pub bytes: u64,
+    pub status: ItemStatus,
+    pub error: Option<String>,
+}
+
+/// One executed cleanup action, as recorded in history.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupRecord {
+    pub id: String,
+    /// "files" or "docker".
+    pub kind: String,
+    pub title: String,
+    pub started_at_ms: i64,
+    pub finished_at_ms: i64,
+    pub status: ActionStatus,
+    /// Bytes removed from disk (permanent deletes and Docker removals).
+    pub bytes_freed: u64,
+    /// Bytes moved to the Trash (freed only when the Trash is emptied).
+    pub bytes_trashed: u64,
+    pub items: Vec<CleanupItemResult>,
+}
