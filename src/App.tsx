@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ApplicationsPage } from "@/features/applications/ApplicationsPage";
 import { AssistantPage } from "@/features/assistant/AssistantPage";
 import { DeveloperToolsPage } from "@/features/developer/DeveloperToolsPage";
 import { DockerPage } from "@/features/docker/DockerPage";
@@ -18,6 +19,7 @@ import { useApp, type PageId } from "@/lib/store";
 
 const PAGES: Record<PageId, () => React.JSX.Element> = {
   assistant: AssistantPage,
+  applications: ApplicationsPage,
   overview: OverviewPage,
   explorer: ExplorerPage,
   recommendations: RecommendationsPage,

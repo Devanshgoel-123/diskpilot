@@ -441,3 +441,38 @@ export interface AppBadge {
   /** PNG data URL rendered from the installed app. */
   icon: string;
 }
+
+/** One of an app's folders in ~/Library. */
+export interface AppDataLocation {
+  path: string;
+  /** The Library folder it lives in, such as "Caches". */
+  kind: string;
+  bytes: number;
+}
+
+export interface AppFootprint {
+  name: string;
+  bundleId: string;
+  appPath: string;
+  /** Null for apps on the read-only system volume. */
+  appBytes: number | null;
+  dataBytes: number;
+  dataModifiedMs: number | null;
+  locations: AppDataLocation[];
+}
+
+/** Sandbox data named for an app that is no longer installed. */
+export interface Leftover {
+  name: string;
+  path: string;
+  kind: string;
+  bytes: number;
+  modifiedMs: number | null;
+}
+
+export interface AppStorageReport {
+  apps: AppFootprint[];
+  leftovers: Leftover[];
+  /** False when no scan covers ~/Library; data sizes are then zero. */
+  dataScanned: boolean;
+}

@@ -21,6 +21,7 @@ export type PageId =
   | "overview"
   | "explorer"
   | "recommendations"
+  | "applications"
   | "docker"
   | "developer"
   | "large-files"
