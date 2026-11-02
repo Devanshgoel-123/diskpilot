@@ -39,6 +39,11 @@ pub const PROTECTED_PREFIXES: &[&str] = &[
     "/Volumes",
     "/dev",
     "/cores",
+    "/private",
+    "/Library",
+    "/opt",
+    "/var",
+    "/etc",
 ];
 
 /// Folders directly under home that are never deletable as a whole
@@ -220,6 +225,9 @@ mod tests {
             "/Users/test/Library",
             "/Users/test/Library/Caches",
             "/Users/test/.ssh",
+            "/private/var/folders/ab/cd",
+            "/Library/Caches",
+            "/opt/homebrew",
         ] {
             assert!(is_protected(Path::new(p), home), "{p} should be protected");
         }
@@ -256,7 +264,7 @@ mod tests {
 
     #[test]
     fn authorize_rejects_symlinks_and_symlinked_parents() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = crate::test_support::sandbox();
         let root = dir.path().canonicalize().unwrap();
         let home = Path::new("/nonexistent-home");
         let real = root.join("real");

@@ -6,6 +6,7 @@
 //! from the UI.
 
 pub mod classifier;
+pub mod cleanup;
 pub mod commands;
 pub mod disk;
 pub mod error;
@@ -16,6 +17,8 @@ pub mod recommend;
 pub mod safety;
 pub mod scanner;
 pub mod state;
+#[cfg(test)]
+pub mod test_support;
 
 use tauri::Manager;
 
