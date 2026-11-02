@@ -456,6 +456,24 @@ mod tests {
     }
 
     #[test]
+    fn tool_homes_are_containers_for_specific_rules() {
+        let p = FakeProbe::empty();
+        assert_eq!(dir("/Users/test/.cargo/bin", &p).rule_id, "cargo.home");
+        assert_eq!(
+            dir("/Users/test/.cargo/registry/src", &p).rule_id,
+            "cargo.registry"
+        );
+        assert_eq!(
+            dir("/Users/test/.claude/projects", &p).rule_id,
+            "ai.claude-code"
+        );
+        assert_eq!(
+            dir("/Users/test/.local/share/claude/versions", &p).rule_id,
+            "ai.claude-code-versions"
+        );
+    }
+
+    #[test]
     fn floor_ignores_ancestor_context() {
         let p = FakeProbe::empty();
         let floored = Classifier::new("/Users/test").with_floor("/Users/test/Library/Caches/x");

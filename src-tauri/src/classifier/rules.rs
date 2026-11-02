@@ -290,6 +290,78 @@ pub static DIR_RULES: &[DirRule] = &[
         "Maven repository",
         "Downloaded Java dependencies. Maven re-downloads them on the next build."
     ),
+    container!(
+        "cargo.home",
+        HomeRelative(&[".cargo"]),
+        DeveloperTools,
+        High,
+        false,
+        "Cargo home",
+        "Cargo's installed binaries, registry cache and git checkouts."
+    ),
+    container!(
+        "rustup.home",
+        HomeRelative(&[".rustup"]),
+        DeveloperTools,
+        High,
+        false,
+        "rustup",
+        "Rust toolchains and components managed by rustup."
+    ),
+    container!(
+        "gradle.home",
+        HomeRelative(&[".gradle"]),
+        DeveloperTools,
+        High,
+        false,
+        "Gradle home",
+        "Gradle's caches, wrapper distributions and daemon data."
+    ),
+    container!(
+        "android.home",
+        HomeRelative(&[".android"]),
+        DeveloperTools,
+        High,
+        false,
+        "Android tooling data",
+        "Android emulator (AVD) images, debug keystore and adb configuration. The debug keystore signs development builds; keep it if you publish apps signed with it."
+    ),
+    // ---- AI coding agents ---------------------------------------------------
+    leaf!(
+        "ai.claude-code-versions",
+        HomeRelative(&[".local", "share", "claude"]),
+        DeveloperTools,
+        Medium,
+        "Claude Code installations",
+        "Installed versions of the Claude Code command-line tool."
+    ),
+    container!(
+        "ai.claude-code",
+        HomeRelative(&[".claude"]),
+        DeveloperTools,
+        High,
+        false,
+        "Claude Code data",
+        "Claude Code settings, session transcripts and per-project memory. Conversation history lives only here."
+    ),
+    container!(
+        "ai.codex",
+        HomeRelative(&[".codex"]),
+        DeveloperTools,
+        High,
+        false,
+        "Codex CLI data",
+        "OpenAI Codex CLI configuration, sessions and logs."
+    ),
+    container!(
+        "ai.gemini",
+        HomeRelative(&[".gemini"]),
+        DeveloperTools,
+        High,
+        false,
+        "Gemini CLI data",
+        "Gemini CLI configuration and session data."
+    ),
     leaf!(
         "xdg.cache",
         HomeRelative(&[".cache"]),
