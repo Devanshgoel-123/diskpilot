@@ -1,0 +1,319 @@
+import { ArrowUp, ChevronRight, File, Folder, FolderTree, Link2, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+import { PageHeader } from "@/components/layout/PageHeader";
+import { CategoryBadge } from "@/components/shared/CategoryBadge";
+import { DetailsPanel } from "@/components/shared/DetailsPanel";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { SizeBar } from "@/components/shared/SizeBar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { api, errorMessage } from "@/lib/api";
+import { ALL_CATEGORIES } from "@/lib/categories";
+import { formatBytes, formatCount, formatPercent, formatRelative, tildify } from "@/lib/format";
+import { useApp } from "@/lib/store";
+import type { Category, DirectoryEntry, DirectoryListing } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+import { CategorySelect } from "@/components/shared/CategorySelect";
+import { SortHeader } from "@/components/shared/SortHeader";
+import { type SortKey, sortEntries } from "./sorting";
+
+function EntryIcon({ entry }: { entry: DirectoryEntry }) {
+  const cls = "size-3.5 shrink-0";
+  if (entry.kind === "directory") return <Folder className={cn(cls, "text-accent")} aria-hidden />;
+  if (entry.kind === "symlink")
+    return <Link2 className={cn(cls, "text-subtle-foreground")} aria-hidden />;
+  return <File className={cn(cls, "text-subtle-foreground")} aria-hidden />;
+}
+
+function Breadcrumbs({
+  listing,
+  home,
+  onNavigate,
+}: {
+  listing: DirectoryListing;
+  home: string | undefined;
+  onNavigate: (path: string) => void;
+}) {
+  const root = listing.scanRoot;
+  const rel = listing.path.slice(root.length).split("/").filter(Boolean);
+  const crumbs = [{ label: tildify(root, home), path: root }];
+  let acc = root;
+  for (const part of rel) {
+    acc = `${acc}/${part}`;
+    crumbs.push({ label: part, path: acc });
+  }
+  return (
+    <nav aria-label="Folder path" className="flex min-w-0 items-center gap-0.5 overflow-hidden">
+      {crumbs.map((c, i) => {
+        const last = i === crumbs.length - 1;
+        return (
+          <span key={c.path} className="flex min-w-0 items-center gap-0.5">
+            {i > 0 ? (
+              <ChevronRight className="text-subtle-foreground size-3 shrink-0" aria-hidden />
+            ) : null}
+            <button
+              type="button"
+              onClick={() => onNavigate(c.path)}
+              disabled={last}
+              className={cn(
+                "truncate rounded px-1 py-0.5 font-mono text-xs",
+                last
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:bg-hover hover:text-foreground",
+              )}
+            >
+              {c.label}
+            </button>
+          </span>
+        );
+      })}
+    </nav>
+  );
+}
+
+export function ExplorerPage() {
+  const { summary, env, explorerPath, scanning, startScan, browse } = useApp();
+  const home = env?.homeDir;
+  const requested = explorerPath ?? summary?.root ?? null;
+  const [listing, setListing] = useState<DirectoryListing | null>(null);
+  const [error, setError] = useState<{ path: string; message: string } | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<Category | "all">("all");
+  const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "size", desc: true });
+
+  // Fetch the listing whenever the requested folder (or the scan) changes.
+  // State is only set from async callbacks.
+  useEffect(() => {
+    if (!summary || !requested) return;
+    let live = true;
+    api
+      .listDirectory(requested)
+      .then((l) => {
+        if (!live) return;
+        setListing(l);
+        setError(null);
+        setSelected(null);
+      })
+      .catch((e: unknown) => live && setError({ path: requested, message: errorMessage(e) }));
+    return () => {
+      live = false;
+    };
+  }, [summary, requested]);
+
+  const loading = !!requested && listing?.path !== requested && error?.path !== requested;
+  const load = useCallback((path: string) => browse(path), [browse]);
+
+  const entries = useMemo(() => {
+    if (!listing) return [];
+    const q = query.trim().toLowerCase();
+    const filtered = listing.entries.filter(
+      (e) =>
+        (!q || e.name.toLowerCase().includes(q)) &&
+        (category === "all" || e.classification.category === category),
+    );
+    return sortEntries(filtered, sort.key, sort.desc);
+  }, [listing, query, category, sort]);
+
+  const parentBytes = listing?.bytes ?? 0;
+  const maxBytes = listing?.entries[0]?.bytes ?? 0;
+  const presentCategories = useMemo(
+    () =>
+      ALL_CATEGORIES.filter((c) => listing?.entries.some((e) => e.classification.category === c)),
+    [listing],
+  );
+
+  const toggleSort = (key: SortKey) =>
+    setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: key !== "name" }));
+
+  const open = (entry: DirectoryEntry) => {
+    if (entry.kind === "directory") load(entry.path);
+  };
+
+  if (!summary) {
+    return (
+      <>
+        <PageHeader title="Storage Explorer" />
+        <EmptyState
+          className="flex-1 justify-center"
+          icon={FolderTree}
+          title={scanning ? "Scanning…" : "No scan yet"}
+          description="Browse folders by size once a scan has finished. Folder sizes come from the scan; nothing is modified."
+          action={scanning ? null : <Button onClick={() => void startScan()}>Start scan</Button>}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="Storage Explorer"
+        description="Folder sizes from the last scan. Double-click a folder to open it."
+      />
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="border-border flex shrink-0 items-center gap-2 border-b px-4 py-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Up one folder"
+              disabled={!listing?.parent}
+              onClick={() => listing?.parent && load(listing.parent)}
+            >
+              <ArrowUp />
+            </Button>
+            {listing ? <Breadcrumbs listing={listing} home={home} onNavigate={load} /> : null}
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <div className="relative w-48">
+                <Search
+                  className="text-subtle-foreground pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2"
+                  aria-hidden
+                />
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Filter by name"
+                  className="pl-7"
+                  aria-label="Filter by name"
+                />
+              </div>
+              <CategorySelect value={category} onChange={setCategory} options={presentCategories} />
+            </div>
+          </div>
+
+          {listing ? (
+            <div className="border-border bg-panel text-muted-foreground flex shrink-0 items-center gap-4 border-b px-4 py-2 text-xs">
+              <span>
+                <span className="text-foreground tabular font-medium">
+                  {formatBytes(listing.bytes)}
+                </span>{" "}
+                in this folder
+              </span>
+              <span className="tabular">{formatCount(listing.entries.length)} items</span>
+              <span className="flex min-w-0 items-center gap-1.5">
+                <CategoryBadge category={listing.classification.category} />
+                <span className="truncate">{listing.classification.label}</span>
+              </span>
+            </div>
+          ) : null}
+
+          <div className="min-h-0 flex-1 overflow-auto">
+            {error ? <p className="text-critical px-4 py-6 text-xs">{error.message}</p> : null}
+            {loading && !listing ? (
+              <div className="space-y-2 p-4">
+                {Array.from({ length: 8 }, (_, i) => (
+                  <Skeleton key={i} className="h-6 w-full" />
+                ))}
+              </div>
+            ) : null}
+            {listing ? (
+              <table className="w-full table-fixed border-collapse text-[13px]">
+                <thead className="bg-background sticky top-0 z-10">
+                  <tr className="border-border text-muted-foreground border-b text-left text-xs">
+                    <SortHeader
+                      label="Name"
+                      k="name"
+                      sort={sort}
+                      onSort={toggleSort}
+                      className="pl-4"
+                    />
+                    <SortHeader
+                      label="Size"
+                      k="size"
+                      sort={sort}
+                      onSort={toggleSort}
+                      className="w-40"
+                      align="right"
+                    />
+                    <th className="w-14 px-2 py-2 text-right font-normal">%</th>
+                    <SortHeader
+                      label="Files"
+                      k="files"
+                      sort={sort}
+                      onSort={toggleSort}
+                      className="w-20"
+                      align="right"
+                    />
+                    <SortHeader
+                      label="Modified"
+                      k="modified"
+                      sort={sort}
+                      onSort={toggleSort}
+                      className="w-28"
+                    />
+                    <th className="w-44 px-2 py-2 pr-4 font-normal">Category</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map((e) => (
+                    <tr
+                      key={e.path}
+                      tabIndex={0}
+                      aria-selected={selected === e.path}
+                      onClick={() => setSelected(e.path)}
+                      onDoubleClick={() => open(e)}
+                      onKeyDown={(ev) => {
+                        if (ev.key === "Enter") open(e);
+                        if (ev.key === " ") {
+                          ev.preventDefault();
+                          setSelected(e.path);
+                        }
+                      }}
+                      className={cn(
+                        "border-border/60 hover:bg-hover/60 focus-visible:bg-hover h-8 border-b outline-none",
+                        selected === e.path && "bg-accent-soft hover:bg-accent-soft",
+                      )}
+                    >
+                      <td className="truncate pr-2 pl-4">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <EntryIcon entry={e} />
+                          <span className="truncate" title={e.name}>
+                            {e.name}
+                          </span>
+                        </span>
+                      </td>
+                      <td className="px-2">
+                        <div className="flex items-center gap-2">
+                          <SizeBar value={e.bytes} max={maxBytes} className="w-16" />
+                          <span className="tabular ml-auto">{formatBytes(e.bytes)}</span>
+                        </div>
+                      </td>
+                      <td className="text-muted-foreground tabular px-2 text-right text-xs">
+                        {e.bytes != null && parentBytes ? formatPercent(e.bytes, parentBytes) : "—"}
+                      </td>
+                      <td className="text-muted-foreground tabular px-2 text-right text-xs">
+                        {e.kind === "directory" ? formatCount(e.fileCount) : ""}
+                      </td>
+                      <td className="text-muted-foreground truncate px-2 text-xs">
+                        {formatRelative(e.modifiedMs)}
+                      </td>
+                      <td className="px-2 pr-4" title={e.classification.label}>
+                        <CategoryBadge category={e.classification.category} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : null}
+            {listing && entries.length === 0 ? (
+              <p className="text-muted-foreground px-4 py-6 text-xs">
+                {listing.entries.length ? "No items match the filter." : "This folder is empty."}
+              </p>
+            ) : null}
+            {listing && listing.omittedCount > 0 ? (
+              <p className="text-subtle-foreground px-4 py-3 text-xs">
+                {formatCount(listing.omittedCount)} smaller items (
+                {formatBytes(listing.omittedBytes)}) are not listed.
+              </p>
+            ) : null}
+          </div>
+        </div>
+        {selected ? <DetailsPanel path={selected} onClose={() => setSelected(null)} /> : null}
+      </div>
+    </>
+  );
+}
