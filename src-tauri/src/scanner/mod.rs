@@ -23,6 +23,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use rayon::prelude::*;
 
+use crate::classifier::rules::RuleKind;
 use crate::classifier::{Classifier, Context, FsProbe, Probe, Resolved};
 use crate::error::describe_io_error;
 use crate::model::{
@@ -564,6 +565,7 @@ fn build_outcome(
             path: l.ctx.path.display().to_string(),
             bytes: l.bytes,
             file_count: l.files,
+            container: l.ctx.rule.kind == RuleKind::Container,
             classification: Resolved::Dir(l.ctx).to_classification(),
         })
         .collect();

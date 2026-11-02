@@ -165,6 +165,9 @@ pub struct DetectedLocation {
     pub path: String,
     pub bytes: u64,
     pub file_count: u64,
+    /// True for broad areas (e.g. `~/Library/Caches`) that can contain other
+    /// detected locations; false for self-contained items (e.g. `node_modules`).
+    pub container: bool,
     pub classification: Classification,
 }
 
