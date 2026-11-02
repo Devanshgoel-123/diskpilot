@@ -12,6 +12,7 @@ pub mod error;
 pub mod explorer;
 pub mod history;
 pub mod model;
+pub mod recommend;
 pub mod safety;
 pub mod scanner;
 pub mod state;
