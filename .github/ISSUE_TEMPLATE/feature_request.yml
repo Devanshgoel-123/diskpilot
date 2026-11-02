@@ -1,0 +1,24 @@
+name: Feature request
+description: Suggest an idea or a new storage location DiskPilot should understand
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What storage problem are you trying to understand or solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: |
+        What should DiskPilot do? For new classification rules, include the location (relative to home, e.g. `~/Library/Caches/SomeTool`), what creates it, and whether it is regenerable (with a source if possible).
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety considerations
+      description: Could acting on this data ever lose something a user cares about?
