@@ -8,6 +8,7 @@
 pub mod classifier;
 pub mod cleanup;
 pub mod commands;
+pub mod devtools;
 pub mod disk;
 pub mod docker;
 pub mod error;
