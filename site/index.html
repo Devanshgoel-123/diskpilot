@@ -42,6 +42,7 @@
           <a href="#features">Features</a>
           <a href="#how">How it works</a>
           <a href="#compare">Compare</a>
+          <a href="#install">Install</a>
           <a href="#windows">Windows</a>
           <a href="#faq">FAQ</a>
         </nav>
@@ -94,18 +95,14 @@
             <div class="cta-row">
               <a
                 class="btn btn-primary"
-                href="https://github.com/Devanshgoel-123/diskpilot"
-                data-track="github"
+                href="https://github.com/Devanshgoel-123/diskpilot/releases/latest/download/DiskPilot.dmg"
+                data-track="download"
                 data-where="hero"
-                target="_blank"
-                rel="noopener"
-                >Get DiskPilot on GitHub</a
+                >Download for Mac</a
               >
-              <a class="btn btn-ghost-dark" href="#safety">How it stays safe</a>
+              <a class="btn btn-ghost-dark" href="#install">How to install</a>
             </div>
-            <p class="fine">
-              macOS 11 or later · Apple silicon and Intel · MIT licensed · Windows planned
-            </p>
+            <p class="fine">Free and open source. macOS 11 or later, Apple silicon and Intel.</p>
           </div>
 
           <div class="hero-visual">
@@ -497,6 +494,62 @@
         </p>
       </section>
 
+      <!-- Install -->
+      <section class="section" id="install">
+        <div class="section-head">
+          <p class="eyebrow">Install</p>
+          <h2>Up and running in a minute</h2>
+          <p>
+            DiskPilot is not yet notarized by Apple, so macOS asks you to confirm it the first time
+            you open it. After that it opens like any other app.
+          </p>
+        </div>
+        <ol class="steps">
+          <li>
+            <h3>Download</h3>
+            <p>
+              Get
+              <a
+                href="https://github.com/Devanshgoel-123/diskpilot/releases/latest/download/DiskPilot.dmg"
+                data-track="download"
+                data-where="install"
+                >DiskPilot.dmg</a
+              >. One file runs on Apple silicon and Intel Macs.
+            </p>
+          </li>
+          <li>
+            <h3>Move to Applications</h3>
+            <p>Open the disk image and drag DiskPilot into the Applications folder.</p>
+          </li>
+          <li>
+            <h3>Allow it once</h3>
+            <p>
+              Open DiskPilot. When macOS says it cannot verify the developer, choose Done, then go
+              to System Settings, Privacy &amp; Security, and click Open Anyway next to DiskPilot.
+            </p>
+          </li>
+          <li>
+            <h3>Scan</h3>
+            <p>
+              Click Scan. DiskPilot reads your home folder and changes nothing until you review and
+              confirm a cleanup.
+            </p>
+          </li>
+        </ol>
+        <p class="footnote">
+          Prefer to build it yourself? The
+          <a
+            href="https://github.com/Devanshgoel-123/diskpilot#installation"
+            data-track="github"
+            data-where="install"
+            target="_blank"
+            rel="noopener"
+            >source and build steps</a
+          >
+          are on GitHub. Updates are published there as new releases.
+        </p>
+      </section>
+
       <!-- Windows -->
       <section class="band band-dark" id="windows">
         <div class="section">
@@ -597,6 +650,14 @@
             </p>
           </details>
           <details>
+            <summary>Why does macOS warn me when I first open it?</summary>
+            <p>
+              Apple shows that warning for apps that are not notarized through a paid Apple
+              developer account. DiskPilot is open source, so you can read every line or build it
+              yourself. Signed and notarized releases are planned.
+            </p>
+          </details>
+          <details>
             <summary>Is it really free?</summary>
             <p>Yes. DiskPilot is open source under the MIT license, with no paid tier.</p>
           </details>
@@ -614,15 +675,24 @@
       <section class="final">
         <img src="/logo.svg" alt="" width="88" height="88" />
         <h2>Take back your disk, one reviewed step at a time.</h2>
-        <a
-          class="btn btn-primary"
-          href="https://github.com/Devanshgoel-123/diskpilot"
-          data-track="github"
-          data-where="footer-cta"
-          target="_blank"
-          rel="noopener"
-          >Get DiskPilot on GitHub</a
-        >
+        <div class="cta-row">
+          <a
+            class="btn btn-primary"
+            href="https://github.com/Devanshgoel-123/diskpilot/releases/latest/download/DiskPilot.dmg"
+            data-track="download"
+            data-where="footer-cta"
+            >Download for Mac</a
+          >
+          <a
+            class="btn btn-quiet"
+            href="https://github.com/Devanshgoel-123/diskpilot"
+            data-track="github"
+            data-where="footer-cta"
+            target="_blank"
+            rel="noopener"
+            >View source on GitHub</a
+          >
+        </div>
       </section>
     </main>
 

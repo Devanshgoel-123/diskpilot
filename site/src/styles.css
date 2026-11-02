@@ -996,3 +996,53 @@ a {
 :root[data-theme="dark"] .theme-toggle [data-icon="dark"] {
   display: block;
 }
+
+/* Install steps: a real sequence, so they are numbered */
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 28px;
+  counter-reset: step;
+}
+.steps li {
+  counter-increment: step;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.steps li::before {
+  content: counter(step);
+  font: 600 13px var(--font-mono);
+  color: var(--accent);
+}
+.steps p {
+  color: var(--muted);
+  font-size: 15.5px;
+}
+.final .cta-row {
+  justify-content: center;
+}
+.btn-quiet {
+  color: var(--ink);
+  border-color: var(--line);
+  background: var(--surface);
+}
+.btn-quiet:hover {
+  border-color: var(--accent);
+}
+@media (max-width: 960px) {
+  .steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .steps {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
