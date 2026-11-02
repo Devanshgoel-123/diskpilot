@@ -9,6 +9,8 @@ import { formatBytes, formatCount, formatDate, formatDuration, tildify } from "@
 import { useApp } from "@/lib/store";
 import type { ScanStatus } from "@/lib/types";
 
+import { CleanupHistory } from "./CleanupHistory";
+
 const STATUS: Record<ScanStatus, string> = {
   completed: "Completed",
   cancelled: "Cancelled",
@@ -31,11 +33,9 @@ export function HistoryPage() {
           <Panel>
             <PanelHeader
               title="Cleanup actions"
-              description="Executed actions, affected paths, commands, reclaimed space and errors will be recorded here."
+              description="What was executed, the exact operations or commands, space reclaimed and errors. Moved-to-Trash items can be put back from the Trash until it is emptied; permanently deleted items cannot be restored."
             />
-            <p className="px-4 pb-4 text-xs text-muted-foreground">
-              No cleanup actions have been executed. This version of DiskPilot is read-only.
-            </p>
+            <CleanupHistory />
           </Panel>
           <Panel>
             <PanelHeader
