@@ -1,0 +1,86 @@
+name: Release
+
+# Builds the universal macOS app from the tagged source on GitHub's runners
+# and publishes it as a GitHub release with a SHA-256 checksum. Release notes
+# come from docs/releases/<tag>.md.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build and release (for example v0.1.0)
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+
+jobs:
+  macos:
+    name: Build and publish (macOS universal)
+    runs-on: macos-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      # Release notes live on main; a tag may predate them.
+      - name: Fetch release notes from main
+        run: |
+          git fetch --depth=1 origin main
+          git show "origin/main:docs/releases/${TAG}.md" > "$RUNNER_TEMP/notes.md" 2>/dev/null || echo "DiskPilot ${TAG}" > "$RUNNER_TEMP/notes.md"
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: pnpm install --frozen-lockfile
+      - name: Build universal app
+        run: pnpm tauri build --target universal-apple-darwin
+      - name: Verify signature and architectures
+        run: |
+          app=src-tauri/target/universal-apple-darwin/release/bundle/macos/DiskPilot.app
+          codesign --verify --deep --strict --verbose=2 "$app"
+          lipo -archs "$app/Contents/MacOS/diskpilot" | grep -q "x86_64 arm64"
+      - name: Prepare assets
+        run: |
+          mkdir -p out
+          cp src-tauri/target/universal-apple-darwin/release/bundle/dmg/DiskPilot_*_universal.dmg out/DiskPilot.dmg
+          cd out
+          shasum -a 256 DiskPilot.dmg > DiskPilot.dmg.sha256
+          cp "$RUNNER_TEMP/notes.md" notes.md
+          {
+            echo
+            echo "## Verify the download"
+            echo
+            echo "SHA-256 of \`DiskPilot.dmg\`:"
+            echo
+            echo '```'
+            cut -d' ' -f1 DiskPilot.dmg.sha256
+            echo '```'
+            echo
+            echo "Check it with \`shasum -a 256 DiskPilot.dmg\`."
+          } >> notes.md
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: out
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" DiskPilot.dmg DiskPilot.dmg.sha256 --clobber
+            gh release edit "$TAG" --notes-file notes.md
+          else
+            gh release create "$TAG" DiskPilot.dmg DiskPilot.dmg.sha256 \
+              --verify-tag --title "DiskPilot ${TAG#v}" --notes-file notes.md
+          fi
