@@ -36,7 +36,7 @@ export function ScanControl() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button onClick={() => void startScan()}>
+        <Button variant={summary ? "secondary" : "default"} onClick={() => void startScan()}>
           {summary ? <RefreshCw /> : <ScanSearch />}
           {summary ? "Rescan" : "Scan"}
         </Button>
