@@ -1,5 +1,5 @@
 import { ListChecks, ShieldCheck, Sparkles } from "lucide-react";
-import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -64,7 +64,7 @@ export function RecommendationsPage() {
   if (!summary) {
     return (
       <>
-        <PageHeader title="Recommendations" />
+        <PageHeader title="Cleanup" />
         <EmptyState
           className="flex-1 justify-center"
           icon={Sparkles}
@@ -81,40 +81,45 @@ export function RecommendationsPage() {
   return (
     <>
       <PageHeader
-        title="Recommendations"
-        description="Explained suggestions from the last scan. Nothing is removed without your confirmation."
+        title="Cleanup"
+        description="Explained suggestions. Nothing is removed until you review and confirm it."
       />
       <div className="relative min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1180px] space-y-4 px-6 py-5 pb-24">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            {TIER_ORDER.map((tier) => {
-              const meta = TIER_META[tier];
-              const items = byTier[tier];
+        <div className="mx-auto max-w-[1120px] space-y-6 px-6 pt-6 pb-24">
+          <div
+            role="tablist"
+            aria-label="Filter by tier"
+            className="inline-flex rounded-lg bg-panel-raised p-0.5"
+          >
+            {(["all", ...TIER_ORDER] as Filter[]).map((t) => {
+              const items = t === "all" ? recommendations : byTier[t];
               const bytes = items.reduce((a, r) => a + r.bytes, 0);
-              const active = filter === tier;
+              const active = filter === t;
               return (
                 <button
-                  key={tier}
+                  key={t}
                   type="button"
-                  onClick={() => setFilter(active ? "all" : tier)}
-                  aria-pressed={active}
-                  style={{ "--tint": meta.color } as CSSProperties}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setFilter(t)}
                   className={cn(
-                    "rounded-lg border bg-panel p-4 text-left transition-colors hover:bg-panel-raised",
-                    active ? "tinted" : "border-border",
+                    "flex items-baseline gap-2 rounded-md px-3 py-1.5 text-[13px] transition-colors duration-[120ms]",
+                    active
+                      ? "bg-panel text-foreground shadow-[0_0_0_0.5px_var(--border-strong),0_1px_2px_rgb(0_0_0/0.08)]"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  <p className="flex items-center gap-2 text-xs font-medium">
-                    <meta.icon className="size-4" style={{ color: meta.color }} aria-hidden />
-                    {meta.label}
-                  </p>
-                  <p className="tabular mt-2 text-xl font-semibold tracking-tight">
-                    {formatBytes(bytes)}
-                  </p>
-                  <p className="mt-0.5 text-2xs text-subtle-foreground">
-                    {formatCount(items.length)} item{items.length === 1 ? "" : "s"} ·{" "}
-                    {meta.description}
-                  </p>
+                  {t !== "all" ? (
+                    <span
+                      className="size-2 self-center rounded-full"
+                      style={{ background: TIER_META[t].color }}
+                      aria-hidden
+                    />
+                  ) : null}
+                  <span className="font-medium">{t === "all" ? "All" : TIER_META[t].label}</span>
+                  <span className="tabular text-xs text-subtle-foreground">
+                    {t === "all" ? formatCount(items.length) : formatBytes(bytes)}
+                  </span>
                 </button>
               );
             })}
@@ -154,8 +159,8 @@ export function RecommendationsPage() {
           ) : (
             tiers.map((tier) =>
               byTier[tier].length ? (
-                <Panel key={tier}>
-                  <header className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+                <section key={tier} aria-label={TIER_META[tier].label}>
+                  <header className="flex items-center gap-2 border-b border-border pb-2">
                     {(() => {
                       const Icon = TIER_META[tier].icon;
                       return (
@@ -166,8 +171,8 @@ export function RecommendationsPage() {
                         />
                       );
                     })()}
-                    <h2 className="text-xs font-medium">{TIER_META[tier].label}</h2>
-                    <span className="text-2xs text-subtle-foreground">
+                    <h2 className="text-[13px] font-semibold">{TIER_META[tier].label}</h2>
+                    <span className="text-xs text-subtle-foreground">
                       {TIER_META[tier].description}
                     </span>
                   </header>
@@ -184,7 +189,7 @@ export function RecommendationsPage() {
                       />
                     ))}
                   </ul>
-                </Panel>
+                </section>
               ) : null,
             )
           )}
@@ -192,9 +197,9 @@ export function RecommendationsPage() {
 
         {selection.count > 0 ? (
           <div className="pointer-events-none sticky bottom-0 flex justify-center px-6 pb-4">
-            <div className="pointer-events-auto flex items-center gap-4 rounded-xl border border-border-strong bg-panel-raised px-4 py-2.5 shadow-2xl shadow-black/40">
-              <p className="text-xs">
-                <span className="tabular font-medium">{selection.count}</span> selected ·{" "}
+            <div className="animate-in pointer-events-auto flex items-center gap-4 rounded-lg bg-panel-raised px-4 py-2.5 shadow-float">
+              <p className="text-[13px]">
+                <span className="tabular font-medium">{selection.count}</span> selected,{" "}
                 <span className="tabular font-medium">{formatBytes(selection.bytes)}</span>
               </p>
               <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>

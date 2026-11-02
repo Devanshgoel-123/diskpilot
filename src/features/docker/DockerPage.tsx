@@ -1,5 +1,4 @@
 import {
-  Activity,
   AlertTriangle,
   Box,
   Container,
@@ -13,7 +12,7 @@ import {
   Stethoscope,
   Trash2,
 } from "lucide-react";
-import { type CSSProperties, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -21,15 +20,9 @@ import { Button } from "@/components/ui/button";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api, errorMessage } from "@/lib/api";
-import { formatBytes, formatCount, formatPercent } from "@/lib/format";
+import { formatBytes, formatCount } from "@/lib/format";
 import { useApp } from "@/lib/store";
-import type {
-  DiagnosticFinding,
-  DockerAction,
-  DockerOverview,
-  FindingLevel,
-  UsageRow,
-} from "@/lib/types";
+import type { DiagnosticFinding, DockerAction, DockerOverview, FindingLevel } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 import { DockerActionDialog } from "./DockerActionDialog";
@@ -80,47 +73,6 @@ const FINDING_STYLE: Record<FindingLevel, { icon: typeof Info; color: string }> 
   suggestion: { icon: Lightbulb, color: "var(--tier-safe)" },
   warning: { icon: AlertTriangle, color: "var(--tier-review)" },
 };
-
-function UsageTile({
-  label,
-  row,
-  color,
-  icon: Icon,
-  active,
-  onClick,
-}: {
-  label: string;
-  row: UsageRow;
-  color: string;
-  icon: typeof Box;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      style={{ "--tint": color } as CSSProperties}
-      className={cn(
-        "rounded-lg border bg-panel px-4 py-3 text-left transition-colors hover:bg-panel-raised",
-        active ? "tinted" : "border-border",
-      )}
-    >
-      <p className="flex items-center justify-between text-xs text-muted-foreground">
-        {label}
-        <Icon className="size-3.5" style={{ color }} aria-hidden />
-      </p>
-      <p className="tabular mt-1 text-lg font-semibold tracking-tight">
-        {formatBytes(row.sizeBytes)}
-      </p>
-      <p className="tabular mt-0.5 text-2xs text-subtle-foreground">
-        {formatCount(row.totalCount)} total · {formatCount(row.active)} active ·{" "}
-        {formatBytes(row.reclaimableBytes)} reclaimable
-      </p>
-    </button>
-  );
-}
 
 export function DockerPage() {
   const refreshHistory = useApp((s) => s.refreshHistory);
@@ -248,35 +200,38 @@ export function DockerPage() {
 
             {overview && running && usage ? (
               <>
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                  {KINDS.map((k) => (
-                    <UsageTile
-                      key={k.key}
-                      label={k.label}
-                      row={usage[k.usage]}
-                      color={k.color}
-                      icon={k.icon}
-                      active={tab === k.key}
-                      onClick={() => setTab(k.key)}
-                    />
-                  ))}
-                </div>
-
-                <Panel className="px-4 py-3">
-                  <p className="flex items-baseline justify-between text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1.5">
-                      <Activity className="size-3.5" aria-hidden />
-                      Usage inside Docker
-                    </span>
-                    <span className="tabular text-foreground">{formatBytes(total)}</span>
-                  </p>
-                  <div className="mt-2 flex h-2.5 gap-[2px] overflow-hidden rounded-full bg-track">
+                <section aria-label="Docker storage">
+                  <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Used by Docker</p>
+                      <p className="tabular mt-1 text-[28px] leading-8 font-semibold tracking-tight">
+                        {formatBytes(total)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        Reclaimable, by Docker&apos;s count
+                      </p>
+                      <p
+                        className="tabular mt-0.5 text-[20px] leading-7 font-semibold tracking-tight"
+                        style={{ color: "var(--tier-safe)" }}
+                      >
+                        {formatBytes(
+                          KINDS.reduce((a, k) => a + usage[k.usage].reclaimableBytes, 0),
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex h-6 gap-[2px] overflow-hidden rounded-md bg-track">
                     {KINDS.map((k) =>
                       usage[k.usage].sizeBytes > 0 ? (
                         <Tooltip key={k.key}>
                           <TooltipTrigger asChild>
-                            <div
-                              className="h-full first:rounded-l-full last:rounded-r-full"
+                            <button
+                              type="button"
+                              onClick={() => setTab(k.key)}
+                              aria-label={`${k.label}: ${formatBytes(usage[k.usage].sizeBytes)}`}
+                              className="fill-in h-full"
                               style={{
                                 width: `${(usage[k.usage].sizeBytes / Math.max(total, 1)) * 100}%`,
                                 background: k.color,
@@ -285,32 +240,34 @@ export function DockerPage() {
                             />
                           </TooltipTrigger>
                           <TooltipContent>
-                            {k.label} · {formatBytes(usage[k.usage].sizeBytes)} (
-                            {formatPercent(usage[k.usage].sizeBytes, total)})
+                            <p className="font-medium">{k.label}</p>
+                            <p className="tabular text-muted-foreground">
+                              {formatBytes(usage[k.usage].sizeBytes)},{" "}
+                              {formatBytes(usage[k.usage].reclaimableBytes)} reclaimable
+                            </p>
                           </TooltipContent>
                         </Tooltip>
                       ) : null,
                     )}
                   </div>
-                  <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                  <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5">
                     {KINDS.map((k) => (
-                      <li
-                        key={k.key}
-                        className="flex items-center gap-1.5 text-xs text-muted-foreground"
-                      >
+                      <li key={k.key} className="flex items-center gap-1.5 text-xs">
                         <span
-                          className="size-2 rounded-[3px]"
+                          className="size-2 rounded-full"
                           style={{ background: k.color }}
                           aria-hidden
                         />
-                        {k.label}
-                        <span className="tabular text-foreground">
-                          {formatBytes(usage[k.usage].sizeBytes)}
+                        <span className="text-muted-foreground">{k.label}</span>
+                        <span className="tabular">{formatBytes(usage[k.usage].sizeBytes)}</span>
+                        <span className="tabular text-subtle-foreground">
+                          {formatCount(usage[k.usage].active)} of{" "}
+                          {formatCount(usage[k.usage].totalCount)} active
                         </span>
                       </li>
                     ))}
                   </ul>
-                </Panel>
+                </section>
 
                 {findings ? (
                   <Panel>
@@ -351,8 +308,8 @@ export function DockerPage() {
                   </Panel>
                 ) : null}
 
-                <Panel>
-                  <div className="flex items-center justify-between gap-3 border-b border-border px-2 pt-1">
+                <section aria-label="Docker objects">
+                  <div className="flex items-center justify-between gap-3 border-b border-border">
                     <div role="tablist" className="flex">
                       {KINDS.map((k) => {
                         const count =
@@ -367,14 +324,14 @@ export function DockerPage() {
                             aria-selected={tab === k.key}
                             onClick={() => setTab(k.key)}
                             className={cn(
-                              "-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs",
+                              "-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-[13px] transition-colors duration-[120ms]",
                               tab === k.key
                                 ? "border-accent font-medium text-foreground"
                                 : "border-transparent text-muted-foreground hover:text-foreground",
                             )}
                           >
                             {k.label}
-                            <span className="tabular text-2xs text-subtle-foreground">{count}</span>
+                            <span className="tabular text-xs text-subtle-foreground">{count}</span>
                           </button>
                         );
                       })}
@@ -383,7 +340,6 @@ export function DockerPage() {
                       <Button
                         variant="secondary"
                         size="sm"
-                        className="mr-2"
                         disabled={!overview.buildCache.some((b) => !b.inUse)}
                         onClick={() => setAction({ type: "pruneBuildCache" })}
                       >
@@ -416,7 +372,7 @@ export function DockerPage() {
                   ) : (
                     <BuildCacheTable entries={overview.buildCache} />
                   )}
-                </Panel>
+                </section>
               </>
             ) : null}
           </div>

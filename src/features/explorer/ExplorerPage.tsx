@@ -6,14 +6,15 @@ import { CategoryBadge } from "@/components/shared/CategoryBadge";
 import { DetailsPanel } from "@/components/shared/DetailsPanel";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { SizeBar } from "@/components/shared/SizeBar";
+import { TierBadge } from "@/components/shared/TierBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
 import { ALL_CATEGORIES, CATEGORY_META } from "@/lib/categories";
-import { formatBytes, formatCount, formatPercent, formatRelative, tildify } from "@/lib/format";
+import { formatBytes, formatCount, formatRelative, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
-import type { Category, DirectoryEntry, DirectoryListing } from "@/lib/types";
+import type { Category, DirectoryEntry, DirectoryListing, Recommendation } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 import { AppIcon } from "@/components/shared/AppIcon";
@@ -33,6 +34,32 @@ function EntryIcon({ entry }: { entry: DirectoryEntry }) {
   if (entry.kind === "symlink")
     return <Link2 className={cn(cls, "text-subtle-foreground")} aria-hidden />;
   return <File className={cn(cls, "text-subtle-foreground")} aria-hidden />;
+}
+
+/** Actionable recommendations by path, for the Cleanup column. */
+function useCleanupIndex() {
+  const recommendations = useApp((s) => s.recommendations);
+  return useMemo(() => recommendations.filter((r) => r.methods.length > 0), [recommendations]);
+}
+
+/**
+ * The item's own tier if DiskPilot recommends it, otherwise how much inside
+ * it is recommended. Empty when there is nothing to clean up.
+ */
+function CleanupCell({ path, index }: { path: string; index: Recommendation[] }) {
+  const own = index.find((r) => r.path === path);
+  if (own) return <TierBadge tier={own.tier} />;
+  const inside = index.filter((r) => r.path.startsWith(`${path}/`));
+  if (!inside.length) return null;
+  const bytes = inside.reduce((a, r) => a + r.estimatedReclaimBytes, 0);
+  return (
+    <span
+      className="text-xs text-muted-foreground"
+      title={`${inside.length} recommendation${inside.length === 1 ? "" : "s"} inside this folder`}
+    >
+      {formatBytes(bytes)} inside
+    </span>
+  );
 }
 
 function Breadcrumbs({
@@ -125,7 +152,7 @@ export function ExplorerPage() {
     return sortEntries(filtered, sort.key, sort.desc);
   }, [listing, query, category, sort]);
 
-  const parentBytes = listing?.bytes ?? 0;
+  const cleanup = useCleanupIndex();
   const maxBytes = listing?.entries[0]?.bytes ?? 0;
   const presentCategories = useMemo(
     () =>
@@ -143,7 +170,7 @@ export function ExplorerPage() {
   if (!summary) {
     return (
       <>
-        <PageHeader title="Storage Explorer" />
+        <PageHeader title="Storage" />
         <EmptyState
           className="flex-1 justify-center"
           icon={FolderTree}
@@ -158,8 +185,8 @@ export function ExplorerPage() {
   return (
     <>
       <PageHeader
-        title="Storage Explorer"
-        description="Folder sizes from the last scan. Double-click a folder to open it."
+        title="Storage"
+        description="Folder sizes from the last scan. Open a folder with a double-click or Return."
       />
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
@@ -236,7 +263,6 @@ export function ExplorerPage() {
                       className="w-40"
                       align="right"
                     />
-                    <th className="w-14 px-2 py-2 text-right font-normal">%</th>
                     <SortHeader
                       label="Files"
                       k="files"
@@ -252,7 +278,8 @@ export function ExplorerPage() {
                       onSort={toggleSort}
                       className="w-28"
                     />
-                    <th className="w-44 px-2 py-2 pr-4 font-normal">Category</th>
+                    <th className="w-40 px-2 py-2 font-normal">Category</th>
+                    <th className="w-36 px-2 py-2 pr-4 font-normal">Cleanup</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -295,16 +322,16 @@ export function ExplorerPage() {
                         </div>
                       </td>
                       <td className="tabular px-2 text-right text-xs text-muted-foreground">
-                        {e.bytes != null && parentBytes ? formatPercent(e.bytes, parentBytes) : "—"}
-                      </td>
-                      <td className="tabular px-2 text-right text-xs text-muted-foreground">
                         {e.kind === "directory" ? formatCount(e.fileCount) : ""}
                       </td>
                       <td className="truncate px-2 text-xs text-muted-foreground">
                         {formatRelative(e.modifiedMs)}
                       </td>
-                      <td className="px-2 pr-4" title={e.classification.label}>
+                      <td className="px-2" title={e.classification.label}>
                         <CategoryBadge category={e.classification.category} />
+                      </td>
+                      <td className="px-2 pr-4">
+                        <CleanupCell path={e.path} index={cleanup} />
                       </td>
                     </tr>
                   ))}

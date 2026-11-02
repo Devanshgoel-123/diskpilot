@@ -113,11 +113,8 @@ function ToolCard({
           path={appPath}
           className="size-8"
           fallback={
-            <span
-              className="tinted flex size-8 shrink-0 items-center justify-center rounded-lg border"
-              style={{ "--tint": color } as CSSProperties}
-            >
-              <Icon className="size-4" style={{ color }} aria-hidden />
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-panel-raised">
+              <Icon className="size-4" style={{ color }} strokeWidth={1.75} aria-hidden />
             </span>
           }
         />
@@ -298,21 +295,25 @@ export function DeveloperToolsPage() {
             </Panel>
           ) : (
             <>
-              <Panel className="flex flex-wrap items-center justify-between gap-4 px-4 py-3">
-                <div className="flex flex-wrap gap-x-8 gap-y-2">
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div className="flex flex-wrap gap-x-10 gap-y-3">
                   <div>
                     <p className="text-xs text-muted-foreground">Tools found</p>
-                    <p className="tabular text-lg font-semibold">{detected.length}</p>
+                    <p className="tabular mt-0.5 text-[20px] leading-7 font-semibold tracking-tight">
+                      {detected.length}
+                    </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Storage used</p>
-                    <p className="tabular text-lg font-semibold">
+                    <p className="tabular mt-0.5 text-[20px] leading-7 font-semibold tracking-tight">
                       {formatBytes(detected.reduce((a, t) => a + t.totalBytes, 0))}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Worth reviewing</p>
-                    <p className="tabular text-lg font-semibold">{formatBytes(reviewBytes)}</p>
+                    <p className="tabular mt-0.5 text-[20px] leading-7 font-semibold tracking-tight">
+                      {formatBytes(reviewBytes)}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -325,7 +326,7 @@ export function DeveloperToolsPage() {
                     </Button>
                   ) : null}
                 </div>
-              </Panel>
+              </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {detected.map((t) => (

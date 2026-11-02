@@ -18,10 +18,10 @@ import { cn } from "@/lib/utils";
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <dt className="text-2xs font-medium tracking-wide text-subtle-foreground uppercase">
-        {label}
-      </dt>
-      <dd className="selectable mt-1 text-xs leading-relaxed text-muted-foreground">{children}</dd>
+      <dt className="text-xs font-semibold text-foreground">{label}</dt>
+      <dd className="selectable mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
+        {children}
+      </dd>
     </div>
   );
 }
@@ -47,8 +47,8 @@ export function RecommendationRow({
   const color = TIER_META[rec.tier].color;
 
   return (
-    <li className={cn("border-b border-border last:border-0", selected && "bg-accent-soft/40")}>
-      <div className="flex items-center gap-3 px-4 py-2.5">
+    <li className={cn("border-b border-border last:border-0", selected && "bg-accent-soft/60")}>
+      <div className="flex items-center gap-3 px-2 py-2">
         <div className="flex w-5 shrink-0 justify-center">
           {actionable ? (
             <input
@@ -79,7 +79,7 @@ export function RecommendationRow({
               <span className="truncate text-[13px] font-medium">{rec.title}</span>
               <CategoryBadge category={rec.classification.category} />
               {rec.source !== "scan" ? (
-                <span className="text-2xs text-subtle-foreground">via Developer Tools</span>
+                <span className="text-xs text-subtle-foreground">via Developer Tools</span>
               ) : null}
               {!actionable ? (
                 <span className="text-2xs text-subtle-foreground">
@@ -93,11 +93,11 @@ export function RecommendationRow({
           </div>
           <div className="w-32 shrink-0">
             <p className="tabular text-right text-[13px]">{formatBytes(rec.bytes)}</p>
-            <SizeBar value={rec.bytes} max={max} color={color} className="mt-1" />
+            <SizeBar value={rec.bytes} max={max} color="var(--chart-other)" className="mt-1" />
           </div>
           <ChevronDown
             className={cn(
-              "size-3.5 shrink-0 text-subtle-foreground transition-transform",
+              "size-3.5 shrink-0 text-subtle-foreground transition-transform duration-[180ms]",
               expanded && "rotate-180",
             )}
             aria-hidden
@@ -106,8 +106,8 @@ export function RecommendationRow({
       </div>
 
       {expanded ? (
-        <div className="px-4 pb-4 pl-12">
-          <dl className="grid grid-cols-1 gap-x-8 gap-y-3 rounded-lg border border-border bg-panel-raised p-4 md:grid-cols-2">
+        <div className="animate-in pb-4 pl-10">
+          <dl className="grid grid-cols-1 gap-x-10 gap-y-4 rounded-lg bg-panel-raised p-4 md:grid-cols-2">
             <Fact label="Why it was detected">{rec.detectedBecause}</Fact>
             {rec.safeBecause ? <Fact label="Why it may be safe">{rec.safeBecause}</Fact> : null}
             <Fact label="Risks">{rec.risks}</Fact>
@@ -169,7 +169,7 @@ export function RecommendationRow({
             </Button>
             <Button variant="ghost" size="sm" onClick={() => openInExplorer(rec.path)}>
               <FolderTree />
-              Open in Explorer
+              Open in Storage
             </Button>
           </div>
         </div>

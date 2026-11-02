@@ -1,8 +1,9 @@
-import { Lock, Play, Search, Square, Trash2 } from "lucide-react";
+import { Lock, MoreHorizontal, Play, Search, Square, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatBytes, formatRelative } from "@/lib/format";
 import type {
@@ -25,13 +26,11 @@ function IconAction({
   label,
   disabledReason,
   onClick,
-  danger,
   children,
 }: {
   label: string;
   disabledReason?: string | null;
   onClick: () => void;
-  danger?: boolean;
   children: ReactNode;
 }) {
   const button = (
@@ -41,7 +40,6 @@ function IconAction({
       aria-label={label}
       disabled={!!disabledReason}
       onClick={onClick}
-      className={cn(danger && "hover:text-critical")}
     >
       {children}
     </Button>
@@ -54,6 +52,20 @@ function IconAction({
       </TooltipTrigger>
       <TooltipContent>{disabledReason ?? label}</TooltipContent>
     </Tooltip>
+  );
+}
+
+/** Secondary row actions. Destructive ones live here, never inline. */
+function RowMenu({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Menu>
+      <MenuTrigger asChild>
+        <Button variant="ghost" size="icon" aria-label={label}>
+          <MoreHorizontal />
+        </Button>
+      </MenuTrigger>
+      <MenuContent>{children}</MenuContent>
+    </Menu>
   );
 }
 
@@ -105,29 +117,29 @@ export function ContainersTable({
                 >
                   <Search />
                 </IconAction>
-                {c.running ? (
-                  <IconAction
-                    label="Stop"
-                    onClick={() => onAction({ type: "stopContainer", id: c.id })}
+                <RowMenu label={`Actions for ${c.name}`}>
+                  {c.running ? (
+                    <MenuItem onSelect={() => onAction({ type: "stopContainer", id: c.id })}>
+                      <Square />
+                      Stop
+                    </MenuItem>
+                  ) : (
+                    <MenuItem onSelect={() => onAction({ type: "startContainer", id: c.id })}>
+                      <Play />
+                      Start
+                    </MenuItem>
+                  )}
+                  <MenuSeparator />
+                  <MenuItem
+                    destructive
+                    disabled={c.running}
+                    hint={c.running ? "Stop the container first." : null}
+                    onSelect={() => onAction({ type: "removeContainer", id: c.id })}
                   >
-                    <Square />
-                  </IconAction>
-                ) : (
-                  <IconAction
-                    label="Start"
-                    onClick={() => onAction({ type: "startContainer", id: c.id })}
-                  >
-                    <Play />
-                  </IconAction>
-                )}
-                <IconAction
-                  label="Remove…"
-                  danger
-                  disabledReason={c.running ? "Stop the container before removing it" : null}
-                  onClick={() => onAction({ type: "removeContainer", id: c.id })}
-                >
-                  <Trash2 />
-                </IconAction>
+                    <Trash2 />
+                    Remove container…
+                  </MenuItem>
+                </RowMenu>
               </div>
             </td>
           </tr>
@@ -186,18 +198,21 @@ export function ImagesTable({ images, onAction, onInspect }: Handlers & { images
                   >
                     <Search />
                   </IconAction>
-                  <IconAction
-                    label="Remove…"
-                    danger
-                    disabledReason={
-                      i.usedBy.length
-                        ? `Used by ${i.usedBy.join(", ")}. Remove those containers first.`
-                        : null
-                    }
-                    onClick={() => onAction({ type: "removeImage", id: i.id })}
-                  >
-                    <Trash2 />
-                  </IconAction>
+                  <RowMenu label={`Actions for ${name}`}>
+                    <MenuItem
+                      destructive
+                      disabled={i.usedBy.length > 0}
+                      hint={
+                        i.usedBy.length
+                          ? `Used by ${i.usedBy.join(", ")}. Remove those containers first.`
+                          : null
+                      }
+                      onSelect={() => onAction({ type: "removeImage", id: i.id })}
+                    >
+                      <Trash2 />
+                      Remove image…
+                    </MenuItem>
+                  </RowMenu>
                 </div>
               </td>
             </tr>
