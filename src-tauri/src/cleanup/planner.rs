@@ -153,6 +153,7 @@ mod tests {
             last_activity_ms: None,
             notes: vec![],
             source: "scan".into(),
+            marker: None,
         }
     }
 

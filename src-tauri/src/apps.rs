@@ -250,6 +250,11 @@ impl AppIndex {
     }
 }
 
+/// Names of the installed apps (from the standard application folders).
+pub fn installed_names(home: &Path) -> Vec<String> {
+    index(home).apps.iter().map(|a| a.name.clone()).collect()
+}
+
 fn index(home: &Path) -> &'static AppIndex {
     static INDEX: OnceLock<AppIndex> = OnceLock::new();
     INDEX.get_or_init(|| AppIndex::build(home))

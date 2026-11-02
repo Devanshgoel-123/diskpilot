@@ -11,6 +11,7 @@ pub mod agents;
 pub mod editors;
 pub mod node;
 pub mod toolchains;
+pub mod versions;
 pub mod xcode;
 
 use std::path::{Path, PathBuf};
@@ -224,6 +225,7 @@ impl RecSpec<'_> {
             last_activity_ms: self.last_activity_ms,
             notes: self.notes,
             source: self.source.to_string(),
+            marker: None,
         }
     }
 }
@@ -244,6 +246,7 @@ pub fn analyze(ctx: &Ctx) -> (DevToolsReport, Vec<Recommendation>) {
         xcode::analyze(ctx),
         toolchains::rust(ctx),
         toolchains::python(ctx),
+        versions::analyze(ctx),
     ] {
         tools.push(report);
         recs.append(&mut r);

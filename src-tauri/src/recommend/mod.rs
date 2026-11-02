@@ -165,6 +165,7 @@ fn build(c: Candidate, now_ms: i64) -> Recommendation {
         last_activity_ms: last_activity,
         notes,
         source: "scan".into(),
+        marker: None,
     }
 }
 
@@ -217,6 +218,7 @@ fn downloads_installers(summary: &ScanSummary, classifier: &Classifier) -> Vec<R
             last_activity_ms: f.modified_ms,
             notes: Vec::new(),
             source: "scan".into(),
+            marker: None,
         })
         .collect()
 }

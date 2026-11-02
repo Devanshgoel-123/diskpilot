@@ -21,7 +21,7 @@ use super::{
     ToolItem, ToolReport, ToolSection,
 };
 use crate::docker::actions::human;
-use crate::model::{CleanupMethod, Recommendation, Tier};
+use crate::model::{CleanupMethod, MarkerKind, Recommendation, Tier};
 
 /// What a location holds, which decides whether and how it is recommended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -600,7 +600,8 @@ fn claude_projects(ctx: &Ctx, out: &mut Collected) {
                 last_activity_ms: last,
                 notes: vec![CLAUDE_CODE_DATA.quit.to_string()],
             }
-            .build(ctx);
+            .build(ctx)
+            .marked(MarkerKind::Leftover, "Project folder no longer exists");
             recommendation_id = Some(rec.id.clone());
             out.recs.push(rec);
         }
@@ -759,7 +760,8 @@ fn copilot_extension_data(ctx: &Ctx, out: &mut Collected) {
                     last_activity_ms: modified_ms(&dir),
                     notes: vec![format!("Quit {} first.", editor.name)],
                 }
-                .build(ctx);
+                .build(ctx)
+            .marked(MarkerKind::Leftover, "Extension is not installed");
                 recommendation_id = Some(rec.id.clone());
                 out.recs.push(rec);
             }

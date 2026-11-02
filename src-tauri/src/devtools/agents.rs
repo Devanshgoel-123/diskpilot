@@ -8,7 +8,7 @@ use super::{
     exists, modified_ms, name_of, outermost_total, Ctx, ItemState, RecSpec, ToolItem, ToolReport,
     ToolSection,
 };
-use crate::model::{CleanupMethod, Recommendation, Tier};
+use crate::model::{CleanupMethod, MarkerKind, Recommendation, Tier};
 
 pub struct VersionedCli {
     pub name: &'static str,
@@ -119,7 +119,8 @@ pub fn versions(ctx: &Ctx, cli: &VersionedCli) -> Option<Versions> {
                 last_activity_ms: modified_ms(&entry),
                 notes: Vec::new(),
             }
-            .build(ctx);
+            .build(ctx)
+            .marked(MarkerKind::OlderVersion, "A newer version is in use");
             recommendation_id = Some(rec.id.clone());
             recs.push(rec);
         }

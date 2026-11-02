@@ -112,6 +112,7 @@ mod tests {
             last_activity_ms: None,
             notes: vec![],
             source: source.into(),
+            marker: None,
         }
     }
 

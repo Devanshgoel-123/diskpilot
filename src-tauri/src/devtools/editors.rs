@@ -11,7 +11,7 @@ use super::{
     app_version, exists, file_uri_to_path, modified_ms, name_of, outermost_total, subdirs, Ctx,
     ItemState, RecSpec, ToolItem, ToolReport, ToolSection,
 };
-use crate::model::{CleanupMethod, Recommendation, Tier};
+use crate::model::{CleanupMethod, MarkerKind, Recommendation, Tier};
 
 struct EditorPaths {
     id: &'static str,
@@ -205,7 +205,8 @@ fn analyze(ctx: &Ctx, p: EditorPaths) -> (ToolReport, Vec<Recommendation>) {
                 last_activity_ms: last_used,
                 notes: vec![format!("Quit {} first.", p.name)],
             }
-            .build(ctx);
+            .build(ctx)
+            .marked(MarkerKind::Leftover, "Project folder no longer exists");
             recommendation_id = Some(rec.id.clone());
             recs.push(rec);
         }
@@ -262,7 +263,8 @@ fn analyze(ctx: &Ctx, p: EditorPaths) -> (ToolReport, Vec<Recommendation>) {
                 last_activity_ms: modified_ms(&dir),
                 notes: vec![format!("Quit {} first.", p.name)],
             }
-            .build(ctx);
+            .build(ctx)
+            .marked(MarkerKind::Leftover, "Not in the editor's extension list");
             recommendation_id = Some(rec.id.clone());
             recs.push(rec);
         }

@@ -342,6 +342,41 @@ pub struct Recommendation {
     pub notes: Vec<String>,
     /// What produced it: "scan" or a developer-tool analyzer id.
     pub source: String,
+    /// Set when the item is an older version, a leftover, an installer or a
+    /// duplicate, with the evidence in `detail`.
+    #[serde(default)]
+    pub marker: Option<Marker>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MarkerKind {
+    /// A newer version of the same thing is installed.
+    OlderVersion,
+    /// Belongs to an app, project or tool that is no longer there.
+    Leftover,
+    /// An installer for an app that is already installed.
+    Installer,
+    /// An identical copy of another file next to it.
+    Duplicate,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Marker {
+    pub kind: MarkerKind,
+    /// The evidence, e.g. "DataGrip 2025.2 is newer".
+    pub detail: String,
+}
+
+impl Recommendation {
+    pub fn marked(mut self, kind: MarkerKind, detail: impl Into<String>) -> Self {
+        self.marker = Some(Marker {
+            kind,
+            detail: detail.into(),
+        });
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

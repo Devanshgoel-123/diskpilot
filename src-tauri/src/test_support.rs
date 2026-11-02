@@ -38,5 +38,6 @@ pub fn recommendation() -> crate::model::Recommendation {
         last_activity_ms: None,
         notes: vec![],
         source: "scan".into(),
+        marker: None,
     }
 }

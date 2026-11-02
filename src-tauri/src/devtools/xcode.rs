@@ -9,7 +9,7 @@ use super::{
     app_version, exists, modified_ms, name_of, outermost_total, subdirs, Ctx, ItemState, RecSpec,
     ToolItem, ToolReport, ToolSection,
 };
-use crate::model::{CleanupMethod, Recommendation, Tier};
+use crate::model::{CleanupMethod, MarkerKind, Recommendation, Tier};
 
 /// The project a DerivedData folder was built from (`WorkspacePath` in its
 /// info.plist).
@@ -171,7 +171,8 @@ pub fn analyze(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
                 last_activity_ms: last,
                 notes: Vec::new(),
             }
-            .build(ctx);
+            .build(ctx)
+            .marked(MarkerKind::Leftover, "Project folder no longer exists");
             recommendation_id = Some(rec.id.clone());
             recs.push(rec);
         }
