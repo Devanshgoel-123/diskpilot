@@ -1,6 +1,7 @@
 import {
   Bot,
   ChevronDown,
+  Cloud,
   Code2,
   FileCode,
   Hammer,
@@ -8,6 +9,8 @@ import {
   Loader2,
   MousePointer2,
   RefreshCw,
+  Sparkles,
+  SquareTerminal,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
@@ -25,6 +28,10 @@ import { cn } from "@/lib/utils";
 const TOOL_ICON: Record<string, LucideIcon> = {
   cursor: MousePointer2,
   vscode: Code2,
+  "claude-code": SquareTerminal,
+  "claude-desktop": Sparkles,
+  codex: Cloud,
+  copilot: Bot,
   "ai-agents": Bot,
   node: Hexagon,
   xcode: Hammer,
@@ -35,6 +42,10 @@ const TOOL_ICON: Record<string, LucideIcon> = {
 const TOOL_COLOR: Record<string, string> = {
   cursor: "var(--cat-developer-tools)",
   vscode: "var(--cat-application-data)",
+  "claude-code": "var(--cat-user-data)",
+  "claude-desktop": "var(--cat-user-data)",
+  codex: "var(--cat-application-data)",
+  copilot: "var(--cat-developer-tools)",
   "ai-agents": "var(--cat-user-data)",
   node: "var(--cat-downloads)",
   xcode: "var(--cat-docker-storage)",
@@ -245,7 +256,7 @@ export function DeveloperToolsPage() {
     <>
       <PageHeader
         title="Developer Tools"
-        description="Per-tool analysis of editors, AI agents, runtimes and build data."
+        description="Per-tool analysis of editors, AI agents, runtimes and build data, including agent caches, logs and leftover updates."
         actions={
           <Button
             variant="secondary"
@@ -318,6 +329,8 @@ export function DeveloperToolsPage() {
                 Sizes come from the last scan where available and are measured directly otherwise.
                 Project activity is based on when dependency manifests last changed. Runtimes,
                 toolchains and simulators are never removed by DiskPilot; use the commands shown.
+                Conversation history, sign-in and settings are listed for reference only, and other
+                apps&apos; databases are read, never modified.
               </p>
             </>
           )}
