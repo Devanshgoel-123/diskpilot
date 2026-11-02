@@ -122,9 +122,19 @@ Scanner -> Classifier -> Recommendations -> Planner -> Safety gate -> Executor
 
 ## Installation
 
-Signed release builds are not yet available. To build DiskPilot from source you need:
+### Download
 
-- macOS 11 or later (Apple silicon is the primary target; the code does not preclude Intel Macs)
+1. Download [DiskPilot.dmg](https://github.com/Devanshgoel-123/diskpilot/releases/latest/download/DiskPilot.dmg) from the [latest release](https://github.com/Devanshgoel-123/diskpilot/releases/latest). It is a universal build for Apple silicon and Intel Macs running macOS 11 or later.
+2. Open the disk image and drag DiskPilot into Applications.
+3. Open DiskPilot. Releases are not yet notarized by Apple, so the first time macOS reports that it cannot verify the developer. Choose **Done**, open **System Settings > Privacy & Security**, and select **Open Anyway** next to DiskPilot. On macOS 14 and earlier you can instead Control-click the app and choose **Open**.
+
+New versions are published as GitHub releases. DiskPilot does not update itself yet; download the new version and replace the app in Applications. Your scan history and settings are kept.
+
+### Build from source
+
+You need:
+
+- macOS 11 or later
 - [Rust](https://rustup.rs) 1.82 or later
 - Node.js 22 and [pnpm](https://pnpm.io) 10
 - Xcode Command Line Tools (`xcode-select --install`)
@@ -136,7 +146,7 @@ pnpm install
 pnpm app:build
 ```
 
-The application bundle and disk image are written to `src-tauri/target/release/bundle/`.
+The application bundle and disk image are written to `src-tauri/target/release/bundle/`. For a universal build, add the Intel target with `rustup target add x86_64-apple-darwin` and run `pnpm tauri build --target universal-apple-darwin`.
 
 ## Using DiskPilot
 
