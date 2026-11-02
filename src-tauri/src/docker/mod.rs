@@ -336,7 +336,7 @@ pub fn build_overview(
     }
 
     let mut images = images;
-    images.sort_by(|a, b| b.unique_bytes.cmp(&a.unique_bytes));
+    images.sort_by_key(|i| std::cmp::Reverse(i.unique_bytes));
     let mut containers = containers;
     containers.sort_by(|a, b| b.running.cmp(&a.running).then(a.name.cmp(&b.name)));
 
