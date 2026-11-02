@@ -233,6 +233,13 @@ export function DeveloperToolsPage() {
         .filter((id): id is string => !!id && reviewable.has(id)),
     [detected, reviewable],
   );
+  // Same items as the "Review" buttons, so the totals always agree.
+  const reviewBytes = useMemo(() => {
+    const ids = new Set(reviewIds);
+    return recommendations
+      .filter((r) => ids.has(r.id))
+      .reduce((a, r) => a + r.estimatedReclaimBytes, 0);
+  }, [reviewIds, recommendations]);
 
   return (
     <>
@@ -276,9 +283,7 @@ export function DeveloperToolsPage() {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Worth reviewing</p>
-                    <p className="tabular text-lg font-semibold">
-                      {formatBytes(devtools.reclaimableBytes)}
-                    </p>
+                    <p className="tabular text-lg font-semibold">{formatBytes(reviewBytes)}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">

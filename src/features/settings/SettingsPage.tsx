@@ -127,7 +127,7 @@ export function SettingsPage() {
             />
             <Setting
               label="Privacy"
-              description="Everything runs locally. No account, telemetry or network access is needed to scan."
+              description="Scanning, analysis and cleanup run entirely on this Mac. There is no account and no telemetry. The optional assistant is the only feature that uses the network, and only when you ask it a question."
               control={null}
             />
           </Section>
