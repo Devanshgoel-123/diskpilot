@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>DiskPilot · Storage intelligence for developers</title>
+    <meta
+      name="description"
+      content="DiskPilot is a free, open-source Mac app that explains what fills your disk and cleans it up safely: Docker, Xcode, node_modules, build output, editor and AI agent data, with a preview before anything moves."
+    />
+    <meta name="theme-color" content="#16133a" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="DiskPilot" />
+    <meta
+      property="og:description"
+      content="Free, open-source storage intelligence for developers. Know what fills your Mac. Clean it up without guessing."
+    />
+    <meta property="og:image" content="/apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="nav" id="top">
+      <div class="nav-inner">
+        <a class="brand" href="#top" aria-label="DiskPilot home">
+          <img src="/logo.svg" alt="" width="34" height="34" />
+          <span>DiskPilot</span>
+        </a>
+        <nav class="nav-links" aria-label="Sections">
+          <a href="#features">Features</a>
+          <a href="#how">How it works</a>
+          <a href="#compare">Compare</a>
+          <a href="#windows">Windows</a>
+          <a href="#faq">FAQ</a>
+        </nav>
+        <a
+          class="btn btn-small btn-ghost-dark"
+          href="https://github.com/Devanshgoel-123/diskpilot"
+          data-track="github"
+          data-where="nav"
+          target="_blank"
+          rel="noopener"
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true" class="gh">
+            <path
+              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+            />
+          </svg>
+          GitHub
+        </a>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- Hero -->
+      <section class="hero">
+        <div class="hero-inner">
+          <div class="hero-copy">
+            <p class="eyebrow eyebrow-dark">Free and open source · for macOS</p>
+            <h1>Know what fills your Mac. <em>Clean it up without guessing.</em></h1>
+            <p class="lede">
+              DiskPilot scans your disk on your own machine, tells you what every large folder is
+              and why it is there, and frees space only through a preview you confirm. It knows
+              where Docker, Xcode, <code>node_modules</code>, build output, editors and AI coding
+              agents hide their gigabytes.
+            </p>
+            <div class="cta-row">
+              <a
+                class="btn btn-primary"
+                href="https://github.com/Devanshgoel-123/diskpilot"
+                data-track="github"
+                data-where="hero"
+                target="_blank"
+                rel="noopener"
+                >Get DiskPilot on GitHub</a
+              >
+              <a class="btn btn-ghost-dark" href="#safety">How it stays safe</a>
+            </div>
+            <p class="fine">
+              macOS 11 or later · Apple silicon and Intel · MIT licensed · Windows planned
+            </p>
+          </div>
+
+          <div class="hero-visual">
+            <img
+              class="mascot"
+              src="/logo.svg"
+              alt="DiskPilot mascot: a smiling disk wearing pilot goggles"
+              width="148"
+              height="148"
+            />
+            <div class="window" role="group" aria-label="Preview of the DiskPilot app">
+              <div class="window-bar">
+                <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <div class="tabs" role="tablist" aria-label="App views">
+                  <button
+                    role="tab"
+                    id="tab-overview"
+                    aria-selected="true"
+                    aria-controls="view-overview"
+                  >
+                    Overview
+                  </button>
+                  <button
+                    role="tab"
+                    id="tab-tools"
+                    aria-selected="false"
+                    aria-controls="view-tools"
+                    tabindex="-1"
+                  >
+                    Developer Tools
+                  </button>
+                  <button
+                    role="tab"
+                    id="tab-docker"
+                    aria-selected="false"
+                    aria-controls="view-docker"
+                    tabindex="-1"
+                  >
+                    Docker
+                  </button>
+                </div>
+              </div>
+
+              <div class="view" id="view-overview" role="tabpanel" aria-labelledby="tab-overview">
+                <div class="v-head">
+                  <div>
+                    <p class="v-label">Scanned in 42 s</p>
+                    <p class="v-big">67.5 GB</p>
+                  </div>
+                  <p class="v-label">995,496 files</p>
+                </div>
+                <div class="bar" aria-hidden="true">
+                  <span style="--w: 20; --c: var(--cat-app)"></span>
+                  <span style="--w: 14.5; --c: var(--cat-cache)"></span>
+                  <span style="--w: 11.4; --c: var(--cat-build)"></span>
+                  <span style="--w: 9.5; --c: var(--cat-dev)"></span>
+                  <span style="--w: 7.4; --c: var(--cat-docker)"></span>
+                  <span style="--w: 3.9; --c: var(--cat-unknown)"></span>
+                </div>
+                <ul class="v-list">
+                  <li>
+                    <i style="--c: var(--cat-build)"></i><span>Rust build output</span
+                    ><b>10.5 GB</b>
+                  </li>
+                  <li>
+                    <i style="--c: var(--cat-docker)"></i><span>Docker Desktop disk image</span
+                    ><b>7.4 GB</b>
+                  </li>
+                  <li>
+                    <i style="--c: var(--cat-app)"></i><span>Cursor global state</span><b>4.3 GB</b>
+                  </li>
+                  <li>
+                    <i style="--c: var(--cat-cache)"></i><span>CLI tool caches</span><b>2.3 GB</b>
+                  </li>
+                  <li>
+                    <i style="--c: var(--cat-dev)"></i><span>Node.js versions (nvm)</span
+                    ><b>1.2 GB</b>
+                  </li>
+                </ul>
+              </div>
+
+              <div class="view" id="view-tools" role="tabpanel" aria-labelledby="tab-tools" hidden>
+                <ul class="v-rows">
+                  <li>
+                    <span class="chip safe">Likely safe</span><span>Cursor downloaded update</span
+                    ><b>1.57 GB</b>
+                  </li>
+                  <li>
+                    <span class="chip review">Review first</span
+                    ><span>Editor storage for 81 deleted projects</span><b>81 folders</b>
+                  </li>
+                  <li>
+                    <span class="chip review">Review first</span
+                    ><span>2 superseded Claude Code versions</span><b>555 MB</b>
+                  </li>
+                  <li>
+                    <span class="chip review">Review first</span
+                    ><span>Stale state database backup</span><b>517 MB</b>
+                  </li>
+                  <li>
+                    <span class="chip keep">Keep</span
+                    ><span>Chat history database, 1,339 chats</span><b>3.07 GB</b>
+                  </li>
+                </ul>
+                <p class="v-note">
+                  Example findings from a real, read-only analysis. Nothing was removed.
+                </p>
+              </div>
+
+              <div
+                class="view"
+                id="view-docker"
+                role="tabpanel"
+                aria-labelledby="tab-docker"
+                hidden
+              >
+                <div class="cmd">
+                  <span class="v-label">Exact command, shown before it runs</span>
+                  <code>docker builder prune --all --force</code>
+                </div>
+                <ul class="v-rows">
+                  <li>
+                    <span class="chip safe">Reclaimable</span><span>Unused build cache</span
+                    ><b>3.1 GB</b>
+                  </li>
+                  <li>
+                    <span class="chip review">Review first</span><span>Dangling images</span
+                    ><b>1.8 GB</b>
+                  </li>
+                  <li>
+                    <span class="chip keep">Never removed</span><span>Volumes</span><b>2.4 GB</b>
+                  </li>
+                </ul>
+                <p class="v-note">Sizes come from Docker's own report. Illustrative figures.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tools-strip" aria-label="Tools DiskPilot understands">
+          <p>Understands the tools developers actually use</p>
+          <ul>
+            <li>Docker</li>
+            <li>Xcode</li>
+            <li>Node.js</li>
+            <li>pnpm</li>
+            <li>Yarn</li>
+            <li>Bun</li>
+            <li>Rust</li>
+            <li>Python</li>
+            <li>Hugging Face</li>
+            <li>Gradle</li>
+            <li>Homebrew</li>
+            <li>Cursor</li>
+            <li>VS Code</li>
+            <li>Claude Code</li>
+            <li>Codex</li>
+            <li>GitHub Copilot</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Features -->
+      <section class="section" id="features">
+        <div class="section-head">
+          <p class="eyebrow">Features</p>
+          <h2>Everything a developer's disk accumulates, explained</h2>
+          <p>
+            Generic cleaners see folders. DiskPilot sees the project, the tool and the version that
+            created them, and whether any of it is still used.
+          </p>
+        </div>
+        <div class="bento">
+          <article class="card card-wide">
+            <h3>Every folder explained</h3>
+            <p>
+              Each folder gets one of eleven categories, the rule that matched, its confidence and a
+              sentence on what it is. You see why <code>~/Library/Developer</code> is 30 GB, not
+              just that it is.
+            </p>
+            <div class="cat-row" aria-hidden="true">
+              <span style="--c: var(--cat-app)">Application data</span>
+              <span style="--c: var(--cat-cache)">Cache</span>
+              <span style="--c: var(--cat-build)">Build artifacts</span>
+              <span style="--c: var(--cat-dev)">Developer tools</span>
+              <span style="--c: var(--cat-docker)">Docker storage</span>
+              <span style="--c: var(--cat-logs)">Logs</span>
+            </div>
+          </article>
+          <article class="card">
+            <h3>Finds data for deleted projects</h3>
+            <p>
+              Editor workspace storage, Xcode DerivedData and agent sessions whose project folder no
+              longer exists, confirmed against the disk.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Docker without the guesswork</h3>
+            <p>
+              Images, containers and build cache from Docker's own numbers. Every action shows the
+              exact command first. Volumes are never touched.
+            </p>
+          </article>
+          <article class="card">
+            <h3>AI agent and editor cleanup</h3>
+            <p>
+              Old Claude Code versions, Cursor update downloads, stale database backups, MCP logs
+              and Copilot leftovers. Conversation history is never recommended.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Trash first, with a history</h3>
+            <p>
+              Items move to the Trash, so you can put them back. Every cleanup is logged with each
+              item's outcome.
+            </p>
+          </article>
+          <article class="card card-wide card-accent">
+            <h3>An optional assistant that cannot delete</h3>
+            <p>
+              Turn it on with your own Anthropic key and ask "what can I safely remove?" It reads
+              DiskPilot's findings and highlights recommendations for you to review. It has no tool
+              that changes your disk, and file contents are never sent.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <!-- How it works -->
+      <section class="band band-tint" id="how">
+        <div class="section">
+          <div class="section-head">
+            <p class="eyebrow">How it works</p>
+            <h2>Five stages, one safety gate</h2>
+            <p>
+              Every cleanup moves through the same steps in the same order. The last step checks
+              every path again just before it acts.
+            </p>
+          </div>
+          <ol class="pipeline">
+            <li>
+              <h3>Scan</h3>
+              <p>
+                Measures real on-disk size in parallel. Stays on one volume, never follows symlinks,
+                counts hard links once.
+              </p>
+            </li>
+            <li>
+              <h3>Classify</h3>
+              <p>
+                Matches each folder to a rule: DerivedData, <code>node_modules</code>, Cargo
+                <code>target</code>, editor caches and more.
+              </p>
+            </li>
+            <li>
+              <h3>Recommend</h3>
+              <p>
+                Regenerable data becomes a suggestion with a tier, the reason, the risk and an
+                alternative command.
+              </p>
+            </li>
+            <li>
+              <h3>Preview</h3>
+              <p>
+                A single-use plan of exactly what will move and how much space it frees. It expires
+                in ten minutes.
+              </p>
+            </li>
+            <li class="gate">
+              <h3>Execute</h3>
+              <p>
+                Re-checks each path, refuses protected folders, moves items to the Trash and records
+                the result.
+              </p>
+            </li>
+          </ol>
+
+          <div class="tiers" id="safety">
+            <div class="tier" style="--c: var(--safe)">
+              <span class="chip safe">Likely safe</span>
+              <p>
+                Regenerable data the tool rebuilds on its own: package caches, build output, app
+                caches, logs.
+              </p>
+            </div>
+            <div class="tier" style="--c: var(--review)">
+              <span class="chip review">Review first</span>
+              <p>
+                Probably unused, but something may depend on it: data for deleted projects, old
+                versions, stale backups.
+              </p>
+            </div>
+            <div class="tier" style="--c: var(--keep)">
+              <span class="chip keep">Keep</span>
+              <p>
+                Important or not understood well enough: conversation history, sign-in, settings,
+                Docker volumes, your files.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Compare -->
+      <section class="section" id="compare">
+        <div class="section-head">
+          <p class="eyebrow">Compare</p>
+          <h2>Where DiskPilot fits</h2>
+          <p>
+            Disk visualizers show you sizes. Cleaner suites remove system junk. Single-purpose dev
+            tools clean one thing. DiskPilot explains all of a developer's storage and cleans it
+            through one reviewed workflow.
+          </p>
+        </div>
+        <div class="table-wrap">
+          <table class="compare">
+            <caption class="sr-only">
+              DiskPilot compared with other kinds of storage tools
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col"></th>
+                <th scope="col" class="us">DiskPilot</th>
+                <th scope="col">
+                  Disk visualizers<span>DaisyDisk, GrandPerspective, OmniDiskSweeper</span>
+                </th>
+                <th scope="col">Cleaner suites<span>CleanMyMac</span></th>
+                <th scope="col">
+                  Single-purpose dev tools<span>DevCleaner for Xcode, kondo, npkill</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Price</th>
+                <td class="us">Free</td>
+                <td>Free to about $10 one-time</td>
+                <td>From $39.95 a year</td>
+                <td>Free</td>
+              </tr>
+              <tr>
+                <th scope="row">Open source</th>
+                <td class="us">Yes, MIT</td>
+                <td>Some</td>
+                <td>No</td>
+                <td>Mostly</td>
+              </tr>
+              <tr>
+                <th scope="row">Explains what a folder is</th>
+                <td class="us">Rule, confidence and a plain sentence</td>
+                <td>Sizes only</td>
+                <td>Junk categories</td>
+                <td>Only its own targets</td>
+              </tr>
+              <tr>
+                <th scope="row">Developer coverage</th>
+                <td class="us">Docker, Xcode, Node, Rust, Python, editors, AI agents</td>
+                <td>None specific</td>
+                <td>General system data</td>
+                <td>One tool or project folders</td>
+              </tr>
+              <tr>
+                <th scope="row">Knows when a project is gone</th>
+                <td class="us">Checks editor, Xcode and agent data against the disk</td>
+                <td>No</td>
+                <td>Not its focus</td>
+                <td>Varies</td>
+              </tr>
+              <tr>
+                <th scope="row">Before anything is removed</th>
+                <td class="us">Tiered preview, Trash first, history</td>
+                <td>You decide by hand</td>
+                <td>Guided cleanup</td>
+                <td>Prompt or list</td>
+              </tr>
+              <tr>
+                <th scope="row">Visual disk map</th>
+                <td class="us">Bars and sortable lists</td>
+                <td>Their strength</td>
+                <td>Yes</td>
+                <td>No</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="footnote">
+          Prices as listed by the vendors in 2026 and may vary by region. Categories describe
+          typical behavior; check each product for details.
+        </p>
+      </section>
+
+      <!-- Windows -->
+      <section class="band band-dark" id="windows">
+        <div class="section">
+          <div class="win">
+            <div class="section-head">
+              <p class="eyebrow eyebrow-dark">On the roadmap</p>
+              <h2>Coming to Windows</h2>
+              <p>
+                The engine is Rust and the shell is Tauri, which already builds for Windows. The
+                work is teaching DiskPilot how Windows stores things, with the same safety rules.
+              </p>
+            </div>
+            <ul class="win-grid">
+              <li>
+                <h3>NTFS-aware scanning</h3>
+                <p>
+                  Real allocated size, hard links counted once, junctions and symlinks never
+                  followed, long paths supported.
+                </p>
+              </li>
+              <li>
+                <h3>Cloud files left alone</h3>
+                <p>
+                  OneDrive placeholders are measured without downloading them, and never counted as
+                  local data.
+                </p>
+              </li>
+              <li>
+                <h3>Recycle Bin first</h3>
+                <p>
+                  The same preview-then-confirm flow, moving items to the Recycle Bin instead of
+                  deleting them.
+                </p>
+              </li>
+              <li>
+                <h3>Docker and WSL disks</h3>
+                <p>
+                  Docker's WSL 2 disk file does not shrink after pruning. DiskPilot will explain why
+                  and show the compaction steps.
+                </p>
+              </li>
+              <li>
+                <h3>Windows developer data</h3>
+                <p>
+                  npm, pnpm and NuGet caches, Visual Studio and Gradle data, editors and agents
+                  under AppData.
+                </p>
+              </li>
+              <li>
+                <h3>System folders protected</h3>
+                <p>
+                  Windows, Program Files and the component store are off limits. Windows Update
+                  cleanup is left to Windows' own tools.
+                </p>
+              </li>
+            </ul>
+            <a
+              class="btn btn-ghost-dark"
+              href="https://github.com/Devanshgoel-123/diskpilot"
+              data-track="github"
+              data-where="windows"
+              target="_blank"
+              rel="noopener"
+              >Watch the repository for Windows releases</a
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- FAQ -->
+      <section class="section" id="faq">
+        <div class="section-head">
+          <p class="eyebrow">FAQ</p>
+          <h2>Questions people ask first</h2>
+        </div>
+        <div class="faq">
+          <details>
+            <summary>Can DiskPilot delete something important?</summary>
+            <p>
+              Nothing is removed without a preview you confirm. Items go to the Trash, system and
+              key home folders are refused outright, and conversation history, sign-in data,
+              settings and Docker volumes are never recommended.
+            </p>
+          </details>
+          <details>
+            <summary>Does it need Full Disk Access?</summary>
+            <p>
+              No. macOS asks once before protected folders such as Desktop, Documents and Downloads
+              are read. Folders you do not allow are skipped and reported.
+            </p>
+          </details>
+          <details>
+            <summary>Does the app send any data?</summary>
+            <p>
+              No. There is no account and no telemetry. The optional assistant is the only feature
+              that uses the network, only when you ask it something, and it never sends file
+              contents.
+            </p>
+          </details>
+          <details>
+            <summary>Is it really free?</summary>
+            <p>Yes. DiskPilot is open source under the MIT license, with no paid tier.</p>
+          </details>
+          <details>
+            <summary>When is Windows support coming?</summary>
+            <p>
+              It is planned after signed macOS releases. Watch the GitHub repository to hear when a
+              preview is ready.
+            </p>
+          </details>
+        </div>
+      </section>
+
+      <!-- Final CTA -->
+      <section class="final">
+        <img src="/logo.svg" alt="" width="88" height="88" />
+        <h2>Take back your disk, one reviewed step at a time.</h2>
+        <a
+          class="btn btn-primary"
+          href="https://github.com/Devanshgoel-123/diskpilot"
+          data-track="github"
+          data-where="footer-cta"
+          target="_blank"
+          rel="noopener"
+          >Get DiskPilot on GitHub</a
+        >
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <span>DiskPilot is free software under the MIT license.</span>
+        <span
+          >This website counts visits with Vercel Web Analytics, which uses no cookies. The app
+          itself sends nothing.</span
+        >
+      </div>
+    </footer>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
