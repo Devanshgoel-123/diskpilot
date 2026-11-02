@@ -28,24 +28,24 @@ the app icon; the working interface stays quiet.
 System grays with a slight cool bias, matched to macOS so the app sits
 naturally next to Finder and System Settings.
 
-| Token                | Light     | Dark      | Use                                      |
-| -------------------- | --------- | --------- | ---------------------------------------- |
-| `background`         | `#FFFFFF` | `#1C1C1E` | Content area                             |
-| `sidebar`            | `#F5F5F7` | `#161618` | Sidebar                                  |
-| `panel`              | `#FFFFFF` | `#1C1C1E` | Surfaces that sit on the background      |
-| `panel-raised`       | `#F5F5F7` | `#252528` | Sheets, menus, inset wells               |
-| `hover`              | `#EDEDF0` | `#2A2A2D` | Row and control hover                    |
-| `selected`           | `#E4E4EA` | `#323236` | Selected row, active navigation          |
-| `border`             | `#E5E5EA` | `#2E2E31` | Hairline dividers                        |
-| `border-strong`      | `#D1D1D6` | `#3A3A3D` | Control outlines                         |
-| `foreground`         | `#1D1D1F` | `#F5F5F7` | Primary text                             |
-| `muted-foreground`   | `#6E6E73` | `#A1A1A6` | Secondary text                           |
-| `subtle-foreground`  | `#737378` | `#8E8E93` | Tertiary text, metadata (4.5:1 or more)  |
-| `accent`             | `#5856D6` | `#7D7AFF` | Primary action, selection, focus         |
-| `tier-safe`          | `#248A3D` | `#30D158` | Likely safe                              |
-| `tier-review`        | `#B25000` | `#FF9F0A` | Review first                             |
-| `tier-keep`          | `#6E6E73` | `#98989D` | Keep                                     |
-| `critical`           | `#D70015` | `#FF453A` | Destructive actions and errors           |
+| Token               | Light     | Dark      | Use                                     |
+| ------------------- | --------- | --------- | --------------------------------------- |
+| `background`        | `#FFFFFF` | `#1C1C1E` | Content area                            |
+| `sidebar`           | `#F5F5F7` | `#161618` | Sidebar                                 |
+| `panel`             | `#FFFFFF` | `#1C1C1E` | Surfaces that sit on the background     |
+| `panel-raised`      | `#F5F5F7` | `#252528` | Sheets, menus, inset wells              |
+| `hover`             | `#EDEDF0` | `#2A2A2D` | Row and control hover                   |
+| `selected`          | `#E4E4EA` | `#323236` | Selected row, active navigation         |
+| `border`            | `#E5E5EA` | `#2E2E31` | Hairline dividers                       |
+| `border-strong`     | `#D1D1D6` | `#3A3A3D` | Control outlines                        |
+| `foreground`        | `#1D1D1F` | `#F5F5F7` | Primary text                            |
+| `muted-foreground`  | `#6E6E73` | `#A1A1A6` | Secondary text                          |
+| `subtle-foreground` | `#737378` | `#8E8E93` | Tertiary text, metadata (4.5:1 or more) |
+| `accent`            | `#5856D6` | `#7D7AFF` | Primary action, selection, focus        |
+| `tier-safe`         | `#248A3D` | `#30D158` | Likely safe                             |
+| `tier-review`       | `#B25000` | `#FF9F0A` | Review first                            |
+| `tier-keep`         | `#6E6E73` | `#98989D` | Keep                                    |
+| `critical`          | `#D70015` | `#FF453A` | Destructive actions and errors          |
 
 The accent is the indigo of the mascot's goggles strap, which is also the
 macOS system indigo. Category colors for charts keep the validated palette in
@@ -56,14 +56,14 @@ macOS system indigo. Category colors for charts keep the validated palette in
 The system font (SF Pro on macOS). SF Mono only for paths, commands and
 identifiers. Sizes and counts use tabular figures in the text face.
 
-| Role         | Size / line height | Weight |
-| ------------ | ------------------ | ------ |
-| Display      | 28 / 32            | 600    |
-| Page title   | 15 / 20            | 600    |
-| Section      | 13 / 18            | 600    |
-| Body         | 13 / 18            | 400    |
-| Secondary    | 12 / 16            | 400    |
-| Caption      | 11 / 14            | 400    |
+| Role       | Size / line height | Weight |
+| ---------- | ------------------ | ------ |
+| Display    | 28 / 32            | 600    |
+| Page title | 15 / 20            | 600    |
+| Section    | 13 / 18            | 600    |
+| Body       | 13 / 18            | 400    |
+| Secondary  | 12 / 16            | 400    |
+| Caption    | 11 / 14            | 400    |
 
 No all-caps labels. Section names are sentence case.
 
