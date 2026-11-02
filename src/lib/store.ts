@@ -115,16 +115,15 @@ export const useApp = create<AppState>((set, get) => ({
     }
 
     try {
-      const [env, disk, summary, scanning, history, recommendations, cleanups] =
-        await Promise.all([
-          api.getEnvironment(),
-          api.getDiskInfo(),
-          api.getScanSummary(),
-          api.isScanRunning(),
-          api.getScanHistory(50),
-          api.getRecommendations(),
-          api.getCleanupHistory(50),
-        ]);
+      const [env, disk, summary, scanning, history, recommendations, cleanups] = await Promise.all([
+        api.getEnvironment(),
+        api.getDiskInfo(),
+        api.getScanSummary(),
+        api.isScanRunning(),
+        api.getScanHistory(50),
+        api.getRecommendations(),
+        api.getCleanupHistory(50),
+      ]);
       set({ env, disk, summary, scanning, history, recommendations, cleanups, ready: true });
     } catch (e) {
       set({ error: errorMessage(e), ready: true });

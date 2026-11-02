@@ -35,7 +35,9 @@ export const DialogContent = React.forwardRef<
 DialogContent.displayName = "DialogContent";
 
 export function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("border-b border-border px-5 pt-4 pb-3 pr-12", className)} {...props} />;
+  return (
+    <div className={cn("border-b border-border px-5 pt-4 pr-12 pb-3", className)} {...props} />
+  );
 }
 
 export const DialogTitle = React.forwardRef<
@@ -65,7 +67,10 @@ DialogDescription.displayName = "DialogDescription";
 export function DialogFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("flex items-center justify-end gap-2 border-t border-border px-5 py-3", className)}
+      className={cn(
+        "flex items-center justify-end gap-2 border-t border-border px-5 py-3",
+        className,
+      )}
       {...props}
     />
   );

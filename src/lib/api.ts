@@ -46,16 +46,14 @@ export const api = {
   createCleanupPlan: (ids: string[], method: CleanupMethod) =>
     invoke<CleanupPlan>("create_cleanup_plan", { ids, method }),
   discardCleanupPlan: (planId: string) => invoke<null>("discard_cleanup_plan", { planId }),
-  executeCleanupPlan: (planId: string) =>
-    invoke<CleanupRecord>("execute_cleanup_plan", { planId }),
+  executeCleanupPlan: (planId: string) => invoke<CleanupRecord>("execute_cleanup_plan", { planId }),
   getCleanupHistory: (limit?: number) =>
     invoke<CleanupRecord[]>("get_cleanup_history", { limit: limit ?? null }),
 
   dockerOverview: () => invoke<DockerOverview>("docker_overview"),
   dockerPreview: (action: DockerAction) =>
     invoke<DockerActionPreview>("docker_preview", { action }),
-  dockerExecute: (action: DockerAction) =>
-    invoke<DockerActionResult>("docker_execute", { action }),
+  dockerExecute: (action: DockerAction) => invoke<DockerActionResult>("docker_execute", { action }),
   dockerInspect: (kind: "container" | "image" | "volume", id: string) =>
     invoke<string>("docker_inspect", { kind, id }),
   dockerDiagnostics: () => invoke<DiagnosticFinding[]>("docker_diagnostics"),
