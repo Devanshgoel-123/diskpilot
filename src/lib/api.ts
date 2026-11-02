@@ -8,6 +8,8 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
   AppEnvironment,
+  AssistantReply,
+  AssistantStatus,
   CleanupMethod,
   CleanupPlan,
   CleanupRecord,
@@ -53,6 +55,13 @@ export const api = {
 
   analyzeDevTools: () => invoke<DevToolsReport>("analyze_dev_tools"),
   getDevToolsReport: () => invoke<DevToolsReport | null>("get_dev_tools_report"),
+
+  assistantStatus: () => invoke<AssistantStatus>("assistant_status"),
+  assistantSetKey: (key: string) => invoke<AssistantStatus>("assistant_set_key", { key }),
+  assistantClearKey: () => invoke<AssistantStatus>("assistant_clear_key"),
+  assistantAsk: (question: string, model: string) =>
+    invoke<AssistantReply>("assistant_ask", { question, model }),
+  assistantReset: () => invoke<null>("assistant_reset"),
 
   dockerOverview: () => invoke<DockerOverview>("docker_overview"),
   dockerPreview: (action: DockerAction) =>

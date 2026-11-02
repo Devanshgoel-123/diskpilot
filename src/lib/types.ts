@@ -413,3 +413,24 @@ export interface DevToolsReport {
   tools: ToolReport[];
   reclaimableBytes: number;
 }
+
+// ---- Assistant (src-tauri/src/assistant) -----------------------------------
+
+export interface AssistantStatus {
+  configured: boolean;
+  keySource: "keychain" | "environment" | null;
+  models: string[];
+}
+
+export interface AssistantReply {
+  text: string;
+  highlighted: string[];
+  toolsUsed: string[];
+  model: string;
+  stopReason: string;
+}
+
+export type ChatEntry =
+  | { role: "user"; text: string }
+  | { role: "assistant"; reply: AssistantReply }
+  | { role: "error"; text: string };

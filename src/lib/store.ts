@@ -4,6 +4,8 @@ import { api, errorMessage, inDesktopApp, onScanFinished, onScanProgress } from 
 import { applyTheme, loadTheme, saveTheme, type ThemePreference } from "./theme";
 import type {
   AppEnvironment,
+  AssistantStatus,
+  ChatEntry,
   CleanupRecord,
   DevToolsReport,
   Recommendation,
@@ -15,6 +17,7 @@ import type {
 } from "./types";
 
 export type PageId =
+  | "assistant"
   | "overview"
   | "explorer"
   | "recommendations"
@@ -25,6 +28,25 @@ export type PageId =
   | "settings";
 
 const ROOT_KEY = "diskpilot.scanRoot";
+const ASSISTANT_ENABLED_KEY = "diskpilot.assistant.enabled";
+const ASSISTANT_MODEL_KEY = "diskpilot.assistant.model";
+export const DEFAULT_ASSISTANT_MODEL = "claude-opus-5-5";
+
+function readPref(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writePref(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* storage unavailable */
+  }
+}
 
 function loadScanRoot(): string | null {
   try {
@@ -48,6 +70,13 @@ interface AppState {
   /** Recommendation ids to preselect when the Recommendations page opens. */
   preselect: string[] | null;
 
+  /** The assistant is off until the user enables it in Settings. */
+  assistantEnabled: boolean;
+  assistantModel: string;
+  assistantStatus: AssistantStatus | null;
+  chat: ChatEntry[];
+  asking: boolean;
+
   scanning: boolean;
   progress: ScanProgress | null;
   lastStatus: { status: ScanStatus; error: string | null } | null;
@@ -68,6 +97,11 @@ interface AppState {
   analyzeDevTools: () => Promise<void>;
   reviewInRecommendations: (ids: string[]) => void;
   consumePreselect: () => string[] | null;
+  setAssistantEnabled: (on: boolean) => void;
+  setAssistantModel: (model: string) => void;
+  refreshAssistantStatus: () => Promise<void>;
+  ask: (question: string) => Promise<void>;
+  resetChat: () => Promise<void>;
   navigate: (page: PageId) => void;
   openInExplorer: (path: string) => void;
   /** Navigate within the Storage Explorer; `null` is the scan root. */
@@ -91,6 +125,11 @@ export const useApp = create<AppState>((set, get) => ({
   devtools: null,
   analyzingDevTools: false,
   preselect: null,
+  assistantEnabled: readPref(ASSISTANT_ENABLED_KEY) === "true",
+  assistantModel: readPref(ASSISTANT_MODEL_KEY) ?? DEFAULT_ASSISTANT_MODEL,
+  assistantStatus: null,
+  chat: [],
+  asking: false,
   scanning: false,
   progress: null,
   lastStatus: null,
@@ -137,6 +176,7 @@ export const useApp = create<AppState>((set, get) => ({
       ]);
       set({ env, disk, summary, scanning, history, recommendations, cleanups, ready: true });
       void api.getDevToolsReport().then((devtools) => set({ devtools }));
+      void get().refreshAssistantStatus();
     } catch (e) {
       set({ error: errorMessage(e), ready: true });
     }
@@ -200,6 +240,47 @@ export const useApp = create<AppState>((set, get) => ({
     const ids = get().preselect;
     if (ids) set({ preselect: null });
     return ids;
+  },
+
+  setAssistantEnabled: (on) => {
+    writePref(ASSISTANT_ENABLED_KEY, String(on));
+    set({ assistantEnabled: on });
+  },
+
+  setAssistantModel: (model) => {
+    writePref(ASSISTANT_MODEL_KEY, model);
+    // The engine starts a new conversation when the model changes.
+    set({ assistantModel: model, chat: [] });
+  },
+
+  refreshAssistantStatus: async () => {
+    try {
+      set({ assistantStatus: await api.assistantStatus() });
+    } catch (e) {
+      set({ error: errorMessage(e) });
+    }
+  },
+
+  ask: async (question) => {
+    const q = question.trim();
+    if (!q || get().asking) return;
+    set((s) => ({ asking: true, chat: [...s.chat, { role: "user", text: q }] }));
+    try {
+      const reply = await api.assistantAsk(q, get().assistantModel);
+      set((s) => ({ chat: [...s.chat, { role: "assistant", reply }] }));
+    } catch (e) {
+      set((s) => ({ chat: [...s.chat, { role: "error", text: errorMessage(e) }] }));
+    } finally {
+      set({ asking: false });
+    }
+  },
+
+  resetChat: async () => {
+    try {
+      await api.assistantReset();
+    } finally {
+      set({ chat: [] });
+    }
   },
 
   refreshRecommendations: async () => {
