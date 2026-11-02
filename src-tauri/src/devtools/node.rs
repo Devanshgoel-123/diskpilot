@@ -181,8 +181,8 @@ pub fn analyze(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
         summary.push_str(&format!("{} projects with node_modules", s.items.len()));
         if stale_count > 0 {
             summary.push_str(&format!(
-                ", {stale_count} inactive for {STALE_DAYS}+ days ({:.1} GB)",
-                stale_bytes as f64 / 1e9
+                ", {stale_count} inactive for {STALE_DAYS}+ days ({})",
+                crate::docker::actions::human(stale_bytes)
             ));
         }
         summary.push('.');
