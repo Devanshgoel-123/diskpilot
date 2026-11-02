@@ -25,6 +25,8 @@ pub enum RuleKind {
 pub enum Matcher {
     /// Exact path relative to the user's home directory.
     HomeRelative(&'static [&'static str]),
+    /// Any of several exact paths relative to the home directory.
+    HomeRelativeAny(&'static [&'static [&'static str]]),
     /// Exact absolute path.
     Absolute(&'static str),
     /// Folder name anywhere.
@@ -371,6 +373,78 @@ pub static DIR_RULES: &[DirRule] = &[
         "Cache folder shared by many command-line tools (pip, Hugging Face, pre-commit and others). Some tools keep large downloads here, such as ML models, that are slow to fetch again."
     ),
     // ---- Editors & AI coding tools -----------------------------------------
+    leaf!(
+        "cursor.caches",
+        HomeRelativeAny(&[
+            &["Library", "Application Support", "Cursor", "Cache"],
+            &["Library", "Application Support", "Cursor", "CachedData"],
+            &["Library", "Application Support", "Cursor", "Code Cache"],
+            &["Library", "Application Support", "Cursor", "GPUCache"],
+            &["Library", "Application Support", "Cursor", "CachedExtensionVSIXs"],
+            &["Library", "Application Support", "Cursor", "CachedProfilesData"],
+            &["Library", "Application Support", "Cursor", "Service Worker", "CacheStorage"],
+        ]),
+        Cache,
+        High,
+        "Cursor caches",
+        "Chromium and extension caches used by Cursor's editor shell. Rebuilt automatically; quit Cursor before removing them."
+    ),
+    leaf!(
+        "cursor.logs",
+        HomeRelative(&["Library", "Application Support", "Cursor", "logs"]),
+        Logs,
+        High,
+        "Cursor logs",
+        "Diagnostic logs written by Cursor, one folder per session."
+    ),
+    leaf!(
+        "cursor.workspace-storage",
+        HomeRelative(&["Library", "Application Support", "Cursor", "User", "workspaceStorage"]),
+        ApplicationData,
+        High,
+        "Cursor workspace storage",
+        "Per-project state, including agent and chat history for each workspace. Removing it loses that history."
+    ),
+    leaf!(
+        "cursor.global-storage",
+        HomeRelative(&["Library", "Application Support", "Cursor", "User", "globalStorage"]),
+        ApplicationData,
+        High,
+        "Cursor global state",
+        "Cursor's global state database (state.vscdb) with settings, extension state and chat history. Removing it resets Cursor."
+    ),
+    leaf!(
+        "vscode.caches",
+        HomeRelativeAny(&[
+            &["Library", "Application Support", "Code", "Cache"],
+            &["Library", "Application Support", "Code", "CachedData"],
+            &["Library", "Application Support", "Code", "Code Cache"],
+            &["Library", "Application Support", "Code", "GPUCache"],
+            &["Library", "Application Support", "Code", "CachedExtensionVSIXs"],
+            &["Library", "Application Support", "Code", "CachedProfilesData"],
+            &["Library", "Application Support", "Code", "Service Worker", "CacheStorage"],
+        ]),
+        Cache,
+        High,
+        "VS Code caches",
+        "Chromium and extension caches used by VS Code. Rebuilt automatically; quit VS Code before removing them."
+    ),
+    leaf!(
+        "vscode.logs",
+        HomeRelative(&["Library", "Application Support", "Code", "logs"]),
+        Logs,
+        High,
+        "VS Code logs",
+        "Diagnostic logs written by VS Code, one folder per session."
+    ),
+    leaf!(
+        "vscode.workspace-storage",
+        HomeRelative(&["Library", "Application Support", "Code", "User", "workspaceStorage"]),
+        ApplicationData,
+        High,
+        "VS Code workspace storage",
+        "Per-project state such as open editors, extension data and chat history."
+    ),
     container!(
         "cursor.app-data",
         HomeRelative(&["Library", "Application Support", "Cursor"]),

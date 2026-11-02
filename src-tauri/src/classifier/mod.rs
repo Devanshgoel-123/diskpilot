@@ -128,6 +128,10 @@ impl Classifier {
                 Ok(rel) => components_equal(rel, parts),
                 Err(_) => false,
             },
+            Matcher::HomeRelativeAny(options) => match path.strip_prefix(&self.home) {
+                Ok(rel) => options.iter().any(|parts| components_equal(rel, parts)),
+                Err(_) => false,
+            },
             Matcher::Absolute(abs) => path == Path::new(abs),
             Matcher::Name(names) => file_name_in(path, names),
             Matcher::NameWithSibling { names, siblings } => {
@@ -471,6 +475,25 @@ mod tests {
             dir("/Users/test/.local/share/claude/versions", &p).rule_id,
             "ai.claude-code-versions"
         );
+    }
+
+    #[test]
+    fn editor_caches_are_separated_from_chat_history() {
+        let p = FakeProbe::empty();
+        let base = "/Users/test/Library/Application Support/Cursor";
+        assert_eq!(
+            dir(&format!("{base}/CachedData/x"), &p).rule_id,
+            "cursor.caches"
+        );
+        assert_eq!(
+            dir(&format!("{base}/Code Cache"), &p).category,
+            Category::Cache
+        );
+        assert_eq!(
+            dir(&format!("{base}/User/workspaceStorage/abc"), &p).rule_id,
+            "cursor.workspace-storage"
+        );
+        assert_eq!(dir(&format!("{base}/User"), &p).rule_id, "cursor.app-data");
     }
 
     #[test]
