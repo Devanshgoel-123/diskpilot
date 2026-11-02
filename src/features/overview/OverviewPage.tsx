@@ -16,7 +16,7 @@ import { ScanDetails } from "./ScanDetails";
 import { StatTile } from "./StatTile";
 
 export function OverviewPage() {
-  const { disk, summary, env, scanning, scanRoot, startScan, navigate } = useApp();
+  const { disk, summary, env, scanning, scanRoot, startScan, navigate, recommendations } = useApp();
   const home = env?.homeDir;
 
   const consumers = summary ? topConsumers(summary.detectedLocations, 8) : [];
@@ -134,7 +134,16 @@ export function OverviewPage() {
                 <Panel className="xl:col-span-3">
                   <PanelHeader
                     title="Worth reviewing"
-                    description="Caches and build output found by this scan. Cleanup actions with previews arrive in the next release; nothing is deleted today."
+                    description="Caches and build output found by this scan."
+                    actions={
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => navigate("recommendations")}
+                      >
+                        Review {recommendations.length} recommendations
+                      </Button>
+                    }
                   />
                   {worthReviewing.length ? (
                     <LocationList locations={worthReviewing} />

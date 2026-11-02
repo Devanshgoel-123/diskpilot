@@ -34,8 +34,8 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "Clean up",
     items: [
-      { id: "recommendations", label: "Recommendations", icon: Sparkles, soon: true },
-      { id: "docker", label: "Docker", icon: Box, soon: true },
+      { id: "recommendations", label: "Recommendations", icon: Sparkles },
+      { id: "docker", label: "Docker", icon: Box },
       { id: "developer", label: "Developer Tools", icon: Code2 },
       { id: "history", label: "History", icon: History },
     ],
@@ -70,7 +70,6 @@ function NavButton({ item }: { item: NavItem }) {
 }
 
 export function Sidebar() {
-  const readOnly = useApp((s) => s.env?.readOnly ?? true);
   return (
     <nav className="flex w-[212px] shrink-0 flex-col border-r border-border bg-sidebar">
       {/* Space for the macOS traffic lights; doubles as a window drag handle. */}
@@ -94,15 +93,13 @@ export function Sidebar() {
         ))}
       </div>
       <div className="space-y-2 px-2.5 pt-2 pb-3">
-        {readOnly ? (
-          <div
-            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-2xs text-muted-foreground"
-            title="This version of DiskPilot cannot modify or delete files."
-          >
-            <ShieldCheck className="size-3.5 text-good" aria-hidden />
-            Read-only mode
-          </div>
-        ) : null}
+        <div
+          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-2xs text-muted-foreground"
+          title="Every cleanup is previewed, confirmed by you, Trash-first, and checked by the safety layer."
+        >
+          <ShieldCheck className="size-3.5 text-good" aria-hidden />
+          Safe cleanup · Trash first
+        </div>
         <NavButton item={{ id: "settings", label: "Settings", icon: Settings }} />
       </div>
     </nav>

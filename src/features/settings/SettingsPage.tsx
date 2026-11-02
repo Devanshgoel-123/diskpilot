@@ -144,8 +144,8 @@ export function SettingsPage() {
 
           <Section title="Safety">
             <Setting
-              label="Read-only mode"
-              description="This version cannot modify or delete files. Cleanup will arrive with previews, explicit confirmation and a central safety gate."
+              label="Cleanup safety"
+              description="Cleanup is always previewed with exact paths and confirmed by you. Items go to the Trash by default; permanent deletion is offered only for regenerable data. Every path is re-checked right before it is touched, protected system and home folders are refused, and symbolic links are never followed. Docker volumes are never removed."
               control={
                 <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Lock className="size-3" aria-hidden />
