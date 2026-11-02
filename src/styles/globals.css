@@ -1,0 +1,138 @@
+@import "tailwindcss";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Design tokens. Dark is the primary theme; light is a selected counterpart,
+ * not an automatic inversion. Components only reference these roles.
+ */
+:root {
+  --background: #fafaf9;
+  --sidebar: #f3f3f1;
+  --panel: #ffffff;
+  --panel-raised: #f6f6f4;
+  --hover: #efefec;
+  --border: #e4e4e0;
+  --border-strong: #d4d4cf;
+  --foreground: #18181b;
+  --muted-foreground: #63636b;
+  --subtle-foreground: #8e8e96;
+  --accent: #2f6fdf;
+  --accent-foreground: #ffffff;
+  --accent-soft: #e6eefc;
+  --track: #ebebe7;
+  --chart-other: #a1a1a8;
+  --good: #19803a;
+  --warning: #a86a00;
+  --critical: #c9302c;
+  --ring: #2f6fdf;
+  color-scheme: light;
+}
+
+.dark {
+  --background: #0b0b0c;
+  --sidebar: #0f0f11;
+  --panel: #141416;
+  --panel-raised: #19191c;
+  --hover: #1d1d21;
+  --border: #232327;
+  --border-strong: #2e2e33;
+  --foreground: #ececef;
+  --muted-foreground: #9a9aa3;
+  --subtle-foreground: #6b6b74;
+  --accent: #5b8def;
+  --accent-foreground: #0b0b0c;
+  --accent-soft: #172238;
+  --track: #222226;
+  --chart-other: #55555c;
+  --good: #3fb46a;
+  --warning: #d9a03f;
+  --critical: #ef5d58;
+  --ring: #5b8def;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --color-background: var(--background);
+  --color-sidebar: var(--sidebar);
+  --color-panel: var(--panel);
+  --color-panel-raised: var(--panel-raised);
+  --color-hover: var(--hover);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
+  --color-track: var(--track);
+  --color-chart-other: var(--chart-other);
+  --color-good: var(--good);
+  --color-warning: var(--warning);
+  --color-critical: var(--critical);
+  --color-ring: var(--ring);
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "cv11", "ss01";
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: default;
+  }
+  ::selection {
+    background: var(--accent-soft);
+  }
+  .selectable {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
+  }
+  /* Quiet, native-feeling scrollbars */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 10px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
