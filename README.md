@@ -2,7 +2,7 @@
 
 **Open-source storage intelligence for macOS.** DiskPilot shows what is using your disk, explains what each item is, and helps you reclaim space safely.
 
-DiskPilot is a native desktop application built with Tauri and Rust. It scans your storage locally, classifies every folder with an explanation, identifies developer data that can be regenerated, and performs cleanup only through a previewed, confirmed and audited workflow. It is designed for developers whose Macs accumulate Docker images, `node_modules`, Xcode build data, AI coding tool data and package manager caches, and for anyone who wants a clear account of their storage without resorting to terminal commands.
+DiskPilot is a native desktop application built with Tauri and Rust. It scans your storage locally, classifies every folder with an explanation, identifies developer data that can be regenerated, and performs cleanup only through a previewed, confirmed and audited workflow. It is built for developers whose Macs accumulate Docker images, `node_modules`, Xcode build data, AI coding tool data and package manager caches, and who want to know what is safe to remove before anything is removed.
 
 > **Project status:** early development (version 0.3). Release builds are published on GitHub but are not yet notarized by Apple; see [Installation](#installation).
 
@@ -223,7 +223,9 @@ The interface communicates with the Rust engine only through typed commands. Slo
 | 5     | Optional assistant with read-only access to storage data                                                                                                     | Complete |
 | 6     | Saved scans, version and leftover detection, Empty Trash, duplicates, local AI models, transcript credential check, menu bar item, Full Disk Access guidance | Complete |
 
-Planned next: signed and notarized release builds, incremental rescans, and additional analyzers (Homebrew, JetBrains IDEs, Android Studio).
+Planned next: notarized release builds, a read-only MCP server so coding agents such as Claude Code and Cursor can ask DiskPilot where space went, incremental rescans, and additional analyzers (Homebrew, JetBrains IDEs, Android Studio).
+
+Not planned: automatic or scheduled cleanup (every removal is approved by you), managing Docker containers beyond reclaiming space, and general-purpose "junk cleaning".
 
 ## Known limitations
 
