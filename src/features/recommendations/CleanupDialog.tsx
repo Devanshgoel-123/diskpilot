@@ -42,9 +42,12 @@ export function CleanupDialog({
   allowedMethods,
   onOpenChange,
   onFinished,
+  createPlan,
 }: {
   open: boolean;
   ids: string[];
+  /** Builds the plan instead of planning recommendation `ids`. Keep it stable. */
+  createPlan?: (method: CleanupMethod) => Promise<CleanupPlan>;
   allowedMethods: CleanupMethod[];
   onOpenChange: (open: boolean) => void;
   onFinished: (record: CleanupRecord) => void;
@@ -61,8 +64,7 @@ export function CleanupDialog({
     if (!open || record) return;
     let live = true;
     let created: string | null = null;
-    api
-      .createCleanupPlan(ids, method)
+    (createPlan ? createPlan(method) : api.createCleanupPlan(ids, method))
       .then((p) => {
         created = p.id;
         if (live) {
@@ -79,7 +81,7 @@ export function CleanupDialog({
       // A plan that was not executed is discarded when it is replaced or closed.
       if (created) void api.discardCleanupPlan(created).catch(() => undefined);
     };
-  }, [open, ids, method, record]);
+  }, [open, ids, method, record, createPlan]);
 
   const loading = !plan || plan.method !== method;
 
