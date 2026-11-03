@@ -4,7 +4,6 @@ import {
   Box,
   Code2,
   Copy,
-  FileStack,
   FolderTree,
   Gauge,
   History,
@@ -105,20 +104,18 @@ export function Sidebar() {
   const assistantEnabled = useApp((s) => s.assistantEnabled);
   const cleanupCount = recommendations.filter((r) => r.methods.length > 0).length;
 
+  // Find where the space went, then get it back in one place.
   const analyze: NavItem[] = [
     { id: "explorer", label: "Storage", icon: FolderTree },
-    { id: "large-files", label: "Large Files", icon: FileStack },
     { id: "duplicates", label: "Duplicates", icon: Copy },
     { id: "applications", label: "Applications", icon: AppWindow },
+    { id: "developer", label: "Developer Tools", icon: Code2 },
+    { id: "docker", label: "Docker", icon: Box },
+    ...(assistantEnabled ? [{ id: "assistant" as const, label: "Assistant", icon: Bot }] : []),
   ];
   const cleanUp: NavItem[] = [
     { id: "recommendations", label: "Cleanup", icon: Sparkles, count: cleanupCount },
-    { id: "developer", label: "Developer Tools", icon: Code2 },
-    { id: "docker", label: "Docker", icon: Box },
-  ];
-  const activity: NavItem[] = [
-    { id: "history", label: "Cleanup History", icon: History },
-    ...(assistantEnabled ? [{ id: "assistant" as const, label: "Assistant", icon: Bot }] : []),
+    { id: "history", label: "History", icon: History },
   ];
 
   return (
@@ -136,7 +133,6 @@ export function Sidebar() {
         <Section items={[{ id: "overview", label: "Overview", icon: Gauge }]} />
         <Section title="Analyze" items={analyze} />
         <Section title="Clean up" items={cleanUp} />
-        <Section title="Activity" items={activity} />
       </div>
       <div className="space-y-1 border-t border-border px-2.5 pt-2 pb-2.5">
         <ScanStatus />
