@@ -1,5 +1,6 @@
 import {
   Bot,
+  BrainCircuit,
   ChevronDown,
   Cloud,
   Code2,
@@ -39,6 +40,7 @@ const TOOL_ICON: Record<string, LucideIcon> = {
   xcode: Hammer,
   rust: Wrench,
   python: FileCode,
+  "local-models": BrainCircuit,
   versions: History,
 };
 
@@ -54,6 +56,7 @@ const TOOL_COLOR: Record<string, string> = {
   xcode: "var(--cat-docker-storage)",
   rust: "var(--cat-build-artifacts)",
   python: "var(--cat-cache)",
+  "local-models": "var(--cat-binary-data)",
   versions: "var(--cat-system-files)",
 };
 
