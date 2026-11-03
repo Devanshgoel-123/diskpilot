@@ -10,15 +10,7 @@
     />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f5f2" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#151517" />
-    <script>
-      // Apply a saved theme before the first paint to avoid a flash.
-      try {
-        const t = localStorage.getItem("diskpilot-theme");
-        if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
-      } catch {
-        /* storage unavailable: follow the system theme */
-      }
-    </script>
+    <script src="/theme.js"></script>
     <meta property="og:type" content="website" />
     <meta property="og:title" content="DiskPilot" />
     <meta
