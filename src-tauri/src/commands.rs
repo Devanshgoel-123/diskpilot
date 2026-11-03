@@ -409,7 +409,7 @@ pub async fn create_cleanup_plan(
     let root = cleanup_root(&state);
     let now = now_ms();
     let mut plan = planner::build_plan(
-        format!("cleanup-{now}"),
+        unique_id("cleanup", now),
         &recs,
         &ids,
         method,
@@ -570,7 +570,7 @@ pub async fn plan_duplicate_cleanup(
         let (recs, rejected) = duplicates::removal_recommendations(&report, &paths, &classify);
         let ids: Vec<String> = recs.iter().map(|r| r.id.clone()).collect();
         let mut plan = planner::build_plan(
-            format!("duplicates-{now}"),
+            unique_id("duplicates", now),
             &recs,
             &ids,
             CleanupMethod::Trash,
@@ -634,7 +634,7 @@ pub async fn preview_trash(state: State<'_, AppState>) -> AppResult<trash::Trash
     let dir = trash::trash_dir(&state.home);
     let now = now_ms();
     let preview = blocking(move || {
-        trash::inventory(&dir, format!("trash-{now}"), now).map_err(|e| AppError::io(&dir, &e))
+        trash::inventory(&dir, unique_id("trash", now), now).map_err(|e| AppError::io(&dir, &e))
     })
     .await?;
     let mut slot = state.trash();
@@ -888,4 +888,23 @@ pub async fn assistant_ask(
     .map_err(|e| AppError::Other(format!("Background task failed: {e}")))?;
     *state.assistant.lock().unwrap_or_else(|e| e.into_inner()) = convo;
     result.map_err(|e| AppError::Other(e.to_string()))
+}
+
+/// An id for a plan or preview that cannot collide with another one made in
+/// the same millisecond: the time plus 64 random bits.
+fn unique_id(prefix: &str, now: i64) -> String {
+    use std::io::Read;
+    let mut bytes = [0u8; 8];
+    let random = std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| f.read_exact(&mut bytes))
+        .is_ok();
+    if !random {
+        // Never expected on macOS; fall back to a process-wide counter.
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        bytes = NEXT
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            .to_be_bytes();
+    }
+    let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    format!("{prefix}-{now}-{hex}")
 }
