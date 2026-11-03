@@ -45,6 +45,11 @@ pub struct TrashEntry {
     pub bytes: u64,
     pub files: u64,
     pub is_dir: bool,
+    /// The entry's device and inode at preview time. Emptying skips an entry
+    /// whose name now belongs to a different item, so only what was reviewed
+    /// is removed. `None` only in tests.
+    #[serde(skip)]
+    pub identity: Option<(u64, u64)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -176,6 +181,7 @@ pub fn inventory(trash: &Path, id: String, now: i64) -> io::Result<TrashPreview>
             bytes,
             files,
             is_dir: meta.is_dir(),
+            identity: Some((meta.dev(), meta.ino())),
         });
     }
     preview
@@ -332,9 +338,13 @@ pub fn empty(
     let mut cancelled = false;
     let mut last_tick = Instant::now() - PROGRESS_EVERY;
 
-    let trash_ok = fs::symlink_metadata(trash)
-        .map(|m| m.is_dir())
-        .unwrap_or(false);
+    // The Trash folder itself, checked again before every entry so it cannot
+    // be swapped for a link to another folder while emptying runs.
+    let trash_id = |m: &Metadata| (m.dev(), m.ino());
+    let trash_start = fs::symlink_metadata(trash)
+        .ok()
+        .filter(Metadata::is_dir)
+        .map(|m| trash_id(&m));
 
     for (i, entry) in preview.entries.iter().enumerate() {
         let operation = format!("Delete permanently from the Trash: {}", entry.name);
@@ -353,6 +363,12 @@ pub fn empty(
             ));
             continue;
         }
+        let trash_ok = trash_start.is_some()
+            && fs::symlink_metadata(trash)
+                .ok()
+                .filter(Metadata::is_dir)
+                .map(|m| trash_id(&m))
+                == trash_start;
         let Some(path) = entry_path(trash, &entry.name).filter(|_| trash_ok) else {
             results.push(skipped("Refused: not an item directly inside the Trash"));
             continue;
@@ -375,6 +391,15 @@ pub fn empty(
                 continue;
             }
         };
+        if entry
+            .identity
+            .is_some_and(|id| id != (meta.dev(), meta.ino()))
+        {
+            results.push(skipped(
+                "Not removed: this name now belongs to a different item than the one you reviewed.",
+            ));
+            continue;
+        }
 
         let not_removed = not_removed(&results);
         progress(TrashProgress {
@@ -584,6 +609,7 @@ mod tests {
                 bytes: 1,
                 files: 1,
                 is_dir: false,
+                identity: None,
             });
         }
         let r = run(&preview, &trash, &AtomicBool::new(false));
@@ -591,6 +617,30 @@ mod tests {
         assert!(r.record.items[2..]
             .iter()
             .all(|i| i.status == ItemStatus::Skipped));
+    }
+
+    #[test]
+    fn skips_a_different_item_that_took_a_reviewed_name() {
+        let (_d, trash) = fixture();
+        let preview = inventory(&trash, "p".into(), 0).unwrap();
+        let name = preview.entries[0].name.clone();
+        let path = trash.join(&name);
+        // Put back the reviewed item, then trash a different one with the same name.
+        if path.is_dir() {
+            fs::remove_dir_all(&path).unwrap();
+        } else {
+            fs::remove_file(&path).unwrap();
+        }
+        fs::write(&path, b"never reviewed").unwrap();
+        let r = run(&preview, &trash, &AtomicBool::new(false));
+        assert!(path.exists(), "an unreviewed item must stay");
+        let item = r
+            .record
+            .items
+            .iter()
+            .find(|i| i.target.ends_with(&name))
+            .unwrap();
+        assert_eq!(item.status, ItemStatus::Skipped);
     }
 
     #[test]
