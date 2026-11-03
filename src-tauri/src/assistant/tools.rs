@@ -120,6 +120,20 @@ fn tilde(path: &str, home: &Path) -> String {
     }
 }
 
+/// How a path is shown to the model. Anything inside a private area (Mail,
+/// Messages, Photos and so on) is replaced by the area itself, so file names
+/// there never leave the Mac.
+fn shown(path: &str, home: &Path) -> (String, Option<&'static str>) {
+    match crate::privacy::private_area(Path::new(path), home) {
+        Some((root, label)) => (tilde(&root.display().to_string(), home), Some(label)),
+        None => (tilde(path, home), None),
+    }
+}
+
+fn private_what(label: &str) -> String {
+    format!("{label} (private: contents are not shared with the assistant)")
+}
+
 fn gb(bytes: u64) -> String {
     let b = bytes as f64;
     if b >= 1e9 {
@@ -187,7 +201,11 @@ pub fn run(ctx: &ToolContext, name: &str, input: &Value) -> ToolOutput {
                 .iter()
                 .filter(|l| !l.container)
                 .take(12)
-                .map(|l| json!({"what": l.classification.label, "path": tilde(&l.path, home), "size": gb(l.bytes)}))
+                .map(|l| {
+                    let (path, private) = shown(&l.path, home);
+                    let what = private.map_or(l.classification.label.clone(), private_what);
+                    json!({"what": what, "path": path, "size": gb(l.bytes)})
+                })
                 .collect();
             ok(json!({
                 "disk": disk,
@@ -221,10 +239,12 @@ pub fn run(ctx: &ToolContext, name: &str, input: &Value) -> ToolOutput {
                 })
                 .take(limit(input, 20))
                 .map(|r| {
+                    let (path, private) = shown(&r.path, home);
+                    let title = private.map_or(r.title.clone(), |l| format!("Item in {l}"));
                     json!({
                         "id": r.id,
-                        "title": r.title,
-                        "path": tilde(&r.path, home),
+                        "title": title,
+                        "path": path,
                         "size": gb(r.bytes),
                         "tier": r.tier,
                         "why_safe": r.safe_because,
@@ -263,7 +283,11 @@ pub fn run(ctx: &ToolContext, name: &str, input: &Value) -> ToolOutput {
                     .iter()
                     .filter(|d| matches(&d.path, &d.classification.category))
                     .take(n)
-                    .map(|d| json!({"path": tilde(&d.path, home), "size": gb(d.bytes), "files": d.file_count, "what": d.classification.label}))
+                    .map(|d| {
+                        let (path, private) = shown(&d.path, home);
+                        let what = private.map_or(d.classification.label.clone(), private_what);
+                        json!({"path": path, "size": gb(d.bytes), "files": d.file_count, "what": what})
+                    })
                     .collect()
             } else {
                 scan.summary
@@ -271,9 +295,24 @@ pub fn run(ctx: &ToolContext, name: &str, input: &Value) -> ToolOutput {
                     .iter()
                     .filter(|f| matches(&f.path, &f.classification.category))
                     .take(n)
-                    .map(|f| json!({"path": tilde(&f.path, home), "size": gb(f.bytes), "modified_ms": f.modified_ms, "what": f.classification.label}))
+                    .map(|f| {
+                        let (path, private) = shown(&f.path, home);
+                        match private {
+                            Some(l) => json!({"path": path, "size": gb(f.bytes), "what": private_what(l)}),
+                            None => json!({"path": path, "size": gb(f.bytes), "modified_ms": f.modified_ms, "what": f.classification.label}),
+                        }
+                    })
                     .collect()
             };
+            // Several files from one private area collapse into one entry.
+            let mut seen = std::collections::HashSet::new();
+            let items: Vec<Value> = items
+                .into_iter()
+                .filter(|i| {
+                    let private = i["what"].as_str().is_some_and(|w| w.contains("(private:"));
+                    !private || seen.insert(i["path"].to_string())
+                })
+                .collect();
             ok(json!({"items": items}))
         }
         "list_folder" => {
@@ -295,7 +334,17 @@ pub fn run(ctx: &ToolContext, name: &str, input: &Value) -> ToolOutput {
                 Ok(p) => p,
                 Err(e) => return err(&e.to_string()),
             };
+            let private = crate::privacy::private_area(&path, home);
             match explorer::list_directory(&path, &root, &scan.index, &Classifier::new(home)) {
+                Ok(listing) if private.is_some() => {
+                    let (area, label) = private.unwrap_or_default();
+                    ok(json!({
+                        "path": tilde(&area.display().to_string(), home),
+                        "size": listing.bytes.map(gb),
+                        "what": private_what(label),
+                        "note": "DiskPilot does not share what is inside this folder. The user can look in the Storage page.",
+                    }))
+                }
                 Ok(listing) => ok(json!({
                     "path": tilde(&listing.path, home),
                     "size": listing.bytes.map(gb),
@@ -435,6 +484,21 @@ mod tests {
         let out = run(&ctx(), HIGHLIGHT_TOOL, &json!({"ids": ["/etc/passwd"]}));
         assert!(out.is_error);
         assert!(out.highlight.is_empty());
+    }
+
+    #[test]
+    fn private_areas_are_shown_as_totals_only() {
+        let home = Path::new("/Users/test");
+        let (path, label) = shown(
+            "/Users/test/Library/Messages/Attachments/ab/IMG_0001.heic",
+            home,
+        );
+        assert_eq!(
+            (path.as_str(), label),
+            ("~/Library/Messages", Some("Messages"))
+        );
+        let (path, label) = shown("/Users/test/Downloads/a.dmg", home);
+        assert_eq!((path.as_str(), label), ("~/Downloads/a.dmg", None));
     }
 
     #[test]

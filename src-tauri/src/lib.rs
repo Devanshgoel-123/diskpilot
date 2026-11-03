@@ -18,6 +18,7 @@ pub mod error;
 pub mod explorer;
 pub mod history;
 pub mod model;
+pub mod privacy;
 pub mod recommend;
 pub mod safety;
 pub mod scanner;
@@ -95,6 +96,7 @@ pub fn run() {
             commands::empty_trash,
             commands::cancel_empty_trash,
             commands::open_full_disk_access_settings,
+            commands::get_full_disk_access,
             commands::check_ai_transcripts,
             commands::find_duplicates,
             commands::cancel_find_duplicates,
