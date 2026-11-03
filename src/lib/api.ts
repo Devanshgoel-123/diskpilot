@@ -117,6 +117,11 @@ export function onDuplicatesProgress(cb: (p: DuplicateProgress) => void): Promis
   return listen<DuplicateProgress>("duplicates://progress", (e) => cb(e.payload));
 }
 
+/** Menu bar shortcuts: a page id, or "trash" for the Empty Trash window. */
+export function onTrayNavigate(cb: (target: string) => void): Promise<UnlistenFn> {
+  return listen<string>("tray://navigate", (e) => cb(e.payload));
+}
+
 export function errorMessage(err: unknown): string {
   if (typeof err === "string") return err;
   if (err && typeof err === "object" && "message" in err) {

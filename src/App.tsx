@@ -17,6 +17,8 @@ import { OverviewPage } from "@/features/overview/OverviewPage";
 import { RecommendationsPage } from "@/features/recommendations/RecommendationsPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import { EmptyTrashDialog } from "@/features/trash/EmptyTrashDialog";
+import { useTrash } from "@/features/trash/trashStore";
+import { inDesktopApp, onTrayNavigate } from "@/lib/api";
 import { useApp, type PageId } from "@/lib/store";
 
 const PAGES: Record<PageId, () => React.JSX.Element> = {
@@ -57,6 +59,16 @@ export function App() {
   useEffect(() => {
     void init();
   }, [init]);
+
+  // Shortcuts from the menu bar item.
+  useEffect(() => {
+    if (!inDesktopApp()) return;
+    const un = onTrayNavigate((target) => {
+      if (target === "trash") useTrash.getState().openDialog();
+      else if (target in PAGES) useApp.getState().navigate(target as PageId);
+    });
+    return () => void un.then((f) => f());
+  }, []);
 
   if (ready && !desktop) {
     return (
