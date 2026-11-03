@@ -13,6 +13,7 @@ pub mod commands;
 pub mod devtools;
 pub mod disk;
 pub mod docker;
+pub mod duplicates;
 pub mod error;
 pub mod explorer;
 pub mod history;
