@@ -14,6 +14,7 @@ import { useApp } from "@/lib/store";
 import { CategoryList } from "./CategoryList";
 import { LocationList } from "./LocationList";
 import { PrivateFoldersNotice } from "./PrivateFoldersNotice";
+import { TrashWaitingNotice } from "./TrashWaitingNotice";
 import { ScanDetails } from "./ScanDetails";
 import { StartHere } from "./StartHere";
 import { StorageStrip } from "./StorageStrip";
@@ -54,6 +55,7 @@ export function OverviewPage() {
         <div className="mx-auto max-w-[1120px] space-y-8 px-6 pt-6 pb-10">
           <ResultsAge />
           <PrivateFoldersNotice />
+          <TrashWaitingNotice />
           {disk ? (
             <StorageStrip
               disk={disk}
