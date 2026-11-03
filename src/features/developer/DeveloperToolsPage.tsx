@@ -28,6 +28,8 @@ import { useApp } from "@/lib/store";
 import type { ItemState, ToolReport } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+import { TranscriptSecrets } from "./TranscriptSecrets";
+
 const TOOL_ICON: Record<string, LucideIcon> = {
   cursor: MousePointer2,
   vscode: Code2,
@@ -344,6 +346,8 @@ export function DeveloperToolsPage() {
                   />
                 ))}
               </div>
+
+              <TranscriptSecrets />
 
               {missing.length ? (
                 <p className="text-xs text-subtle-foreground">
