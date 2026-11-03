@@ -28,6 +28,7 @@ use crate::safety::{self, SafetyError};
 use crate::scanner::{self, now_ms, ScanError, ScanOptions, ScanOutcome};
 use crate::snapshot;
 use crate::state::{AppState, ScanSlot};
+use crate::trash;
 
 pub const EVENT_SCAN_PROGRESS: &str = "scan://progress";
 pub const EVENT_SCAN_FINISHED: &str = "scan://finished";
@@ -486,6 +487,123 @@ pub fn get_cleanup_history(
         Some(h) => Ok(h.recent_cleanups(limit.unwrap_or(50).min(500))?),
         None => Ok(Vec::new()),
     }
+}
+
+// ---- Trash ---------------------------------------------------------------
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashSummary {
+    pub access: trash::TrashAccess,
+    pub items: usize,
+    pub total_bytes: u64,
+    pub total_files: u64,
+}
+
+/// What is in the Trash right now. Read-only.
+#[tauri::command]
+pub async fn get_trash_summary(state: State<'_, AppState>) -> AppResult<TrashSummary> {
+    let dir = trash::trash_dir(&state.home);
+    let p = blocking(move || {
+        trash::inventory(&dir, String::new(), now_ms()).map_err(|e| AppError::io(&dir, &e))
+    })
+    .await?;
+    Ok(TrashSummary {
+        access: p.access,
+        items: p.entries.len(),
+        total_bytes: p.total_bytes,
+        total_files: p.total_files,
+    })
+}
+
+/// List the Trash as a single-use preview. Only the entries in it can be
+/// removed by [`empty_trash`]. Nothing is changed.
+#[tauri::command]
+pub async fn preview_trash(state: State<'_, AppState>) -> AppResult<trash::TrashPreview> {
+    let dir = trash::trash_dir(&state.home);
+    let now = now_ms();
+    let preview = blocking(move || {
+        trash::inventory(&dir, format!("trash-{now}"), now).map_err(|e| AppError::io(&dir, &e))
+    })
+    .await?;
+    let mut slot = state.trash();
+    slot.previews
+        .retain(|_, p| now - p.created_at_ms < trash::PREVIEW_TTL_MS);
+    slot.previews.insert(preview.id.clone(), preview.clone());
+    Ok(preview)
+}
+
+#[tauri::command]
+pub fn discard_trash_preview(state: State<'_, AppState>, preview_id: String) {
+    state.trash().previews.remove(&preview_id);
+}
+
+/// Permanently remove the previewed entries, once, after the user confirmed.
+/// Progress is emitted as `trash://progress`; the result is recorded in history.
+#[tauri::command]
+pub async fn empty_trash(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    preview_id: String,
+) -> AppResult<trash::TrashResult> {
+    let expired = || AppError::Other("This preview has expired. Review the Trash again.".into());
+    let (preview, cancel) = {
+        let mut slot = state.trash();
+        if slot.running.is_some() {
+            return Err(AppError::Other(
+                "The Trash is already being emptied.".into(),
+            ));
+        }
+        let preview = slot.previews.remove(&preview_id).ok_or_else(expired)?;
+        if now_ms() - preview.created_at_ms > trash::PREVIEW_TTL_MS {
+            return Err(expired());
+        }
+        if preview.entries.is_empty() {
+            return Err(AppError::Other("The Trash is already empty.".into()));
+        }
+        let cancel = Arc::new(AtomicBool::new(false));
+        slot.running = Some(cancel.clone());
+        (preview, cancel)
+    };
+    let dir = trash::trash_dir(&state.home);
+    let history = state.history.clone();
+    let outcome = blocking(move || {
+        let result = trash::empty(&preview, &dir, &cancel, &mut |p| {
+            let _ = app.emit(trash::EVENT_TRASH_PROGRESS, p);
+        });
+        if let Some(h) = history {
+            if let Err(e) = h.record_cleanup(&result.record) {
+                eprintln!("diskpilot: could not record emptying the Trash: {e}");
+            }
+        }
+        Ok(result)
+    })
+    .await;
+    state.trash().running = None;
+    outcome
+}
+
+/// Ask a running empty-Trash operation to stop after the current file.
+#[tauri::command]
+pub fn cancel_empty_trash(state: State<'_, AppState>) -> bool {
+    match &state.trash().running {
+        Some(flag) => {
+            flag.store(true, Ordering::Relaxed);
+            true
+        }
+        None => false,
+    }
+}
+
+/// Open System Settings at Privacy & Security > Full Disk Access.
+#[tauri::command]
+pub fn open_full_disk_access_settings() -> AppResult<()> {
+    const PANE: &str = "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
+    std::process::Command::new("/usr/bin/open")
+        .arg(PANE)
+        .status()
+        .map_err(|e| AppError::Other(format!("Could not open System Settings: {e}")))
+        .map(|_| ())
 }
 
 // ---- Docker --------------------------------------------------------------

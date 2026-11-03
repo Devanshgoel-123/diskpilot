@@ -68,11 +68,17 @@ pub struct AppState {
     pub assistant: Mutex<Conversation>,
     /// Where the last scan is saved between launches; `None` if unavailable.
     pub data_dir: Option<PathBuf>,
+    /// Trash previews and the empty-Trash operation in progress.
+    pub trash: Mutex<crate::trash::TrashSlot>,
 }
 
 impl AppState {
     pub fn slot(&self) -> MutexGuard<'_, ScanSlot> {
         self.scan.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    pub fn trash(&self) -> MutexGuard<'_, crate::trash::TrashSlot> {
+        self.trash.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn plans(&self) -> MutexGuard<'_, HashMap<String, CleanupPlan>> {

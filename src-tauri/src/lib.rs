@@ -24,6 +24,7 @@ pub mod snapshot;
 pub mod state;
 #[cfg(test)]
 pub mod test_support;
+pub mod trash;
 
 use tauri::Manager;
 
@@ -59,6 +60,7 @@ pub fn run() {
                 history: history.map(std::sync::Arc::new),
                 assistant: std::sync::Mutex::new(assistant::Conversation::default()),
                 data_dir,
+                trash: std::sync::Mutex::default(),
             });
             Ok(())
         })
@@ -82,6 +84,12 @@ pub fn run() {
             commands::discard_cleanup_plan,
             commands::execute_cleanup_plan,
             commands::get_cleanup_history,
+            commands::get_trash_summary,
+            commands::preview_trash,
+            commands::discard_trash_preview,
+            commands::empty_trash,
+            commands::cancel_empty_trash,
+            commands::open_full_disk_access_settings,
             commands::analyze_dev_tools,
             commands::get_dev_tools_report,
             commands::assistant_status,
