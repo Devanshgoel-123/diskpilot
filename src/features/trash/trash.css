@@ -1,0 +1,332 @@
+/*
+ * Empty Trash motion. Only transform and opacity animate. Springs are
+ * pre-sampled into linear() curves; each has a cubic-bezier fallback declared
+ * first for WebKit versions without linear() easing. The global
+ * prefers-reduced-motion rule in globals.css shortens every animation and
+ * transition here to an instant change.
+ */
+
+.dialog-content.trash-dialog {
+  --spring-enter: linear(
+    0,
+    0.0205,
+    0.0736,
+    0.1483,
+    0.2358,
+    0.3293,
+    0.4234,
+    0.5143,
+    0.5994,
+    0.6769,
+    0.7459,
+    0.806,
+    0.8573,
+    0.9002,
+    0.9352,
+    0.9633,
+    0.9851,
+    1.0016,
+    1.0135,
+    1.0217,
+    1.0267,
+    1.0294,
+    1.0302,
+    1.0296,
+    1.028,
+    1.0257,
+    1.0231,
+    1.0203,
+    1.0174,
+    1.0147,
+    1.0121,
+    1.0098,
+    1.0077,
+    1.0059,
+    1.0043,
+    1.003,
+    1
+  );
+  --spring-lid: linear(
+    0,
+    0.0329,
+    0.1179,
+    0.236,
+    0.3711,
+    0.5105,
+    0.6441,
+    0.7653,
+    0.8695,
+    0.9547,
+    1.0206,
+    1.0679,
+    1.0987,
+    1.1153,
+    1.1203,
+    1.1164,
+    1.1063,
+    1.0921,
+    1.0759,
+    1.0591,
+    1.0431,
+    1.0285,
+    1.0159,
+    1.0056,
+    0.9976,
+    0.9919,
+    0.9882,
+    0.9862,
+    0.9855,
+    0.986,
+    0.9872,
+    0.9889,
+    0.9908,
+    0.9929,
+    0.9948,
+    0.9966,
+    1
+  );
+  animation: tr-enter 480ms cubic-bezier(0.2, 0.9, 0.25, 1.05);
+  animation: tr-enter 480ms var(--spring-enter);
+}
+.dialog-content.trash-dialog[data-state="closed"] {
+  animation: tr-exit 150ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+.dialog-overlay.trash-overlay[data-state="closed"] {
+  animation: tr-fade-out 150ms ease-in forwards;
+}
+@keyframes tr-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -46%) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+@keyframes tr-exit {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -49%) scale(0.97);
+  }
+}
+@keyframes tr-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* ---- Button glyph: the lid lifts on its right-hand hinge ---------------- */
+.tg-lid {
+  transform-box: view-box;
+  transform-origin: 21px 6px;
+  transition: transform 260ms var(--dp-ease);
+}
+.group:hover .tg-lid,
+.group:focus-visible .tg-lid {
+  transform: translateY(-1.2px) rotate(12deg);
+}
+.group:active .tg-lid {
+  transform: translateY(-0.4px) rotate(4deg);
+  transition-duration: 90ms;
+}
+
+/* ---- Stage --------------------------------------------------------------- */
+.ts-stage {
+  position: relative;
+  flex-shrink: 0;
+  height: 200px;
+  overflow: hidden;
+  background: var(--panel-raised);
+}
+/* The drawing is laid out at 200px tall and scales as one piece. */
+.ts-scene {
+  position: absolute;
+  inset: auto 0 0;
+  height: 200px;
+  transform-origin: 50% 100%;
+}
+@media (max-height: 640px) {
+  .ts-stage {
+    height: 140px;
+  }
+  .ts-scene {
+    transform: scale(0.7);
+  }
+}
+.ts-light {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 600ms var(--dp-ease);
+  background: radial-gradient(
+    ellipse 62% 88% at 50% 92%,
+    color-mix(in oklab, var(--tone) 16%, transparent),
+    transparent 72%
+  );
+}
+.ts-light[data-on="true"] {
+  opacity: 1;
+}
+/* A hairline of light along the stage's lower edge. */
+.ts-stage::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--foreground) 10%, transparent),
+    transparent
+  );
+}
+
+.ts-bin {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  width: 120px;
+  height: 120px;
+  margin-left: -60px;
+}
+.ts-lid {
+  transform-box: view-box;
+  transform-origin: 98px 38px;
+  transition: transform 480ms cubic-bezier(0.2, 0.9, 0.25, 1.2);
+  transition: transform 540ms var(--spring-lid);
+}
+.ts-stage[data-lid="open"] .ts-lid {
+  transform: rotate(24deg);
+  transition: transform 300ms var(--dp-ease);
+}
+.ts-mouth {
+  opacity: 0;
+  transition: opacity 200ms var(--dp-ease);
+}
+.ts-stage[data-lid="open"] .ts-mouth {
+  opacity: 1;
+}
+
+/* ---- File chips ---------------------------------------------------------- */
+.ts-chip {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 46px;
+  height: 56px;
+  margin-left: -23px;
+  transform: translate(var(--x), var(--y)) rotate(var(--r));
+  animation: tr-chip-in 420ms cubic-bezier(0.2, 0.9, 0.25, 1.05) backwards;
+  animation: tr-chip-in 480ms var(--spring-enter) backwards;
+  animation-delay: var(--delay);
+}
+.ts-chip[data-state="falling"] {
+  animation: tr-chip-fall 560ms cubic-bezier(0.55, 0, 0.75, 0.3) forwards;
+}
+.ts-chip[data-state="kept"] {
+  transition: opacity 300ms var(--dp-ease);
+  opacity: 0.55;
+}
+@keyframes tr-chip-in {
+  from {
+    opacity: 0;
+    transform: translate(calc(var(--x) * 0.6), calc(var(--y) + 14px)) rotate(0deg) scale(0.9);
+  }
+}
+@keyframes tr-chip-fall {
+  0% {
+    transform: translate(var(--x), var(--y)) rotate(var(--r));
+  }
+  35% {
+    transform: translate(calc(var(--x) * 0.55), calc(var(--y) - 10px)) rotate(calc(var(--r) * 0.4))
+      scale(0.92);
+    animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.5);
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(0, 100px) rotate(0deg) scale(0.42);
+    opacity: 0;
+  }
+}
+
+/* ---- Motes: a few specks drift up from the bin as each file lands -------- */
+.ts-motes {
+  position: absolute;
+  left: 50%;
+  top: 102px;
+  width: 0;
+  height: 0;
+}
+.ts-mote {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--tone) 55%, var(--muted-foreground));
+  opacity: 0;
+  animation: tr-mote 760ms cubic-bezier(0.2, 0.7, 0.2, 1) 400ms forwards;
+}
+@keyframes tr-mote {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(1);
+  }
+  20% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy)) scale(0.4);
+  }
+}
+
+/* ---- Badge (done, locked) ------------------------------------------------ */
+.ts-badge {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: tr-badge 520ms cubic-bezier(0.2, 0.9, 0.25, 1.2) 160ms backwards;
+  animation: tr-badge 540ms var(--spring-lid) 160ms backwards;
+}
+.ts-check {
+  stroke-dasharray: 16;
+  stroke-dashoffset: 16;
+  animation: tr-draw 360ms var(--dp-ease) 420ms forwards;
+}
+@keyframes tr-badge {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+@keyframes tr-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ---- Body transitions ---------------------------------------------------- */
+.tr-swap {
+  animation: tr-swap 260ms var(--dp-ease) backwards;
+}
+@keyframes tr-swap {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.tr-progress {
+  transform-origin: left;
+  transition: transform 220ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ts-mote {
+    display: none;
+  }
+  .ts-check {
+    stroke-dashoffset: 0;
+  }
+}
