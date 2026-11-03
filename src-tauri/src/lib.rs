@@ -27,6 +27,7 @@ pub mod state;
 #[cfg(test)]
 pub mod test_support;
 pub mod trash;
+pub mod tray;
 
 use tauri::Manager;
 
@@ -55,6 +56,7 @@ pub fn run() {
                 .and_then(snapshot::load)
                 .map(|outcome| commands::restored_slot(&home, outcome))
                 .unwrap_or_default();
+            tray::install(app.handle(), home.clone())?;
             app.manage(AppState {
                 home,
                 scan: std::sync::Mutex::new(slot),
@@ -111,6 +113,24 @@ pub fn run() {
             commands::docker_inspect,
             commands::docker_diagnostics,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running DiskPilot");
+        // The menu bar item keeps running when the window is closed; it, the
+        // Dock icon and Quit bring the window back or end the app.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building DiskPilot")
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                tray::show_main_window(app);
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
+        });
 }
