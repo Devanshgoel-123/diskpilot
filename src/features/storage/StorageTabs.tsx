@@ -11,7 +11,11 @@ export function StorageTabs() {
   const view = useApp((s) => s.storageView);
   const setView = useApp((s) => s.setStorageView);
   return (
-    <div role="tablist" aria-label="Storage view" className="flex rounded-md border border-border-strong p-0.5">
+    <div
+      role="tablist"
+      aria-label="Storage view"
+      className="flex rounded-md border border-border-strong p-0.5"
+    >
       {VIEWS.map((v) => (
         <button
           key={v.id}
