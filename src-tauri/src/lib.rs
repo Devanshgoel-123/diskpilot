@@ -21,6 +21,7 @@ pub mod model;
 pub mod recommend;
 pub mod safety;
 pub mod scanner;
+pub mod secrets;
 pub mod snapshot;
 pub mod state;
 #[cfg(test)]
@@ -92,6 +93,7 @@ pub fn run() {
             commands::empty_trash,
             commands::cancel_empty_trash,
             commands::open_full_disk_access_settings,
+            commands::check_ai_transcripts,
             commands::find_duplicates,
             commands::cancel_find_duplicates,
             commands::get_duplicates,
