@@ -2,6 +2,7 @@ import { ListChecks, ShieldCheck, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyTrashButton } from "@/features/trash/EmptyTrashButton";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ResultsAge } from "@/components/shared/ResultsAge";
 import { Button } from "@/components/ui/button";
@@ -73,7 +74,7 @@ export function RecommendationsPage() {
   if (!summary) {
     return (
       <>
-        <PageHeader title="Cleanup" />
+        <PageHeader title="Cleanup" actions={<EmptyTrashButton />} />
         <EmptyState
           className="flex-1 justify-center"
           icon={Sparkles}
@@ -92,6 +93,7 @@ export function RecommendationsPage() {
       <PageHeader
         title="Cleanup"
         description="Explained suggestions. Nothing is removed until you review and confirm it."
+        actions={<EmptyTrashButton />}
       />
       <div className="relative min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[1120px] space-y-6 px-6 pt-6 pb-24">

@@ -15,6 +15,7 @@ import { LargeFilesPage } from "@/features/large-files/LargeFilesPage";
 import { OverviewPage } from "@/features/overview/OverviewPage";
 import { RecommendationsPage } from "@/features/recommendations/RecommendationsPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
+import { EmptyTrashDialog } from "@/features/trash/EmptyTrashDialog";
 import { useApp, type PageId } from "@/lib/store";
 
 const PAGES: Record<PageId, () => React.JSX.Element> = {
@@ -81,6 +82,7 @@ export function App() {
           <Page />
         </main>
       </div>
+      <EmptyTrashDialog />
     </TooltipProvider>
   );
 }

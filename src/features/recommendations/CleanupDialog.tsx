@@ -14,6 +14,8 @@ import {
 import { api, errorMessage } from "@/lib/api";
 import { formatBytes, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
+import { TrashGlyph } from "@/features/trash/TrashGlyph";
+import { useTrash } from "@/features/trash/trashStore";
 import type { CleanupMethod, CleanupPlan, CleanupRecord } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -301,6 +303,19 @@ function ResultView({
         ))}
       </ul>
       <DialogFooter>
+        {record.bytesTrashed > 0 ? (
+          <Button
+            variant="secondary"
+            className="group"
+            onClick={() => {
+              onClose();
+              useTrash.getState().openDialog();
+            }}
+          >
+            <TrashGlyph />
+            Empty Trash…
+          </Button>
+        ) : null}
         <Button onClick={onClose}>Done</Button>
       </DialogFooter>
     </>
