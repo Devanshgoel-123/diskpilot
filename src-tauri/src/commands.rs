@@ -588,6 +588,18 @@ pub async fn plan_duplicate_cleanup(
     Ok(plan)
 }
 
+// ---- Credentials in AI transcripts -----------------------------------------
+
+/// Look for credentials pasted into AI agents' transcripts. Read-only and
+/// offline; findings carry masked values only.
+#[tauri::command]
+pub async fn check_ai_transcripts(
+    state: State<'_, AppState>,
+) -> AppResult<crate::secrets::SecretsReport> {
+    let home = state.home.clone();
+    blocking(move || Ok(crate::secrets::check(&home, &AtomicBool::new(false)))).await
+}
+
 // ---- Trash ---------------------------------------------------------------
 
 #[derive(Debug, Clone, serde::Serialize)]
