@@ -62,6 +62,7 @@ pub fn run() {
                 assistant: std::sync::Mutex::new(assistant::Conversation::default()),
                 data_dir,
                 trash: std::sync::Mutex::default(),
+                duplicates: std::sync::Mutex::default(),
             });
             Ok(())
         })
@@ -91,6 +92,10 @@ pub fn run() {
             commands::empty_trash,
             commands::cancel_empty_trash,
             commands::open_full_disk_access_settings,
+            commands::find_duplicates,
+            commands::cancel_find_duplicates,
+            commands::get_duplicates,
+            commands::plan_duplicate_cleanup,
             commands::analyze_dev_tools,
             commands::get_dev_tools_report,
             commands::assistant_status,

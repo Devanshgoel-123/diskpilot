@@ -514,6 +514,94 @@ pub fn forget(report: &mut DuplicateReport, gone: &HashSet<String>, home: &Path)
     report.reclaimable_bytes = report.groups.iter().map(|g| g.reclaimable_bytes).sum();
 }
 
+/// Recommendations for the copies the user chose to move to the Trash, and
+/// the reasons for any that cannot be. Every group keeps at least one copy,
+/// and each chosen copy is compared byte for byte with a copy that stays.
+pub fn removal_recommendations(
+    report: &DuplicateReport,
+    selected: &[String],
+    classify: &dyn Fn(&Path) -> crate::model::Classification,
+) -> (
+    Vec<crate::model::Recommendation>,
+    Vec<crate::model::PlanRejection>,
+) {
+    use crate::model::{CleanupMethod, PlanRejection, Recommendation, Tier};
+
+    let chosen: HashSet<&str> = selected.iter().map(String::as_str).collect();
+    let reject = |path: &str, reason: &str| PlanRejection {
+        recommendation_id: path.to_string(),
+        path: path.to_string(),
+        reason: reason.to_string(),
+    };
+    let mut recs = Vec::new();
+    let mut rejected = Vec::new();
+    let mut known = HashSet::new();
+    for g in &report.groups {
+        let (remove, keep): (Vec<&DuplicateFile>, Vec<&DuplicateFile>) = g
+            .files
+            .iter()
+            .partition(|f| chosen.contains(f.path.as_str()));
+        if remove.is_empty() {
+            continue;
+        }
+        known.extend(remove.iter().map(|f| f.path.as_str()));
+        let Some(kept) = keep.first() else {
+            for f in remove {
+                rejected.push(reject(
+                    &f.path,
+                    "Every copy was selected. Keep at least one.",
+                ));
+            }
+            continue;
+        };
+        for f in remove {
+            match same_contents(Path::new(&f.path), Path::new(&kept.path)) {
+                Ok(true) => {}
+                Ok(false) => {
+                    rejected.push(reject(
+                        &f.path,
+                        "It no longer matches the copy you are keeping. Search again.",
+                    ));
+                    continue;
+                }
+                Err(e) => {
+                    rejected.push(reject(&f.path, &format!("Could not compare it: {e}.")));
+                    continue;
+                }
+            }
+            let path = Path::new(&f.path);
+            recs.push(Recommendation {
+                id: f.path.clone(),
+                title: format!("Duplicate of {}", kept.path),
+                path: f.path.clone(),
+                bytes: g.bytes,
+                file_count: 1,
+                tier: Tier::ReviewFirst,
+                confidence: crate::model::Confidence::High,
+                classification: classify(path),
+                detected_because: format!("Same SHA-256 and the same bytes as {}.", kept.path),
+                safe_because: "An identical copy stays where it is.".into(),
+                risks: "Apps or shortcuts that open this exact location will no longer find it."
+                    .into(),
+                proposed_action: "Move to Trash".into(),
+                methods: vec![CleanupMethod::Trash],
+                alternative: None,
+                estimated_reclaim_bytes: if g.shares_storage { 0 } else { g.bytes },
+                last_activity_ms: f.modified_ms,
+                notes: Vec::new(),
+                source: "duplicates".into(),
+                marker: None,
+            });
+        }
+    }
+    for p in selected {
+        if !known.contains(p.as_str()) {
+            rejected.push(reject(p, "Not part of the last duplicate search."));
+        }
+    }
+    (recs, rejected)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -621,6 +709,39 @@ mod tests {
         assert!(same_contents(&root.join("a"), &root.join("b")).unwrap());
         assert!(!same_contents(&root.join("a"), &root.join("c")).unwrap());
         assert!(!same_contents(&root.join("a"), &root.join("a")).unwrap());
+    }
+
+    #[test]
+    fn removal_keeps_one_copy_and_rechecks_contents() {
+        let dir = crate::test_support::sandbox();
+        let root = dir.path().canonicalize().unwrap();
+        write(&root.join("a"), &big(6, 10_000));
+        write(&root.join("b"), &big(6, 10_000));
+        write(&root.join("c"), &big(6, 10_000));
+        let r = run(&root, 1);
+        let p = |n: &str| root.join(n).display().to_string();
+        let classify = |path: &Path| {
+            crate::classifier::Classifier::new(&root).classify_path(
+                path,
+                false,
+                &crate::classifier::FsProbe,
+            )
+        };
+
+        let (recs, rejected) = removal_recommendations(&r, &[p("b"), p("zzz")], &classify);
+        assert_eq!(recs.len(), 1);
+        assert_eq!(recs[0].methods, vec![crate::model::CleanupMethod::Trash]);
+        assert_eq!(rejected.len(), 1);
+
+        let (recs, rejected) = removal_recommendations(&r, &[p("a"), p("b"), p("c")], &classify);
+        assert!(recs.is_empty());
+        assert_eq!(rejected.len(), 3);
+
+        // A copy edited after the search is not removed.
+        write(&root.join("c"), &big(7, 10_000));
+        let (recs, rejected) = removal_recommendations(&r, &[p("c")], &classify);
+        assert!(recs.is_empty());
+        assert!(rejected[0].reason.contains("no longer matches"));
     }
 
     #[test]

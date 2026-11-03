@@ -70,6 +70,8 @@ pub struct AppState {
     pub data_dir: Option<PathBuf>,
     /// Trash previews and the empty-Trash operation in progress.
     pub trash: Mutex<crate::trash::TrashSlot>,
+    /// The last duplicate search and the one in progress.
+    pub duplicates: Mutex<crate::duplicates::DuplicateSlot>,
 }
 
 impl AppState {
@@ -79,6 +81,10 @@ impl AppState {
 
     pub fn trash(&self) -> MutexGuard<'_, crate::trash::TrashSlot> {
         self.trash.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    pub fn duplicates(&self) -> MutexGuard<'_, crate::duplicates::DuplicateSlot> {
+        self.duplicates.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn plans(&self) -> MutexGuard<'_, HashMap<String, CleanupPlan>> {

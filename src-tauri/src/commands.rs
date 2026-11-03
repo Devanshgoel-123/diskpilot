@@ -17,6 +17,7 @@ use crate::cleanup::{executor, planner};
 use crate::devtools::{self, DevToolsReport};
 use crate::disk;
 use crate::docker::{self, actions, cli::DockerCli, DockerOverview, DockerState};
+use crate::duplicates::{self, DuplicateReport};
 use crate::error::{AppError, AppResult};
 use crate::explorer;
 use crate::model::{
@@ -475,6 +476,9 @@ pub async fn execute_cleanup_plan(
         .map(|i| i.target.clone())
         .collect();
     state.slot().remove_paths(&done);
+    if let Some(report) = state.duplicates().report.as_mut() {
+        duplicates::forget(report, &done, &state.home);
+    }
     Ok(record)
 }
 
@@ -487,6 +491,101 @@ pub fn get_cleanup_history(
         Some(h) => Ok(h.recent_cleanups(limit.unwrap_or(50).min(500))?),
         None => Ok(Vec::new()),
     }
+}
+
+// ---- Duplicates ----------------------------------------------------------
+
+/// Search the scanned folder (or the home folder) for files with identical
+/// contents. Read-only; reports progress on `duplicates://progress`.
+#[tauri::command]
+pub async fn find_duplicates(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    min_bytes: Option<u64>,
+) -> AppResult<DuplicateReport> {
+    let cancel = {
+        let mut slot = state.duplicates();
+        if slot.running.is_some() {
+            return Err(AppError::Other(
+                "A duplicate search is already running.".into(),
+            ));
+        }
+        let cancel = Arc::new(AtomicBool::new(false));
+        slot.running = Some(cancel.clone());
+        cancel
+    };
+    let root = cleanup_root(&state);
+    let home = state.home.clone();
+    let min = min_bytes.unwrap_or(duplicates::DEFAULT_MIN_BYTES);
+    let outcome = blocking(move || {
+        Ok(duplicates::find(&root, &home, min, &cancel, &mut |p| {
+            let _ = app.emit(duplicates::EVENT_DUPLICATES_PROGRESS, p);
+        }))
+    })
+    .await;
+    let mut slot = state.duplicates();
+    slot.running = None;
+    if let Ok(report) = &outcome {
+        slot.report = Some(report.clone());
+    }
+    outcome
+}
+
+#[tauri::command]
+pub fn cancel_find_duplicates(state: State<'_, AppState>) -> bool {
+    match &state.duplicates().running {
+        Some(flag) => {
+            flag.store(true, Ordering::Relaxed);
+            true
+        }
+        None => false,
+    }
+}
+
+/// The last duplicate search, if any, so the page survives navigation.
+#[tauri::command]
+pub fn get_duplicates(state: State<'_, AppState>) -> Option<DuplicateReport> {
+    state.duplicates().report.clone()
+}
+
+/// A previewable plan to move the chosen copies to the Trash. Paths must come
+/// from the last search; every group keeps a copy, and each chosen copy is
+/// compared byte for byte with one that stays. Nothing is changed.
+#[tauri::command]
+pub async fn plan_duplicate_cleanup(
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+) -> AppResult<CleanupPlan> {
+    let report = state
+        .duplicates()
+        .report
+        .clone()
+        .ok_or_else(|| AppError::Other("Search for duplicates first.".into()))?;
+    let root = cleanup_root(&state);
+    let home = state.home.clone();
+    let now = now_ms();
+    let plan = blocking(move || {
+        let classifier = Classifier::new(&home);
+        let classify = |p: &Path| classifier.classify_path(p, false, &crate::classifier::FsProbe);
+        let (recs, rejected) = duplicates::removal_recommendations(&report, &paths, &classify);
+        let ids: Vec<String> = recs.iter().map(|r| r.id.clone()).collect();
+        let mut plan = planner::build_plan(
+            format!("duplicates-{now}"),
+            &recs,
+            &ids,
+            CleanupMethod::Trash,
+            &root,
+            &home,
+            now,
+        );
+        plan.rejected.extend(rejected);
+        Ok(plan)
+    })
+    .await?;
+    let mut plans = state.plans();
+    plans.retain(|_, p| now - p.created_at_ms < planner::PLAN_TTL_MS);
+    plans.insert(plan.id.clone(), plan.clone());
+    Ok(plan)
 }
 
 // ---- Trash ---------------------------------------------------------------
