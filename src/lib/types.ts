@@ -257,7 +257,7 @@ export interface CleanupItemResult {
 
 export interface CleanupRecord {
   id: string;
-  kind: "files" | "docker";
+  kind: "files" | "docker" | "trash";
   title: string;
   startedAtMs: number;
   finishedAtMs: number;
@@ -265,6 +265,52 @@ export interface CleanupRecord {
   bytesFreed: number;
   bytesTrashed: number;
   items: CleanupItemResult[];
+}
+
+// ---- Trash (src-tauri/src/trash.rs) ---------------------------------------
+
+export type TrashAccess = "granted" | "denied";
+
+export interface TrashSummary {
+  access: TrashAccess;
+  items: number;
+  totalBytes: number;
+  totalFiles: number;
+}
+
+export interface TrashEntry {
+  name: string;
+  bytes: number;
+  files: number;
+  isDir: boolean;
+}
+
+export interface TrashPreview {
+  id: string;
+  createdAtMs: number;
+  access: TrashAccess;
+  /** Largest first. */
+  entries: TrashEntry[];
+  totalBytes: number;
+  totalFiles: number;
+}
+
+export interface TrashProgress {
+  previewId: string;
+  entriesDone: number;
+  entriesTotal: number;
+  bytesRemoved: number;
+  filesRemoved: number;
+  current: string | null;
+  /** Indexes of finished entries that were not fully removed. */
+  notRemoved: number[];
+}
+
+export interface TrashResult {
+  record: CleanupRecord;
+  filesRemoved: number;
+  cancelled: boolean;
+  permissionDenied: boolean;
 }
 
 // ---- Docker (src-tauri/src/docker) ----------------------------------------

@@ -30,6 +30,10 @@ import type {
   ScanProgress,
   ScanRecord,
   ScanSummary,
+  TrashPreview,
+  TrashProgress,
+  TrashResult,
+  TrashSummary,
 } from "./types";
 
 export const inDesktopApp = (): boolean => isTauri();
@@ -61,6 +65,13 @@ export const api = {
   getCleanupHistory: (limit?: number) =>
     invoke<CleanupRecord[]>("get_cleanup_history", { limit: limit ?? null }),
 
+  getTrashSummary: () => invoke<TrashSummary>("get_trash_summary"),
+  previewTrash: () => invoke<TrashPreview>("preview_trash"),
+  discardTrashPreview: (previewId: string) => invoke<null>("discard_trash_preview", { previewId }),
+  emptyTrash: (previewId: string) => invoke<TrashResult>("empty_trash", { previewId }),
+  cancelEmptyTrash: () => invoke<boolean>("cancel_empty_trash"),
+  openFullDiskAccessSettings: () => invoke<null>("open_full_disk_access_settings"),
+
   analyzeDevTools: () => invoke<DevToolsReport>("analyze_dev_tools"),
   getDevToolsReport: () => invoke<DevToolsReport | null>("get_dev_tools_report"),
 
@@ -86,6 +97,10 @@ export function onScanProgress(cb: (p: ScanProgress) => void): Promise<UnlistenF
 
 export function onScanFinished(cb: (p: ScanFinished) => void): Promise<UnlistenFn> {
   return listen<ScanFinished>("scan://finished", (e) => cb(e.payload));
+}
+
+export function onTrashProgress(cb: (p: TrashProgress) => void): Promise<UnlistenFn> {
+  return listen<TrashProgress>("trash://progress", (e) => cb(e.payload));
 }
 
 export function errorMessage(err: unknown): string {
