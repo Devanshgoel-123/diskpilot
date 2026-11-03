@@ -9,6 +9,7 @@
 pub mod agent_data;
 pub mod agents;
 pub mod editors;
+pub mod models;
 pub mod node;
 pub mod toolchains;
 pub mod versions;
@@ -246,6 +247,7 @@ pub fn analyze(ctx: &Ctx) -> (DevToolsReport, Vec<Recommendation>) {
         xcode::analyze(ctx),
         toolchains::rust(ctx),
         toolchains::python(ctx),
+        models::analyze(ctx),
         versions::analyze(ctx),
     ] {
         tools.push(report);
