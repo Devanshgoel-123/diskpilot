@@ -315,8 +315,7 @@ export const useApp = create<AppState>((set, get) => ({
 
   navigate: (page) => set({ page }),
 
-  openInExplorer: (path) =>
-    set({ page: "explorer", storageView: "browse", explorerPath: path }),
+  openInExplorer: (path) => set({ page: "explorer", storageView: "browse", explorerPath: path }),
 
   browse: (path) => set({ explorerPath: path }),
 
