@@ -456,7 +456,7 @@ fn make_group(id: String, same: Vec<Candidate>, home: &Path) -> DuplicateGroup {
         .map(|(i, c)| {
             c.map(|(id, _)| id)
                 .filter(|id| *id != 0)
-                .map_or(i as u64 | 1 << 63, |id| id)
+                .unwrap_or(i as u64 | 1 << 63)
         })
         .collect::<HashSet<u64>>()
         .len() as u64;
