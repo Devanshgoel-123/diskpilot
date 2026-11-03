@@ -1,9 +1,9 @@
-import { Lock, MoreHorizontal, Play, Search, Square, Trash2 } from "lucide-react";
+import { Lock, MoreHorizontal, Search, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
+import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatBytes, formatRelative } from "@/lib/format";
 import type {
@@ -118,22 +118,10 @@ export function ContainersTable({
                   <Search />
                 </IconAction>
                 <RowMenu label={`Actions for ${c.name}`}>
-                  {c.running ? (
-                    <MenuItem onSelect={() => onAction({ type: "stopContainer", id: c.id })}>
-                      <Square />
-                      Stop
-                    </MenuItem>
-                  ) : (
-                    <MenuItem onSelect={() => onAction({ type: "startContainer", id: c.id })}>
-                      <Play />
-                      Start
-                    </MenuItem>
-                  )}
-                  <MenuSeparator />
                   <MenuItem
                     destructive
                     disabled={c.running}
-                    hint={c.running ? "Stop the container first." : null}
+                    hint={c.running ? "Stop it in Docker Desktop first." : null}
                     onSelect={() => onAction({ type: "removeContainer", id: c.id })}
                   >
                     <Trash2 />

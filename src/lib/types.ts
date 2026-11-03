@@ -398,8 +398,6 @@ export interface DockerOverview {
 }
 
 export type DockerAction =
-  | { type: "startContainer"; id: string }
-  | { type: "stopContainer"; id: string }
   | { type: "removeContainer"; id: string }
   | { type: "removeImage"; id: string }
   | { type: "pruneBuildCache" };

@@ -71,7 +71,7 @@ Selected recommendations are turned into a cleanup plan that lists every path to
 ### Docker Manager
 
 - Disk usage for images, containers, volumes and build cache, with the space Docker reports as reclaimable.
-- Containers with their state, image and Compose project; start, stop and inspect.
+- Containers with their state, image and Compose project, and what each one keeps on disk.
 - Images with the containers that depend on them, and the space unique to each image versus layers shared with others.
 - Removal of stopped containers, unused images and unused build cache, each previewed with the exact `docker` command before it runs.
 - Volumes are listed and can be inspected, but DiskPilot never removes them.

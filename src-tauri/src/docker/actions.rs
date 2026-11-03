@@ -17,8 +17,6 @@ use crate::scanner::now_ms;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum DockerAction {
-    StartContainer { id: String },
-    StopContainer { id: String },
     RemoveContainer { id: String },
     RemoveImage { id: String },
     PruneBuildCache,
@@ -122,43 +120,6 @@ pub fn preview(
     }
 
     match action {
-        DockerAction::StartContainer { id } | DockerAction::StopContainer { id } => {
-            validate_id(id)?;
-            let c = o
-                .containers
-                .iter()
-                .find(|c| &c.id == id)
-                .ok_or_else(|| DockerError::Blocked("Container no longer exists.".into()))?;
-            let start = matches!(action, DockerAction::StartContainer { .. });
-            p.title = format!(
-                "{} container {}",
-                if start { "Start" } else { "Stop" },
-                c.name
-            );
-            p.command = cmd(&[if start { "start" } else { "stop" }, id]);
-            p.affected.push(AffectedItem {
-                label: c.name.clone(),
-                detail: format!("{} · {}", c.image, c.status),
-                bytes: None,
-            });
-            if start {
-                if c.running {
-                    p.blocked = Some("The container is already running.".into());
-                }
-                p.effects
-                    .push("Starts the container with its existing configuration.".into());
-            } else {
-                if !c.running {
-                    p.blocked = Some("The container is not running.".into());
-                }
-                p.effects
-                    .push("Sends SIGTERM, then SIGKILL after 10 seconds.".into());
-                p.warnings.push(
-                    "Anything the container keeps only in memory is lost. Data in volumes is kept."
-                        .into(),
-                );
-            }
-        }
         DockerAction::RemoveContainer { id } => {
             validate_id(id)?;
             let c = o
@@ -180,7 +141,7 @@ pub fn preview(
                     .into(),
             );
             if c.running {
-                p.blocked = Some("The container is running. Stop it first.".into());
+                p.blocked = Some("The container is running. Stop it in Docker Desktop or with `docker stop` first.".into());
             }
             if !c.mounts.is_empty() {
                 p.effects
@@ -192,7 +153,7 @@ pub fn preview(
                 ));
             }
             p.warnings.push(
-                "A stopped container is not necessarily unused: you may want to start it again."
+                "A stopped container is not necessarily unused: you may want to run it again."
                     .into(),
             );
         }
