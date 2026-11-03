@@ -1,8 +1,12 @@
 name: Release
 
 # Builds the universal macOS app from the tagged source on GitHub's runners
-# and publishes it as a GitHub release with a SHA-256 checksum. Release notes
-# come from docs/releases/<tag>.md.
+# and publishes it as a GitHub release with a SHA-256 checksum and a signed
+# build provenance attestation. Release notes come from docs/releases/<tag>.md.
+#
+# The build job can only read the repository. Publishing runs in a separate
+# job with no checkout and no build scripts, so a compromised dependency
+# cannot use a write token. Every action is pinned to a full commit SHA.
 
 on:
   push:
@@ -14,35 +18,39 @@ on:
         required: true
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ inputs.tag || github.ref_name }}
 
 jobs:
   macos:
-    name: Build and publish (macOS universal)
+    name: Build (macOS universal)
     runs-on: macos-latest
+    permissions:
+      contents: read
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
       # Release notes live on main; a tag may predate them.
       - name: Fetch release notes from main
         run: |
           git fetch --depth=1 origin main
           git show "origin/main:docs/releases/${TAG}.md" > "$RUNNER_TEMP/notes.md" 2>/dev/null || echo "DiskPilot ${TAG}" > "$RUNNER_TEMP/notes.md"
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
+          toolchain: 1.99.1
           targets: aarch64-apple-darwin, x86_64-apple-darwin
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: src-tauri
       - run: pnpm install --frozen-lockfile
@@ -106,14 +114,58 @@ jobs:
             echo '```'
             echo
             echo "Check it with \`shasum -a 256 DiskPilot.dmg\`."
+            echo
+            echo "To confirm this DMG was built by this repository's release workflow:"
+            echo
+            echo '```'
+            echo 'gh attestation verify DiskPilot.dmg -R Devanshgoel-123/diskpilot'
+            echo '```'
           } >> notes.md
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release
+          path: out/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Attest and publish
+    needs: macos
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release
+          path: out
+      - name: Check the checksum
+        working-directory: out
+        run: sha256sum -c DiskPilot.dmg.sha256
+      # A signed record, kept by GitHub outside the release, of which workflow
+      # run and commit built this DMG. Check it with:
+      #   gh attestation verify DiskPilot.dmg -R Devanshgoel-123/diskpilot
+      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: out/DiskPilot.dmg
+      # A published DMG is never replaced. To rebuild a release, delete it
+      # first, deliberately, and the new build gets a new attestation.
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         working-directory: out
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" DiskPilot.dmg DiskPilot.dmg.sha256 --clobber
+            if gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qx DiskPilot.dmg; then
+              echo "::error::$TAG already has DiskPilot.dmg. Published files are never replaced."
+              exit 1
+            fi
+            gh release upload "$TAG" DiskPilot.dmg DiskPilot.dmg.sha256
             gh release edit "$TAG" --notes-file notes.md
           else
             gh release create "$TAG" DiskPilot.dmg DiskPilot.dmg.sha256 \

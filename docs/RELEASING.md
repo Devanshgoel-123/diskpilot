@@ -8,8 +8,18 @@ Releases are built on GitHub Actions from a tag, never from a local machine.
 2. Bump the version in `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, and refresh `src-tauri/Cargo.lock` (`cargo check` in `src-tauri`).
 3. Write the release notes in `docs/releases/vX.Y.Z.md`. Describe what changed for the person using the app, not the code.
 4. Commit as `release: X.Y.Z`, tag `vX.Y.Z`, and push `main` and the tag.
-5. The Release workflow builds the universal app, checks its signature and architectures, and publishes `DiskPilot.dmg` with its SHA-256 checksum and the notes.
-6. Download the published DMG, check the checksum, and open it on a Mac to confirm it launches.
+5. The Release workflow builds the universal app, checks its signature and architectures, records a signed build provenance attestation, and publishes `DiskPilot.dmg` with its SHA-256 checksum and the notes.
+6. Download the published DMG, check the checksum and run `gh attestation verify DiskPilot.dmg -R Devanshgoel-123/diskpilot`, then open it on a Mac to confirm it launches.
+
+A published DMG is never replaced: the workflow fails if the release already has one. To rebuild a release, delete it on GitHub first, on purpose.
+
+### Repository settings that protect releases
+
+These are set on GitHub, not in the code:
+
+- Settings > General > Releases: turn on **immutable releases**, so a published release's files cannot be changed.
+- Settings > Rules > Rulesets: add a tag ruleset for `v*` that blocks updates and deletions.
+- Settings > Actions > General: require actions to be pinned to a full-length commit SHA.
 
 The landing page links to `releases/latest/download/DiskPilot.dmg`, so it picks up the new release without changes.
 
