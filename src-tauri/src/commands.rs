@@ -706,6 +706,12 @@ pub fn cancel_empty_trash(state: State<'_, AppState>) -> bool {
     }
 }
 
+/// Whether DiskPilot can read folders macOS protects (Mail, Messages, Photos).
+#[tauri::command]
+pub fn get_full_disk_access(state: State<'_, AppState>) -> crate::privacy::FullDiskAccess {
+    crate::privacy::full_disk_access(&state.home)
+}
+
 /// Open System Settings at Privacy & Security > Full Disk Access.
 #[tauri::command]
 pub fn open_full_disk_access_settings() -> AppResult<()> {
