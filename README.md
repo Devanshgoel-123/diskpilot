@@ -4,7 +4,7 @@
 
 DiskPilot is a native desktop application built with Tauri and Rust. It scans your storage locally, classifies every folder with an explanation, identifies developer data that can be regenerated, and performs cleanup only through a previewed, confirmed and audited workflow. It is built for developers whose Macs accumulate Docker images, `node_modules`, Xcode build data, AI coding tool data and package manager caches, and who want to know what is safe to remove before anything is removed.
 
-> **Project status:** early development (version 0.3). Release builds are published on GitHub but are not yet notarized by Apple; see [Installation](#installation).
+> **Project status:** early development (version 0.4). Release builds are published on GitHub but are not yet notarized by Apple; see [Installation](#installation).
 
 <!-- Screenshots will be added here. Contributors: please do not submit screenshots containing personal file names. -->
 
