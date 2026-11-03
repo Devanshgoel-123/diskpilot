@@ -23,6 +23,7 @@ import type {
   DockerOverview,
   Recommendation,
   SavedScanInfo,
+  SecretsReport,
   DirectoryListing,
   DiskInfo,
   DuplicateProgress,
@@ -74,6 +75,7 @@ export const api = {
   cancelEmptyTrash: () => invoke<boolean>("cancel_empty_trash"),
   openFullDiskAccessSettings: () => invoke<null>("open_full_disk_access_settings"),
 
+  checkAiTranscripts: () => invoke<SecretsReport>("check_ai_transcripts"),
   findDuplicates: (minBytes: number) => invoke<DuplicateReport>("find_duplicates", { minBytes }),
   cancelFindDuplicates: () => invoke<boolean>("cancel_find_duplicates"),
   getDuplicates: () => invoke<DuplicateReport | null>("get_duplicates"),

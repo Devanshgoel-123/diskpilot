@@ -581,3 +581,30 @@ export interface DuplicateProgress {
   bytesToHash: number;
   current: string | null;
 }
+
+// ---- Credentials in AI transcripts ------------------------------------------
+
+export interface SecretMatch {
+  kind: string;
+  /** Prefix and last four characters only. */
+  masked: string;
+  line: number;
+  occurrences: number;
+}
+
+export interface TranscriptFinding {
+  agent: string;
+  path: string;
+  bytes: number;
+  modifiedMs: number | null;
+  matches: SecretMatch[];
+}
+
+export interface SecretsReport {
+  generatedAtMs: number;
+  filesChecked: number;
+  bytesChecked: number;
+  agents: string[];
+  findings: TranscriptFinding[];
+  cancelled: boolean;
+}
