@@ -10,10 +10,16 @@ export const DialogClose = DialogPrimitive.Close;
 
 export const DialogContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+    /** Hide the corner close button, e.g. while an operation must finish. */
+    showClose?: boolean;
+    overlayClassName?: string;
+  }
+>(({ className, children, showClose = true, overlayClassName, ...props }, ref) => (
   <DialogPrimitive.Portal>
-    <DialogPrimitive.Overlay className="dialog-overlay fixed inset-0 z-40 bg-black/40" />
+    <DialogPrimitive.Overlay
+      className={cn("dialog-overlay fixed inset-0 z-40 bg-black/40", overlayClassName)}
+    />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
@@ -23,12 +29,14 @@ export const DialogContent = React.forwardRef<
       {...props}
     >
       {children}
-      <DialogPrimitive.Close
-        className="absolute top-3 right-3 rounded-md p-1 text-muted-foreground hover:bg-hover hover:text-foreground"
-        aria-label="Close"
-      >
-        <X className="size-4" />
-      </DialogPrimitive.Close>
+      {showClose ? (
+        <DialogPrimitive.Close
+          className="absolute top-3 right-3 rounded-md p-1 text-muted-foreground hover:bg-hover hover:text-foreground"
+          aria-label="Close"
+        >
+          <X className="size-4" />
+        </DialogPrimitive.Close>
+      ) : null}
     </DialogPrimitive.Content>
   </DialogPrimitive.Portal>
 ));
