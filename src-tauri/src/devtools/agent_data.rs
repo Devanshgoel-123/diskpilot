@@ -549,7 +549,9 @@ fn transcript_cwd(project: &Path) -> Option<PathBuf> {
         let Ok(f) = std::fs::File::open(file) else {
             continue;
         };
-        for line in BufReader::new(f).lines().take(50).map_while(Result::ok) {
+        // The working folder is near the top; never read more than 4 MB.
+        let head = std::io::Read::take(f, 4 * 1024 * 1024);
+        for line in BufReader::new(head).lines().take(50).map_while(Result::ok) {
             if !line.contains("\"cwd\"") {
                 continue;
             }

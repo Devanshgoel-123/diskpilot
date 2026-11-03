@@ -125,6 +125,54 @@ impl Ctx<'_> {
     }
 }
 
+/// Read a small text file written by another tool. Anything larger than
+/// `max` bytes is ignored rather than loaded into memory.
+pub fn read_small(path: &Path, max: u64) -> Option<String> {
+    let meta = std::fs::metadata(path).ok()?;
+    if !meta.is_file() || meta.len() > max {
+        return None;
+    }
+    std::fs::read_to_string(path).ok()
+}
+
+/// Run a system tool (absolute path, no shell) and return its stdout if it
+/// succeeds within `timeout`. A hung tool is killed instead of blocking the
+/// analysis, and output is capped.
+pub fn run_tool(program: &str, args: &[&str], timeout: std::time::Duration) -> Option<String> {
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+    const MAX_OUTPUT: u64 = 32 * 1024 * 1024;
+    let mut child = Command::new(program)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let mut stdout = child.stdout.take()?;
+    let reader = std::thread::spawn(move || {
+        let mut s = String::new();
+        let _ = stdout.by_ref().take(MAX_OUTPUT).read_to_string(&mut s);
+        let _ = std::io::copy(&mut stdout, &mut std::io::sink());
+        s
+    });
+    let started = std::time::Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if started.elapsed() > timeout => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(25)),
+            Err(_) => return None,
+        }
+    };
+    let out = reader.join().ok()?;
+    status.success().then_some(out)
+}
+
 pub fn modified_ms(path: &Path) -> Option<i64> {
     path.symlink_metadata()
         .ok()?

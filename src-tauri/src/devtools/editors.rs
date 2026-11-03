@@ -74,7 +74,7 @@ enum Target {
 }
 
 fn workspace_target(dir: &Path) -> Target {
-    let Ok(text) = std::fs::read_to_string(dir.join("workspace.json")) else {
+    let Some(text) = super::read_small(&dir.join("workspace.json"), 1024 * 1024) else {
         return Target::Unknown;
     };
     let Ok(ws) = serde_json::from_str::<WorkspaceJson>(&text) else {
@@ -103,7 +103,7 @@ struct ExtensionLocation {
 
 /// Extension folders the editor's own registry (`extensions.json`) refers to.
 fn registered_extensions(ext_dir: &Path) -> Option<HashSet<String>> {
-    let text = std::fs::read_to_string(ext_dir.join("extensions.json")).ok()?;
+    let text = super::read_small(&ext_dir.join("extensions.json"), 16 * 1024 * 1024)?;
     let entries: Vec<ExtensionEntry> = serde_json::from_str(&text).ok()?;
     Some(
         entries

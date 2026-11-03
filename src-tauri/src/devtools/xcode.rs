@@ -1,7 +1,7 @@
 //! Xcode: DerivedData per project, archives, device support and simulators.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::time::Duration;
 
 use serde::Deserialize;
 
@@ -62,31 +62,31 @@ pub fn parse_simctl(json: &str) -> Option<Vec<(String, SimDevice)>> {
 
 /// Full Xcode (not just Command Line Tools) is needed for simctl.
 fn has_full_xcode() -> bool {
-    Command::new("/usr/bin/xcode-select")
-        .arg("-p")
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).contains(".app/"))
-        .unwrap_or(false)
+    super::run_tool("/usr/bin/xcode-select", &["-p"], Duration::from_secs(10))
+        .is_some_and(|out| out.contains(".app/"))
 }
 
 fn simulators(ctx: &Ctx) -> Option<ToolSection> {
     if !has_full_xcode() {
         return None;
     }
-    let out = Command::new("/usr/bin/xcrun")
-        .args(["simctl", "list", "devices", "--json"])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let devices = parse_simctl(&String::from_utf8_lossy(&out.stdout))?;
+    // CoreSimulatorService is known to hang; never wait on it forever.
+    let out = super::run_tool(
+        "/usr/bin/xcrun",
+        &["simctl", "list", "devices", "--json"],
+        Duration::from_secs(30),
+    )?;
+    let devices = parse_simctl(&out)?;
+    // simctl reports each device's data folder from files the user can edit;
+    // only measure folders inside the simulator directory.
+    let devices_root = ctx.home_path("Library/Developer/CoreSimulator/Devices");
     let mut items: Vec<ToolItem> = devices
         .into_iter()
         .map(|(runtime, d)| {
-            let path = d.data_path.as_deref().map(PathBuf::from);
+            let path = d.data_path.as_deref().map(PathBuf::from).filter(|p| {
+                p.starts_with(&devices_root)
+                    && !p.components().any(|c| c == std::path::Component::ParentDir)
+            });
             let bytes = path.as_deref().map_or(0, |p| ctx.size(p));
             ToolItem {
                 label: format!("{} · {}", d.name, runtime),

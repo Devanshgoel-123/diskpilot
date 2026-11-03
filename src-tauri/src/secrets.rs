@@ -11,7 +11,7 @@
 
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -252,6 +252,22 @@ fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
     hay.windows(needle.len()).position(|w| w == needle)
 }
 
+fn skip_rest_of_line(reader: &mut impl BufRead) {
+    loop {
+        let (done, used) = match reader.fill_buf() {
+            Ok([]) | Err(_) => return,
+            Ok(chunk) => match chunk.iter().position(|&b| b == b'\n') {
+                Some(i) => (true, i + 1),
+                None => (false, chunk.len()),
+            },
+        };
+        reader.consume(used);
+        if done {
+            return;
+        }
+    }
+}
+
 fn scan_file(path: &Path, cancel: &AtomicBool) -> Vec<SecretMatch> {
     let Ok(f) = File::open(path) else {
         return Vec::new();
@@ -265,12 +281,20 @@ fn scan_file(path: &Path, cancel: &AtomicBool) -> Vec<SecretMatch> {
             break;
         }
         buf.clear();
-        match reader.read_until(b'\n', &mut buf) {
+        // Read at most MAX_LINE bytes of the line, then skip the rest, so a
+        // file with one enormous line is never loaded into memory.
+        match reader
+            .by_ref()
+            .take(MAX_LINE as u64)
+            .read_until(b'\n', &mut buf)
+        {
             Ok(0) | Err(_) => break,
             Ok(_) => {}
         }
+        if buf.last() != Some(&b'\n') && buf.len() == MAX_LINE {
+            skip_rest_of_line(&mut reader);
+        }
         line_no += 1;
-        buf.truncate(MAX_LINE);
         for (kind, masked) in scan_line(&buf) {
             found
                 .entry((kind, masked.clone()))
@@ -382,6 +406,20 @@ mod tests {
         );
         assert_eq!(found[0].1, "sk-ant-…sTuV");
         assert!(found.iter().all(|(_, m)| !m.contains("a1B2c3")));
+    }
+
+    #[test]
+    fn an_enormous_line_is_skipped_without_losing_line_numbers() {
+        let dir = crate::test_support::sandbox();
+        let file = dir.path().join("t.jsonl");
+        let ant = fake("sk-ant-", "api03-a1B2c3D4e5F6g7H8i9J0kLmNoPqRsTuV");
+        let mut text = "x".repeat(MAX_LINE * 2);
+        text.push('\n');
+        text.push_str(&format!("key {ant}\n"));
+        std::fs::write(&file, text).unwrap();
+        let found = scan_file(&file, &AtomicBool::new(false));
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].line, 2);
     }
 
     #[test]
