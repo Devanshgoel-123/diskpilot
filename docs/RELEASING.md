@@ -17,13 +17,13 @@ The landing page links to `releases/latest/download/DiskPilot.dmg`, so it picks 
 
 Without an Apple Developer ID the app is signed ad hoc, and macOS asks people to confirm in **System Settings > Privacy & Security** the first time they open it. To remove that step, join the Apple Developer Program, then add these repository secrets. The Release workflow uses them automatically when they are present.
 
-| Secret | Value |
-| --- | --- |
-| `APPLE_CERTIFICATE` | Your **Developer ID Application** certificate exported as `.p12`, base64-encoded (`base64 -i cert.p12 \| pbcopy`) |
-| `APPLE_CERTIFICATE_PASSWORD` | The password you set when exporting the `.p12` |
-| `APPLE_SIGNING_IDENTITY` | The certificate name, for example `Developer ID Application: Your Name (TEAMID)` |
-| `APPLE_API_ISSUER` | Issuer ID of an App Store Connect API key (Users and Access > Integrations) |
-| `APPLE_API_KEY` | The key ID of that API key |
-| `APPLE_API_KEY_P8` | The contents of the downloaded `AuthKey_<id>.p8` file |
+| Secret                       | Value                                                                                                             |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `APPLE_CERTIFICATE`          | Your **Developer ID Application** certificate exported as `.p12`, base64-encoded (`base64 -i cert.p12 \| pbcopy`) |
+| `APPLE_CERTIFICATE_PASSWORD` | The password you set when exporting the `.p12`                                                                    |
+| `APPLE_SIGNING_IDENTITY`     | The certificate name, for example `Developer ID Application: Your Name (TEAMID)`                                  |
+| `APPLE_API_ISSUER`           | Issuer ID of an App Store Connect API key (Users and Access > Integrations)                                       |
+| `APPLE_API_KEY`              | The key ID of that API key                                                                                        |
+| `APPLE_API_KEY_P8`           | The contents of the downloaded `AuthKey_<id>.p8` file                                                             |
 
 With the API key secrets present the build is notarized and stapled, and the workflow verifies that Gatekeeper accepts it. Never commit any of these values.
