@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 #[derive(Debug, thiserror::Error)]
 pub enum DockerError {
-    #[error("Docker is not installed (no docker CLI found)")]
+    #[error("Docker is not installed (no signed docker CLI found)")]
     NotInstalled,
     #[error("Docker is installed but not running. Start Docker Desktop (or your Docker engine) and try again.")]
     NotRunning,
@@ -26,6 +26,55 @@ pub enum DockerError {
     #[error("{0}")]
     Blocked(String),
 }
+
+/// Code requirement for a binary signed with an Apple Developer ID
+/// certificate (Docker Desktop, OrbStack, Rancher Desktop and so on).
+const DEVELOPER_ID: &str = "anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists";
+
+/// Homebrew's package folders. Homebrew's docker is not Developer ID signed.
+const HOMEBREW_CELLARS: &[&str] = &["/opt/homebrew/Cellar/", "/usr/local/Cellar/"];
+
+/// Whether DiskPilot may run this docker binary. Child processes inherit
+/// DiskPilot's Full Disk Access, so a `docker` planted in a user-writable
+/// folder such as `~/.docker/bin` must never run. The binary must carry a
+/// valid Developer ID signature, or be a Homebrew-installed package.
+fn is_trusted(real_path: &Path) -> bool {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    use std::time::SystemTime;
+
+    let text = real_path.to_string_lossy();
+    if HOMEBREW_CELLARS.iter().any(|c| text.starts_with(c)) {
+        return true;
+    }
+    // Verifying a signature takes a moment; remember the answer per file version.
+    type Verdicts = HashMap<PathBuf, (Option<SystemTime>, bool)>;
+    static CACHE: OnceLock<Mutex<Verdicts>> = OnceLock::new();
+    let modified = real_path.metadata().and_then(|m| m.modified()).ok();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some((m, ok)) = cache.lock().ok().and_then(|c| c.get(real_path).copied()) {
+        if m == modified {
+            return ok;
+        }
+    }
+    let ok = Command::new("/usr/bin/codesign")
+        .arg("--verify")
+        .arg("--strict")
+        .arg(format!("-R={DEVELOPER_ID}"))
+        .arg(real_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success());
+    if let Ok(mut c) = cache.lock() {
+        c.insert(real_path.to_path_buf(), (modified, ok));
+    }
+    ok
+}
+
+/// Most output DiskPilot reads from one docker command.
+const MAX_OUTPUT: u64 = 64 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 pub struct DockerCli {
@@ -45,10 +94,14 @@ pub fn candidate_paths(home: &Path) -> Vec<PathBuf> {
 }
 
 impl DockerCli {
+    /// The first candidate that exists and is trusted (see [`is_trusted`]).
+    /// Symlinks are resolved first, so the binary that runs is the one checked.
     pub fn locate(home: &Path) -> Option<Self> {
         candidate_paths(home)
             .into_iter()
-            .find(|p| p.metadata().is_ok_and(|m| m.is_file()))
+            .filter_map(|p| std::fs::canonicalize(p).ok())
+            .filter(|p| p.metadata().is_ok_and(|m| m.is_file()))
+            .find(|p| is_trusted(p))
             .map(|path| Self { path })
     }
 
@@ -82,12 +135,15 @@ impl DockerCli {
         let mut stderr = child.stderr.take().expect("piped stderr");
         let out_t = std::thread::spawn(move || {
             let mut s = String::new();
-            let _ = stdout.read_to_string(&mut s);
+            let _ = stdout.by_ref().take(MAX_OUTPUT).read_to_string(&mut s);
+            // Keep draining so the child never blocks on a full pipe.
+            let _ = std::io::copy(&mut stdout, &mut std::io::sink());
             s
         });
         let err_t = std::thread::spawn(move || {
             let mut s = String::new();
-            let _ = stderr.read_to_string(&mut s);
+            let _ = stderr.by_ref().take(MAX_OUTPUT).read_to_string(&mut s);
+            let _ = std::io::copy(&mut stderr, &mut std::io::sink());
             s
         });
 
@@ -145,6 +201,20 @@ mod tests {
             "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
         ));
         assert!(!is_daemon_down("Error: No such image: foo"));
+    }
+
+    #[test]
+    fn only_signed_or_homebrew_binaries_are_trusted() {
+        // A plain file, as malware would plant in ~/.docker/bin, is refused.
+        let dir = std::env::temp_dir().join(format!("dp-docker-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let fake = dir.join("docker");
+        std::fs::write(&fake, "#!/bin/sh\n").unwrap();
+        assert!(!is_trusted(&fake));
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(is_trusted(Path::new(
+            "/opt/homebrew/Cellar/docker/27.0/bin/docker"
+        )));
     }
 
     #[test]
