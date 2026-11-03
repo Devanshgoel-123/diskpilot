@@ -4,7 +4,7 @@
 
 DiskPilot is a native desktop application built with Tauri and Rust. It scans your storage locally, classifies every folder with an explanation, identifies developer data that can be regenerated, and performs cleanup only through a previewed, confirmed and audited workflow. It is designed for developers whose Macs accumulate Docker images, `node_modules`, Xcode build data, AI coding tool data and package manager caches, and for anyone who wants a clear account of their storage without resorting to terminal commands.
 
-> **Project status:** early development (version 0.1). All five planned phases are implemented. There are no signed release builds yet; see [Installation](#installation).
+> **Project status:** early development (version 0.3). Release builds are published on GitHub but are not yet notarized by Apple; see [Installation](#installation).
 
 <!-- Screenshots will be added here. Contributors: please do not submit screenshots containing personal file names. -->
 
@@ -43,6 +43,8 @@ DiskPilot replaces that process with three steps:
 - **Storage** browses folders by size, with sorting, filtering by name and category, a Cleanup column that shows each folder's tier or how much inside it can be cleaned up, and a details panel with live metadata and Reveal in Finder.
 - **Applications** lists installed apps with the size of each app and the data it keeps in `~/Library` (caches, containers, support files), and the sandbox data left behind by apps that are no longer installed. Leftovers are reported for review in Finder and never removed automatically, since they can contain documents.
 - **Large Files** lists the 500 largest files and the folders where data accumulates. Size alone is never treated as a reason to delete.
+- **Duplicates** finds files with identical contents (same size, then SHA-256). Hidden folders, `~/Library`, app and document bundles, dependency folders and package caches are skipped, hard links are counted once, and APFS clones are flagged because removing one frees little or no space. You choose the copy that stays; one copy of every set always stays, and each copy is compared byte for byte with it again just before it is moved to the Trash.
+- A **menu bar item** shows the space available on the startup disk and opens Cleanup, Duplicates or Empty Trash. Closing the window keeps it running; Quit ends the app.
 
 ### Classification
 
@@ -63,6 +65,8 @@ Each recommendation states why it was detected, why it may be safe, the risks, t
 ### Safe cleanup
 
 Selected recommendations are turned into a cleanup plan that lists every path to be affected. Nothing happens until you confirm. Items are moved to the Trash by default; permanent deletion is offered only when every selected item is regenerable data. Each path is verified again immediately before it is touched. The **History** page records every action with the affected paths, the exact operation or command, the space reclaimed and any errors.
+
+**Empty Trash** lists what is in the Trash first, then removes exactly those items, one by one, with live progress, a Stop button and a per-item result. Reading the Trash requires Full Disk Access; without it, DiskPilot explains how to grant it.
 
 ### Docker Manager
 
@@ -90,6 +94,9 @@ Dedicated analyzers inspect the on-disk layout of individual tools:
 | Xcode              | DerivedData per project, including data for deleted projects; archives; device support; simulators, including unavailable ones                                                                                                                                                                   |
 | Rust               | Toolchains and the default toolchain; `target` folders per project; Cargo caches                                                                                                                                                                                                                 |
 | Python             | Virtual environments; pip, uv and Poetry caches; downloaded Hugging Face models                                                                                                                                                                                                                  |
+| Local AI models    | Ollama models (with layers shared between models) and LM Studio models, listed for reference; Ollama layers no model uses and interrupted downloads are offered for cleanup                                                                                                                      |
+
+**Credentials in AI transcripts.** Coding agents keep every conversation on disk, including keys that were pasted or printed. DiskPilot can check the Claude Code, Codex CLI and Gemini CLI transcripts for well-known credential formats (API keys, access tokens, private keys). The check runs offline, changes nothing, and shows only a masked form of each value.
 
 Findings that can be cleaned up feed into the same recommendation and cleanup workflow. For AI agents, caches, logs and downloaded updates are marked likely safe; edit checkpoints, stale backups and sessions for deleted projects need review; conversation history, sign-in and settings are never recommended. DiskPilot reads other applications' databases but never modifies them.
 
@@ -117,8 +124,9 @@ Scanner -> Classifier -> Recommendations -> Planner -> Safety gate -> Executor
 ## Privacy
 
 - Scanning, classification, recommendations, cleanup and Docker management run entirely on your Mac. There is no account, no telemetry and no cloud service.
-- DiskPilot does not request Full Disk Access. macOS asks for permission the first time protected folders such as Desktop, Documents and Downloads are read.
-- The optional assistant is the only feature that uses the network. When you ask a question, the question and the storage data needed to answer it (folder and file names, paths with your home folder shown as `~`, sizes and categories) are sent directly from your Mac to Anthropic's API. File contents are never read or sent. The API key never leaves the Rust process except in the request to Anthropic.
+- DiskPilot works without Full Disk Access. macOS asks for permission the first time protected folders such as Desktop, Documents and Downloads are read, and folders such as Mail, Messages, iCloud Drive and the Photos library are skipped and listed as not measured.
+- If you grant Full Disk Access in System Settings, DiskPilot can also measure those folders. It reads sizes only, keeps the results on your Mac, and never shares what is inside them with the assistant: the assistant sees each of them as a single total.
+- The optional assistant is the only feature that uses the network. When you ask a question, the question and the storage data needed to answer it (folder and file names, paths with your home folder shown as `~`, sizes and categories; private folders such as Mail, Messages and Photos only as totals) are sent directly from your Mac to Anthropic's API. File contents are never read or sent. The API key never leaves the Rust process except in the request to Anthropic.
 
 ## Installation
 
@@ -206,21 +214,22 @@ The interface communicates with the Rust engine only through typed commands. Slo
 
 ## Roadmap
 
-| Phase | Scope                                                                                                                  | Status   |
-| ----- | ---------------------------------------------------------------------------------------------------------------------- | -------- |
-| 1     | Application foundation, design system, Overview, scanning, folder sizes, classification, Storage Explorer, Large Files | Complete |
-| 2     | Cleanup recommendations, risk tiers, previews, safe executor, cleanup history                                          | Complete |
-| 3     | Docker Manager with previewed actions and diagnostics                                                                  | Complete |
-| 4     | Developer tools analysis for Cursor, VS Code, Claude Code, Codex, Copilot, Node.js, Xcode, Rust and Python             | Complete |
-| 5     | Optional assistant with read-only access to storage data                                                               | Complete |
+| Phase | Scope                                                                                                                                                        | Status   |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| 1     | Application foundation, design system, Overview, scanning, folder sizes, classification, Storage Explorer, Large Files                                       | Complete |
+| 2     | Cleanup recommendations, risk tiers, previews, safe executor, cleanup history                                                                                | Complete |
+| 3     | Docker Manager with previewed actions and diagnostics                                                                                                        | Complete |
+| 4     | Developer tools analysis for Cursor, VS Code, Claude Code, Codex, Copilot, Node.js, Xcode, Rust and Python                                                   | Complete |
+| 5     | Optional assistant with read-only access to storage data                                                                                                     | Complete |
+| 6     | Saved scans, version and leftover detection, Empty Trash, duplicates, local AI models, transcript credential check, menu bar item, Full Disk Access guidance | Complete |
 
-Planned next: signed and notarized release builds, persisting the scan index so the Explorer is available after a restart, incremental rescans, and additional analyzers (Homebrew, JetBrains IDEs, Android Studio).
+Planned next: signed and notarized release builds, incremental rescans, and additional analyzers (Homebrew, JetBrains IDEs, Android Studio).
 
 ## Known limitations
 
 - The available space shown excludes purgeable space, so it can be lower than the figure in Finder.
-- APFS clones are counted once per copy, so totals can exceed physical usage.
-- Scan results are held in memory; after restarting the app, rescan before browsing or cleaning up.
+- APFS clones are counted once per copy in scan totals, so totals can exceed physical usage. (The duplicate finder does account for clones.)
+- The last scan is saved and shown after a restart; cleanup measures every item again before you confirm.
 - After a cleanup, sizes elsewhere in the app reflect the last scan until you rescan. Space moved to the Trash is freed only when the Trash is emptied.
 - Folder listings show at most 1,000 entries; the remainder is summarized.
 - Docker actions have been tested against Docker Desktop. OrbStack and Colima are detected but less thoroughly exercised.
