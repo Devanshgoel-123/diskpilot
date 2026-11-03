@@ -232,9 +232,13 @@ pub fn run(ctx: &ToolContext, name: &str, input: &Value) -> ToolOutput {
                     Some("keep") => r.tier == Tier::Keep,
                     _ => true,
                 })
+                // Filter on what the model is allowed to see, so the filter
+                // cannot be used to probe names inside a private area.
                 .filter(|r| {
                     contains.as_ref().is_none_or(|c| {
-                        r.title.to_lowercase().contains(c) || r.path.to_lowercase().contains(c)
+                        let (path, private) = shown(&r.path, home);
+                        let title = if private.is_some() { "" } else { r.title.as_str() };
+                        title.to_lowercase().contains(c) || path.to_lowercase().contains(c)
                     })
                 })
                 .take(limit(input, 20))
@@ -274,7 +278,7 @@ pub fn run(ctx: &ToolContext, name: &str, input: &Value) -> ToolOutput {
                         == Some(true)
                 }) && contains
                     .as_ref()
-                    .is_none_or(|c| path.to_lowercase().contains(c))
+                    .is_none_or(|c| shown(path, home).0.to_lowercase().contains(c))
             };
             let items: Vec<Value> = if input.get("kind").and_then(Value::as_str) == Some("folders")
             {
@@ -328,7 +332,13 @@ pub fn run(ctx: &ToolContext, name: &str, input: &Value) -> ToolOutput {
                 raw.to_string()
             };
             let root = PathBuf::from(&scan.summary.root);
+            // Resolve the real path first (case and symlinks), so the private
+            // area check sees the folder that will actually be listed.
             let path = match safety::parse_user_path(&expanded)
+                .and_then(|p| {
+                    std::fs::canonicalize(&p)
+                        .map_err(|_| safety::SafetyError::Missing(p.display().to_string()))
+                })
                 .and_then(|p| safety::ensure_within(&p, &root).map(|_| p))
             {
                 Ok(p) => p,

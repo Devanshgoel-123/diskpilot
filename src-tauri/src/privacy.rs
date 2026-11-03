@@ -47,7 +47,7 @@ const PRIVATE_BUNDLES: &[(&str, &str)] = &[
 pub fn private_area(path: &Path, home: &Path) -> Option<(PathBuf, &'static str)> {
     for (rel, label) in PRIVATE_AREAS {
         let root = home.join(rel);
-        if path.starts_with(&root) {
+        if starts_with_ignoring_case(path, &root) {
             return Some((root, label));
         }
     }
@@ -66,6 +66,22 @@ pub fn private_area(path: &Path, home: &Path) -> Option<(PathBuf, &'static str)>
         }
     }
     None
+}
+
+/// `Path::starts_with`, but ignoring ASCII case in each component. macOS
+/// volumes are case-insensitive by default, so `~/library/mail` is the Mail
+/// folder too and must count as private.
+fn starts_with_ignoring_case(path: &Path, prefix: &Path) -> bool {
+    let mut path = path.components();
+    prefix.components().all(|want| {
+        path.next().is_some_and(|got| {
+            let (got, want) = (got.as_os_str(), want.as_os_str());
+            match (got.to_str(), want.to_str()) {
+                (Some(g), Some(w)) => g.eq_ignore_ascii_case(w),
+                _ => got == want,
+            }
+        })
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -125,5 +141,14 @@ mod tests {
         assert_eq!(label, "Photos library");
         assert!(private_area(Path::new("/Users/a/Library/Caches/x"), home).is_none());
         assert!(private_area(Path::new("/Users/a/Library"), home).is_none());
+        // macOS volumes are case-insensitive: a different spelling is the same folder.
+        for p in [
+            "/Users/a/library/mail/V10",
+            "/Users/a/LIBRARY/Messages/x",
+            "/users/A/Library/mobile documents",
+        ] {
+            assert!(private_area(Path::new(p), home).is_some(), "{p}");
+        }
+        assert!(private_area(Path::new("/Users/a/Library/Mailbox"), home).is_none());
     }
 }
