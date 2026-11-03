@@ -73,6 +73,7 @@ export const api = {
   discardTrashPreview: (previewId: string) => invoke<null>("discard_trash_preview", { previewId }),
   emptyTrash: (previewId: string) => invoke<TrashResult>("empty_trash", { previewId }),
   cancelEmptyTrash: () => invoke<boolean>("cancel_empty_trash"),
+  getFullDiskAccess: () => invoke<"granted" | "denied" | "unknown">("get_full_disk_access"),
   openFullDiskAccessSettings: () => invoke<null>("open_full_disk_access_settings"),
 
   checkAiTranscripts: () => invoke<SecretsReport>("check_ai_transcripts"),
