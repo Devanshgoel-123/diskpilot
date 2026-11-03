@@ -390,6 +390,10 @@ pub struct PlanItem {
     pub tier: Tier,
     /// Exactly what will be done, e.g. "Move to Trash".
     pub operation: String,
+    /// For an extra copy of a duplicate: the copy that stays. Checked again
+    /// right before this item is moved, so the last copy is never removed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keep_copy: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

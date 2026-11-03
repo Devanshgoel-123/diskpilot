@@ -72,6 +72,7 @@ pub fn build_plan(
             file_count: rec.file_count,
             tier: rec.tier,
             operation: method.describe().to_string(),
+            keep_copy: None,
         });
     }
 

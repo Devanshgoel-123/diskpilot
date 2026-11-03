@@ -568,6 +568,7 @@ pub async fn plan_duplicate_cleanup(
         let classifier = Classifier::new(&home);
         let classify = |p: &Path| classifier.classify_path(p, false, &crate::classifier::FsProbe);
         let (recs, rejected) = duplicates::removal_recommendations(&report, &paths, &classify);
+        let kept = duplicates::kept_copies(&report, &paths);
         let ids: Vec<String> = recs.iter().map(|r| r.id.clone()).collect();
         let mut plan = planner::build_plan(
             unique_id("duplicates", now),
@@ -578,6 +579,9 @@ pub async fn plan_duplicate_cleanup(
             &home,
             now,
         );
+        for item in &mut plan.items {
+            item.keep_copy = kept.get(&item.path).cloned();
+        }
         plan.rejected.extend(rejected);
         Ok(plan)
     })

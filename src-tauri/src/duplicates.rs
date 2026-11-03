@@ -485,6 +485,22 @@ fn make_group(id: String, same: Vec<Candidate>, home: &Path) -> DuplicateGroup {
     }
 }
 
+/// For each selected copy, the copy that stays in its group: the first file
+/// that was not selected, the same choice [`removal_recommendations`] makes.
+pub fn kept_copies(report: &DuplicateReport, selected: &[String]) -> HashMap<String, String> {
+    let chosen: HashSet<&str> = selected.iter().map(String::as_str).collect();
+    let mut kept = HashMap::new();
+    for g in &report.groups {
+        let Some(keep) = g.files.iter().find(|f| !chosen.contains(f.path.as_str())) else {
+            continue;
+        };
+        for f in g.files.iter().filter(|f| chosen.contains(f.path.as_str())) {
+            kept.insert(f.path.clone(), keep.path.clone());
+        }
+    }
+    kept
+}
+
 /// True when both files exist, are regular files of the same size, and have
 /// the same bytes. Used right before a copy is moved to the Trash.
 pub fn same_contents(a: &Path, b: &Path) -> io::Result<bool> {

@@ -6,6 +6,7 @@
 
 use std::fs;
 use std::io;
+use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
 use crate::error::describe_io_error;
@@ -38,11 +39,37 @@ impl FileOps for RealFileOps {
             ));
         }
         if meta.is_dir() {
+            if contains_other_volume(path, meta.dev())? {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "it contains another mounted volume, so DiskPilot will not delete it",
+                ));
+            }
             fs::remove_dir_all(path)
         } else {
             fs::remove_file(path)
         }
     }
+}
+
+/// Whether any folder under `dir` is on a different device, such as a disk
+/// image or network share mounted inside it. `remove_dir_all` would descend
+/// into it and erase that volume's contents. Links are never followed.
+fn contains_other_volume(dir: &Path, dev: u64) -> io::Result<bool> {
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for entry in fs::read_dir(&d)? {
+            let path = entry?.path();
+            let meta = path.symlink_metadata()?;
+            if meta.is_dir() {
+                if meta.dev() != dev {
+                    return Ok(true);
+                }
+                stack.push(path);
+            }
+        }
+    }
+    Ok(false)
 }
 
 pub fn execute(
@@ -71,6 +98,22 @@ pub fn execute(
                 continue;
             }
         };
+        // An extra copy of a duplicate goes only while the copy that stays
+        // is still there with the same bytes.
+        if let Some(keep) = &item.keep_copy {
+            if !crate::duplicates::same_contents(&path, Path::new(keep)).unwrap_or(false) {
+                results.push(CleanupItemResult {
+                    target: item.path.clone(),
+                    operation,
+                    bytes: 0,
+                    status: ItemStatus::Skipped,
+                    error: Some(format!(
+                        "The copy you are keeping ({keep}) has changed or is gone. Search for duplicates again."
+                    )),
+                });
+                continue;
+            }
+        }
         let outcome = match plan.method {
             CleanupMethod::Trash => ops.trash(&path),
             CleanupMethod::Delete => ops.delete(&path),
@@ -155,6 +198,7 @@ mod tests {
                     file_count: 1,
                     tier: Tier::LikelySafe,
                     operation: method.describe().into(),
+                    keep_copy: None,
                 })
                 .collect(),
             rejected: vec![],
@@ -187,6 +231,34 @@ mod tests {
         assert!(record.items[0]
             .operation
             .starts_with("Delete permanently: "));
+    }
+
+    #[test]
+    fn an_extra_copy_stays_when_the_kept_copy_is_gone_or_changed() {
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        let (a, b, c) = (home.join("a.bin"), home.join("b.bin"), home.join("c.bin"));
+        for p in [&a, &b, &c] {
+            fs::write(p, "same bytes").unwrap();
+        }
+        let mut p = plan(CleanupMethod::Trash, &[&a, &b]);
+        p.items[0].keep_copy = Some(home.join("missing.bin").display().to_string());
+        p.items[1].keep_copy = Some(c.display().to_string());
+        fs::write(&c, "edited....").unwrap(); // same length, different bytes
+        let fake = FakeTrash::default();
+        let record = execute(&p, &home, &home, &fake);
+        assert!(fake.0.lock().unwrap().is_empty(), "nothing may be trashed");
+        assert!(record.items.iter().all(|i| i.status == ItemStatus::Skipped));
+
+        // With the kept copy intact, the extra copy goes.
+        fs::write(&c, "same bytes").unwrap();
+        let p = {
+            let mut p = plan(CleanupMethod::Trash, &[&b]);
+            p.items[0].keep_copy = Some(c.display().to_string());
+            p
+        };
+        execute(&p, &home, &home, &fake);
+        assert_eq!(*fake.0.lock().unwrap(), vec![b.clone()]);
     }
 
     #[test]
