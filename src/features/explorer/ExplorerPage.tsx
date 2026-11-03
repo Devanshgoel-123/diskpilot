@@ -2,6 +2,7 @@ import { ArrowUp, ChevronRight, File, Folder, FolderTree, Link2, Search } from "
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
+import { StorageTabs } from "@/features/storage/StorageTabs";
 import { CategoryBadge } from "@/components/shared/CategoryBadge";
 import { DetailsPanel } from "@/components/shared/DetailsPanel";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -170,7 +171,7 @@ export function ExplorerPage() {
   if (!summary) {
     return (
       <>
-        <PageHeader title="Storage" />
+        <PageHeader title="Storage" actions={<StorageTabs />} />
         <EmptyState
           className="flex-1 justify-center"
           icon={FolderTree}
@@ -186,6 +187,7 @@ export function ExplorerPage() {
     <>
       <PageHeader
         title="Storage"
+        actions={<StorageTabs />}
         description="Folder sizes from the last scan. Open a folder with a double-click or Return."
       />
       <div className="flex min-h-0 flex-1">

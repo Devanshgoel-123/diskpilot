@@ -24,10 +24,11 @@ export type PageId =
   | "applications"
   | "docker"
   | "developer"
-  | "large-files"
   | "duplicates"
   | "history"
   | "settings";
+
+export type StorageView = "browse" | "largest";
 
 const ROOT_KEY = "diskpilot.scanRoot";
 const ASSISTANT_ENABLED_KEY = "diskpilot.assistant.enabled";
@@ -86,6 +87,7 @@ interface AppState {
 
   page: PageId;
   explorerPath: string | null;
+  storageView: StorageView;
   /** Folder to scan; `null` means the home folder. */
   scanRoot: string | null;
   theme: ThemePreference;
@@ -110,6 +112,7 @@ interface AppState {
   openInExplorer: (path: string) => void;
   /** Navigate within the Storage Explorer; `null` is the scan root. */
   browse: (path: string | null) => void;
+  setStorageView: (view: StorageView) => void;
   setScanRoot: (root: string | null) => void;
   setTheme: (t: ThemePreference) => void;
   dismissError: () => void;
@@ -140,6 +143,7 @@ export const useApp = create<AppState>((set, get) => ({
   error: null,
   page: "overview",
   explorerPath: null,
+  storageView: "browse",
   scanRoot: loadScanRoot(),
   theme: loadTheme(),
 
@@ -311,9 +315,12 @@ export const useApp = create<AppState>((set, get) => ({
 
   navigate: (page) => set({ page }),
 
-  openInExplorer: (path) => set({ page: "explorer", explorerPath: path }),
+  openInExplorer: (path) =>
+    set({ page: "explorer", storageView: "browse", explorerPath: path }),
 
   browse: (path) => set({ explorerPath: path }),
+
+  setStorageView: (storageView) => set({ storageView }),
 
   setScanRoot: (root) => {
     try {

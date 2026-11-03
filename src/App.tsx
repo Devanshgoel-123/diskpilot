@@ -10,12 +10,11 @@ import { AssistantPage } from "@/features/assistant/AssistantPage";
 import { DeveloperToolsPage } from "@/features/developer/DeveloperToolsPage";
 import { DockerPage } from "@/features/docker/DockerPage";
 import { DuplicatesPage } from "@/features/duplicates/DuplicatesPage";
-import { ExplorerPage } from "@/features/explorer/ExplorerPage";
 import { HistoryPage } from "@/features/history/HistoryPage";
-import { LargeFilesPage } from "@/features/large-files/LargeFilesPage";
 import { OverviewPage } from "@/features/overview/OverviewPage";
 import { RecommendationsPage } from "@/features/recommendations/RecommendationsPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
+import { StoragePage } from "@/features/storage/StoragePage";
 import { EmptyTrashDialog } from "@/features/trash/EmptyTrashDialog";
 import { useTrash } from "@/features/trash/trashStore";
 import { inDesktopApp, onTrayNavigate } from "@/lib/api";
@@ -25,11 +24,10 @@ const PAGES: Record<PageId, () => React.JSX.Element> = {
   assistant: AssistantPage,
   applications: ApplicationsPage,
   overview: OverviewPage,
-  explorer: ExplorerPage,
+  explorer: StoragePage,
   recommendations: RecommendationsPage,
   docker: DockerPage,
   developer: DeveloperToolsPage,
-  "large-files": LargeFilesPage,
   duplicates: DuplicatesPage,
   history: HistoryPage,
   settings: SettingsPage,

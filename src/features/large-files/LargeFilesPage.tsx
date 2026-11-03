@@ -2,6 +2,7 @@ import { FileStack, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
+import { StorageTabs } from "@/features/storage/StorageTabs";
 import { CategoryBadge } from "@/components/shared/CategoryBadge";
 import { CategorySelect } from "@/components/shared/CategorySelect";
 import { DetailsPanel } from "@/components/shared/DetailsPanel";
@@ -92,7 +93,7 @@ export function LargeFilesPage() {
   if (!summary) {
     return (
       <>
-        <PageHeader title="Large Files" />
+        <PageHeader title="Storage" actions={<StorageTabs />} />
         <EmptyState
           className="flex-1 justify-center"
           icon={FileStack}
@@ -107,7 +108,8 @@ export function LargeFilesPage() {
   return (
     <>
       <PageHeader
-        title="Large Files"
+        title="Storage"
+        actions={<StorageTabs />}
         description="Large does not mean disposable. DiskPilot never marks a file safe to delete because of its size."
       />
       <div className="flex min-h-0 flex-1">
