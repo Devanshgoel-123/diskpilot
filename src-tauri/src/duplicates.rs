@@ -8,8 +8,9 @@
 //! The search only reads. It never follows symbolic links, never leaves the
 //! starting volume, and skips places where removing a copy could break
 //! something: hidden folders, `~/Library`, app and document bundles, and
-//! dependency folders. Hard links to the same file are counted once, and APFS
-//! clones are flagged because removing a clone frees little or no space.
+//! dependency folders and package stores such as the Go module cache. Hard
+//! links to the same file are counted once, and APFS clones are flagged
+//! because removing a clone frees little or no space.
 
 use std::collections::{HashMap, HashSet};
 use std::fs::{File, Metadata};
@@ -59,7 +60,28 @@ const BUNDLE_EXTENSIONS: &[&str] = &[
     "lrlibrary",
     "lrdata",
 ];
-const SKIPPED_DIRS: &[&str] = &["node_modules", "Pods", "DerivedData", "target", "venv"];
+/// Dependency and package-manager folders: their files are managed by a tool,
+/// and removing one copy breaks the package it belongs to.
+const SKIPPED_DIRS: &[&str] = &[
+    "node_modules",
+    "bower_components",
+    "Pods",
+    "Carthage",
+    "DerivedData",
+    "target",
+    "venv",
+    "site-packages",
+    "vendor",
+    "__pycache__",
+];
+/// Package stores outside hidden folders, relative to the home folder.
+const SKIPPED_HOME_DIRS: &[&str] = &[
+    "Library",
+    "go/pkg",
+    "Applications",
+    "miniconda3",
+    "anaconda3",
+];
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -131,7 +153,7 @@ fn skip_dir(name: &str, path: &Path, home: &Path) -> bool {
     if name.starts_with('.') || SKIPPED_DIRS.contains(&name) {
         return true;
     }
-    if path == home.join("Library") {
+    if SKIPPED_HOME_DIRS.iter().any(|d| path == home.join(d)) {
         return true;
     }
     match name.rsplit_once('.') {
@@ -572,7 +594,7 @@ pub fn removal_recommendations(
             let path = Path::new(&f.path);
             recs.push(Recommendation {
                 id: f.path.clone(),
-                title: format!("Duplicate of {}", kept.path),
+                title: format!("Extra copy of {}", g.name),
                 path: f.path.clone(),
                 bytes: g.bytes,
                 file_count: 1,
@@ -672,6 +694,7 @@ mod tests {
         write(&root.join("Thing.app/Contents/a"), &data);
         write(&root.join("node_modules/pkg/a"), &data);
         write(&root.join("Library/a"), &data);
+        write(&root.join("go/pkg/mod/x@v1/a"), &data);
         std::os::unix::fs::symlink(root.join("a"), root.join("a-sym")).unwrap();
         let r = run(&root, 1);
         assert!(r.groups.is_empty(), "{:?}", r.groups);
