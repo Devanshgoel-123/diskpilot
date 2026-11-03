@@ -78,6 +78,8 @@ pub struct TrashProgress {
     pub files_removed: u64,
     /// The entry being removed now.
     pub current: Option<String>,
+    /// Indexes of finished entries that were not fully removed.
+    pub not_removed: Vec<usize>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -295,7 +297,24 @@ fn remove_tree(
 }
 
 fn plural(n: u64, word: &str) -> String {
-    format!("{n} {word}{}", if n == 1 { "" } else { "s" })
+    let digits = n.to_string();
+    let mut grouped = String::with_capacity(digits.len() + digits.len() / 3);
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i) % 3 == 0 {
+            grouped.push(',');
+        }
+        grouped.push(c);
+    }
+    format!("{grouped} {word}{}", if n == 1 { "" } else { "s" })
+}
+
+fn not_removed(results: &[CleanupItemResult]) -> Vec<usize> {
+    results
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.status != ItemStatus::Succeeded)
+        .map(|(i, _)| i)
+        .collect()
 }
 
 /// Permanently remove the entries named in `preview` from `trash`.
@@ -357,6 +376,7 @@ pub fn empty(
             }
         };
 
+        let not_removed = not_removed(&results);
         progress(TrashProgress {
             preview_id: preview.id.clone(),
             entries_done: i,
@@ -364,6 +384,7 @@ pub fn empty(
             bytes_removed: bytes_done,
             files_removed: files_done,
             current: Some(entry.name.clone()),
+            not_removed: not_removed.clone(),
         });
         let mut walk = Walk::default();
         let mut tick = |w: &Walk| {
@@ -376,6 +397,7 @@ pub fn empty(
                     bytes_removed: bytes_done + w.bytes,
                     files_removed: files_done + w.files,
                     current: Some(entry.name.clone()),
+                    not_removed: not_removed.clone(),
                 });
             }
         };
@@ -428,6 +450,7 @@ pub fn empty(
         bytes_removed: bytes_done,
         files_removed: files_done,
         current: None,
+        not_removed: not_removed(&results),
     });
 
     TrashResult {
@@ -480,6 +503,14 @@ mod tests {
     }
 
     #[test]
+    fn counts_read_with_thousands_separators() {
+        assert_eq!(plural(1, "file"), "1 file");
+        assert_eq!(plural(999, "file"), "999 files");
+        assert_eq!(plural(7282, "file"), "7,282 files");
+        assert_eq!(plural(1_234_567, "item"), "1,234,567 items");
+    }
+
+    #[test]
     fn missing_trash_is_empty() {
         let dir = crate::test_support::sandbox();
         let p = inventory(&dir.path().join(".Trash"), "p".into(), 0).unwrap();
@@ -511,7 +542,11 @@ mod tests {
         let (_d, trash) = fixture();
         let preview = inventory(&trash, "p".into(), 0).unwrap();
         fs::remove_file(trash.join("Installer.dmg")).unwrap();
-        let r = run(&preview, &trash, &AtomicBool::new(false));
+        let mut last = None;
+        let r = empty(&preview, &trash, &AtomicBool::new(false), &mut |p| {
+            last = Some(p)
+        });
+        assert_eq!(last.unwrap().not_removed, [0]);
         assert_eq!(r.record.status, ActionStatus::Partial);
         assert_eq!(r.record.items[0].status, ItemStatus::Skipped);
         assert!(r.record.items[0]
