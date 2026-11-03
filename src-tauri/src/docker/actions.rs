@@ -331,11 +331,37 @@ pub fn inspect(cli: &DockerCli, kind: &str, id: &str) -> Result<String, DockerEr
         _ => return Err(DockerError::InvalidId(kind.chars().take(20).collect())),
     };
     let out = cli.run(&["inspect", "--type", kind, id], Duration::from_secs(20))?;
-    // Re-indent for display; fall back to the raw text.
-    Ok(serde_json::from_str::<serde_json::Value>(&out)
-        .ok()
-        .and_then(|v| serde_json::to_string_pretty(&v).ok())
-        .unwrap_or(out))
+    // Re-indent for display. If it cannot be parsed, show nothing rather than
+    // raw text that could carry unmasked environment values.
+    let mut value: serde_json::Value =
+        serde_json::from_str(&out).map_err(|e| DockerError::Parse(e.to_string()))?;
+    mask_environment(&mut value);
+    serde_json::to_string_pretty(&value).map_err(|e| DockerError::Parse(e.to_string()))
+}
+
+/// Hide the values of `Config.Env` entries. Containers often get database
+/// passwords and API keys this way, and the details panel can be shared in a
+/// screenshot. Variable names stay visible.
+fn mask_environment(value: &mut serde_json::Value) {
+    let objects: Vec<&mut serde_json::Value> = match value {
+        serde_json::Value::Array(items) => items.iter_mut().collect(),
+        other => vec![other],
+    };
+    for obj in objects {
+        let Some(env) = obj
+            .pointer_mut("/Config/Env")
+            .and_then(serde_json::Value::as_array_mut)
+        else {
+            continue;
+        };
+        for entry in env {
+            if let Some((name, val)) = entry.as_str().and_then(|e| e.split_once('=')) {
+                if !val.is_empty() {
+                    *entry = serde_json::Value::String(format!("{name}=(hidden)"));
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -463,6 +489,20 @@ pub fn diagnostics(o: &DockerOverview, vm_disk: Option<(u64, u64)>) -> Vec<Diagn
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn inspect_output_hides_environment_values() {
+        let mut v = serde_json::json!([{
+            "Id": "abc",
+            "Config": {"Env": ["POSTGRES_PASSWORD=hunter2", "PATH=/usr/bin", "EMPTY="]}
+        }]);
+        mask_environment(&mut v);
+        assert_eq!(
+            v[0]["Config"]["Env"],
+            serde_json::json!(["POSTGRES_PASSWORD=(hidden)", "PATH=(hidden)", "EMPTY="])
+        );
+    }
+
     use super::*;
     use crate::docker::tests::sample;
 
