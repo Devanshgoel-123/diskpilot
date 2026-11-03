@@ -3,6 +3,7 @@ import {
   Bot,
   Box,
   Code2,
+  Copy,
   FileStack,
   FolderTree,
   Gauge,
@@ -107,6 +108,7 @@ export function Sidebar() {
   const analyze: NavItem[] = [
     { id: "explorer", label: "Storage", icon: FolderTree },
     { id: "large-files", label: "Large Files", icon: FileStack },
+    { id: "duplicates", label: "Duplicates", icon: Copy },
     { id: "applications", label: "Applications", icon: AppWindow },
   ];
   const cleanUp: NavItem[] = [

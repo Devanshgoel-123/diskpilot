@@ -25,6 +25,7 @@ export type PageId =
   | "docker"
   | "developer"
   | "large-files"
+  | "duplicates"
   | "history"
   | "settings";
 

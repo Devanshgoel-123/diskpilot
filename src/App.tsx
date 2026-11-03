@@ -9,6 +9,7 @@ import { ApplicationsPage } from "@/features/applications/ApplicationsPage";
 import { AssistantPage } from "@/features/assistant/AssistantPage";
 import { DeveloperToolsPage } from "@/features/developer/DeveloperToolsPage";
 import { DockerPage } from "@/features/docker/DockerPage";
+import { DuplicatesPage } from "@/features/duplicates/DuplicatesPage";
 import { ExplorerPage } from "@/features/explorer/ExplorerPage";
 import { HistoryPage } from "@/features/history/HistoryPage";
 import { LargeFilesPage } from "@/features/large-files/LargeFilesPage";
@@ -27,6 +28,7 @@ const PAGES: Record<PageId, () => React.JSX.Element> = {
   docker: DockerPage,
   developer: DeveloperToolsPage,
   "large-files": LargeFilesPage,
+  duplicates: DuplicatesPage,
   history: HistoryPage,
   settings: SettingsPage,
 };
