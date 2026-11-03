@@ -538,3 +538,46 @@ export interface AppStorageReport {
   /** False when no scan covers ~/Library; data sizes are then zero. */
   dataScanned: boolean;
 }
+
+// ---- Duplicates ------------------------------------------------------------
+
+export interface DuplicateFile {
+  path: string;
+  modifiedMs: number | null;
+  /** The copy DiskPilot suggests keeping; exactly one per group. */
+  keep: boolean;
+}
+
+export interface DuplicateGroup {
+  /** SHA-256 of the contents. */
+  id: string;
+  name: string;
+  /** Size of each copy. */
+  bytes: number;
+  files: DuplicateFile[];
+  reclaimableBytes: number;
+  /** Some copies are APFS clones that share storage. */
+  sharesStorage: boolean;
+}
+
+export interface DuplicateReport {
+  root: string;
+  minBytes: number;
+  startedAtMs: number;
+  finishedAtMs: number;
+  filesExamined: number;
+  bytesHashed: number;
+  groups: DuplicateGroup[];
+  reclaimableBytes: number;
+  truncated: boolean;
+  cancelled: boolean;
+  unreadable: number;
+}
+
+export interface DuplicateProgress {
+  phase: "listing" | "comparing";
+  filesExamined: number;
+  bytesHashed: number;
+  bytesToHash: number;
+  current: string | null;
+}

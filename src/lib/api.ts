@@ -25,6 +25,8 @@ import type {
   SavedScanInfo,
   DirectoryListing,
   DiskInfo,
+  DuplicateProgress,
+  DuplicateReport,
   ItemDetails,
   ScanFinished,
   ScanProgress,
@@ -72,6 +74,12 @@ export const api = {
   cancelEmptyTrash: () => invoke<boolean>("cancel_empty_trash"),
   openFullDiskAccessSettings: () => invoke<null>("open_full_disk_access_settings"),
 
+  findDuplicates: (minBytes: number) => invoke<DuplicateReport>("find_duplicates", { minBytes }),
+  cancelFindDuplicates: () => invoke<boolean>("cancel_find_duplicates"),
+  getDuplicates: () => invoke<DuplicateReport | null>("get_duplicates"),
+  planDuplicateCleanup: (paths: string[]) =>
+    invoke<CleanupPlan>("plan_duplicate_cleanup", { paths }),
+
   analyzeDevTools: () => invoke<DevToolsReport>("analyze_dev_tools"),
   getDevToolsReport: () => invoke<DevToolsReport | null>("get_dev_tools_report"),
 
@@ -101,6 +109,10 @@ export function onScanFinished(cb: (p: ScanFinished) => void): Promise<UnlistenF
 
 export function onTrashProgress(cb: (p: TrashProgress) => void): Promise<UnlistenFn> {
   return listen<TrashProgress>("trash://progress", (e) => cb(e.payload));
+}
+
+export function onDuplicatesProgress(cb: (p: DuplicateProgress) => void): Promise<UnlistenFn> {
+  return listen<DuplicateProgress>("duplicates://progress", (e) => cb(e.payload));
 }
 
 export function errorMessage(err: unknown): string {
