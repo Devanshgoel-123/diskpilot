@@ -58,11 +58,14 @@
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.72.1",
     "vite": "^6.4.5",
-    "vitest": "^3.2.7"
+    "vitest": "^4.1.12"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild"
-    ]
+    ],
+    "overrides": {
+      "minimatch@<11.0.1": "^11.0.1"
+    }
   }
 }
