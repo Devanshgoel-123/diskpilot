@@ -44,7 +44,7 @@ DiskPilot replaces that process with three steps:
 - **Applications** lists installed apps with the size of each app and the data it keeps in `~/Library` (caches, containers, support files), and the sandbox data left behind by apps that are no longer installed. Leftovers are reported for review in Finder and never removed automatically, since they can contain documents.
 - **Storage > Largest items** lists the 500 largest files and the folders where data accumulates. Size alone is never treated as a reason to delete.
 - **Duplicates** finds files with identical contents (same size, then SHA-256). Hidden folders, `~/Library`, app and document bundles, dependency folders and package caches are skipped, hard links are counted once, and APFS clones are flagged because removing one frees little or no space. You choose the copy that stays; one copy of every set always stays, and each copy is compared byte for byte with it again just before it is moved to the Trash.
-- A **menu bar item** shows the space available on the startup disk and opens Cleanup, Duplicates or Empty Trash. Closing the window keeps it running; Quit ends the app.
+- A **menu bar item** shows the space available on the startup disk, with an icon whose ring fills as the disk does, and opens Cleanup, Duplicates or Empty Trash. Closing the window keeps it running; Quit ends the app.
 
 ### Classification
 

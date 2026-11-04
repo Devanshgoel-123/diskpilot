@@ -10,7 +10,7 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
-use crate::disk;
+use crate::{disk, tray_icon};
 
 /// Asks the window to open a page or the Empty Trash window.
 pub const EVENT_TRAY_NAVIGATE: &str = "tray://navigate";
@@ -32,7 +32,8 @@ pub fn format_bytes(bytes: u64) -> String {
     format!("{value:.digits$} {}", UNITS[unit - 1])
 }
 
-fn labels(home: &Path) -> (String, String) {
+/// Menu bar title, menu detail line, and the share of the disk in use.
+fn labels(home: &Path) -> (String, String, f64) {
     match disk::disk_info(home) {
         Ok(d) => (
             format_bytes(d.available_bytes),
@@ -41,9 +42,27 @@ fn labels(home: &Path) -> (String, String) {
                 format_bytes(d.available_bytes),
                 format_bytes(d.total_bytes)
             ),
+            used_share(d.available_bytes, d.total_bytes),
         ),
-        Err(_) => ("—".into(), "Disk capacity unavailable".into()),
+        Err(_) => ("—".into(), "Disk capacity unavailable".into(), 0.0),
     }
+}
+
+/// Share of the disk that is not available, matching the "available" figure.
+fn used_share(available: u64, total: u64) -> f64 {
+    if total == 0 {
+        return 0.0;
+    }
+    1.0 - available.min(total) as f64 / total as f64
+}
+
+/// Whole percent steps, so the icon is redrawn only when it would change.
+fn icon_step(used: f64) -> u32 {
+    (used * 100.0).round() as u32
+}
+
+fn gauge(used: f64) -> Image<'static> {
+    Image::new_owned(tray_icon::render(used), tray_icon::SIZE, tray_icon::SIZE)
 }
 
 pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
@@ -55,7 +74,7 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
 }
 
 pub fn install<R: Runtime>(app: &AppHandle<R>, home: PathBuf) -> tauri::Result<()> {
-    let (title, detail) = labels(&home);
+    let (title, detail, used) = labels(&home);
     let capacity = MenuItem::with_id(app, "capacity", detail, false, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", "Open DiskPilot", true, None::<&str>)?;
     let cleanup = MenuItem::with_id(
@@ -83,9 +102,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>, home: PathBuf) -> tauri::Result<(
     )?;
 
     let tray = TrayIconBuilder::with_id("diskpilot")
-        .icon(Image::from_bytes(include_bytes!(
-            "../icons/tray-template.png"
-        ))?)
+        .icon(gauge(used))
         .icon_as_template(true)
         .title(&title)
         .tooltip("DiskPilot: available space")
@@ -103,13 +120,19 @@ pub fn install<R: Runtime>(app: &AppHandle<R>, home: PathBuf) -> tauri::Result<(
         .build(app)?;
 
     // statfs is a single cheap system call; refresh it in the background.
+    let mut shown = icon_step(used);
     std::thread::spawn(move || loop {
         std::thread::sleep(REFRESH);
-        let (title, detail) = labels(&home);
+        let (title, detail, used) = labels(&home);
         if tray.set_title(Some(&title)).is_err() {
             break; // The app is shutting down.
         }
         let _ = capacity.set_text(detail);
+        if icon_step(used) != shown {
+            shown = icon_step(used);
+            let _ = tray.set_icon(Some(gauge(used)));
+            let _ = tray.set_icon_as_template(true);
+        }
     });
     Ok(())
 }
@@ -124,5 +147,13 @@ mod tests {
         assert_eq!(format_bytes(1_500), "1.5 KB");
         assert_eq!(format_bytes(115_400_000_000), "115 GB");
         assert_eq!(format_bytes(23_160_000_000), "23.2 GB");
+    }
+
+    #[test]
+    fn used_share_follows_available_space() {
+        assert_eq!(used_share(25, 100), 0.75);
+        assert_eq!(used_share(0, 0), 0.0);
+        assert_eq!(used_share(200, 100), 0.0);
+        assert_eq!(icon_step(0.734), 73);
     }
 }
