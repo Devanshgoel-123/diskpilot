@@ -11,6 +11,7 @@ import { pickStartHere, topConsumers } from "@/lib/analysis";
 import { formatBytes, formatCount, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 
+import { AssistantPrompt } from "./AssistantPrompt";
 import { CategoryList } from "./CategoryList";
 import { LocationList } from "./LocationList";
 import { PrivateFoldersNotice } from "./PrivateFoldersNotice";
@@ -164,6 +165,8 @@ export function OverviewPage() {
               </div>
             </div>
           ) : null}
+
+          {summary ? <AssistantPrompt /> : null}
         </div>
       </div>
     </>

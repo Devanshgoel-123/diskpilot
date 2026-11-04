@@ -41,6 +41,9 @@ function Switch({
   );
 }
 
+/** Anchor the Overview links to. */
+export const ASSISTANT_SETTINGS_ID = "assistant-settings";
+
 export function AssistantSettings() {
   const {
     assistantEnabled,
@@ -86,7 +89,7 @@ export function AssistantSettings() {
   const models = assistantStatus?.models ?? Object.keys(MODEL_LABELS);
 
   return (
-    <Section title="Assistant (optional)">
+    <Section title="Assistant (optional)" id={ASSISTANT_SETTINGS_ID}>
       <Setting
         label="Enable the assistant"
         description="Ask questions about your storage in plain language. Off by default; every other DiskPilot feature works without it."

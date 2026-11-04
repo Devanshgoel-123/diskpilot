@@ -2,9 +2,17 @@ import type * as React from "react";
 
 import { Panel } from "@/components/ui/panel";
 
-export function Section({ title, children }: { title: string; children: React.ReactNode }) {
+export function Section({
+  title,
+  id,
+  children,
+}: {
+  title: string;
+  id?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <section>
+    <section id={id} className="scroll-mt-6">
       <h2 className="mb-2 text-xs font-medium text-muted-foreground">{title}</h2>
       <Panel className="divide-y divide-border">{children}</Panel>
     </section>
