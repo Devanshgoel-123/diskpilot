@@ -3,80 +3,57 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>DiskPilot · Storage intelligence for developers</title>
+    <title>DiskPilot: find out what fills your Mac</title>
     <meta
       name="description"
       content="DiskPilot is a free, open-source Mac app that explains what fills your disk and cleans it up safely: Docker, Xcode, node_modules, build output, editor and AI agent data, with a preview before anything moves."
     />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f5f2" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#151517" />
+    <meta name="theme-color" content="#121316" />
+    <meta name="color-scheme" content="dark light" />
     <script src="/theme.js"></script>
+    <link rel="canonical" href="https://diskpilot.vercel.app/" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="DiskPilot" />
+    <meta property="og:url" content="https://diskpilot.vercel.app/" />
+    <meta property="og:site_name" content="DiskPilot" />
+    <meta property="og:title" content="DiskPilot: your Mac is full. Find out why." />
     <meta
       property="og:description"
-      content="Free, open-source storage intelligence for developers. Know what fills your Mac. Clean it up without guessing."
+      content="Free, open-source storage intelligence for developers. See what Docker, Xcode, node_modules and AI tools left on your Mac, and clean it up without guessing."
     />
-    <meta property="og:image" content="/apple-touch-icon.png" />
+    <meta property="og:image" content="https://diskpilot.vercel.app/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="DiskPilot's Overview showing disk usage by category and cleanup suggestions"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="DiskPilot: your Mac is full. Find out why." />
+    <meta
+      name="twitter:description"
+      content="Free, open-source storage intelligence for developers. Clean up without guessing."
+    />
+    <meta name="twitter:image" content="https://diskpilot.vercel.app/og.png" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   </head>
   <body>
-    <!-- Lucide icons, inlined once and referenced with <use>. -->
     <svg class="sprite" aria-hidden="true">
       <symbol id="i-download" viewBox="0 0 24 24">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
         <path d="m7 10 5 5 5-5" />
         <path d="M12 15V3" />
       </symbol>
-      <symbol id="i-gauge" viewBox="0 0 24 24">
-        <path d="m12 14 4-4" />
-        <path d="M3.34 19a10 10 0 1 1 17.32 0" />
-      </symbol>
       <symbol id="i-folder" viewBox="0 0 24 24">
         <path
           d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
         />
-      </symbol>
-      <symbol id="i-copy" viewBox="0 0 24 24">
-        <rect width="14" height="14" x="8" y="8" rx="2" />
-        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-      </symbol>
-      <symbol id="i-app" viewBox="0 0 24 24">
-        <rect x="2" y="4" width="20" height="16" rx="2" />
-        <path d="M10 4v4M2 8h20M6 4v4" />
-      </symbol>
-      <symbol id="i-code" viewBox="0 0 24 24">
-        <path d="m16 18 6-6-6-6M8 6l-6 6 6 6" />
-      </symbol>
-      <symbol id="i-box" viewBox="0 0 24 24">
-        <path
-          d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"
-        />
-        <path d="m3.3 7 8.7 5 8.7-5M12 22V12" />
-      </symbol>
-      <symbol id="i-sparkle" viewBox="0 0 24 24">
-        <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
-        <path d="M19 15v4M17 17h4" />
-      </symbol>
-      <symbol id="i-history" viewBox="0 0 24 24">
-        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-        <path d="M3 3v5h5M12 7v5l4 2" />
-      </symbol>
-      <symbol id="i-sliders" viewBox="0 0 24 24">
-        <path d="M20 7h-9M14 17H5" />
-        <circle cx="17" cy="17" r="3" />
-        <circle cx="7" cy="7" r="3" />
       </symbol>
       <symbol id="i-refresh" viewBox="0 0 24 24">
         <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
         <path d="M21 3v5h-5" />
         <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
         <path d="M8 16H3v5" />
-      </symbol>
-      <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></symbol>
-      <symbol id="i-trash" viewBox="0 0 24 24">
-        <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
       </symbol>
       <symbol id="i-undo" viewBox="0 0 24 24">
         <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
@@ -88,12 +65,10 @@
         />
         <path d="m9 12 2 2 4-4" />
       </symbol>
-      <symbol id="i-terminal" viewBox="0 0 24 24"><path d="m4 17 6-6-6-6M12 19h8" /></symbol>
       <symbol id="i-lock" viewBox="0 0 24 24">
         <rect width="18" height="11" x="3" y="11" rx="2" />
         <path d="M7 11V7a5 5 0 0 1 10 0v4" />
       </symbol>
-      <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" /></symbol>
       <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14" /></symbol>
       <symbol id="i-github" viewBox="0 0 16 16">
         <path
@@ -107,76 +82,84 @@
     <a class="skip" href="#main">Skip to content</a>
 
     <header class="nav" id="top">
-      <div class="nav-inner">
-        <a class="brand" href="#top" aria-label="DiskPilot home">
-          <img src="/logo.svg" alt="" width="26" height="26" />
+      <div class="wrap nav-inner">
+        <a class="brand" href="#top" aria-label="DiskPilot, back to top">
+          <img src="/logo.svg" alt="" width="24" height="24" />
           <span>DiskPilot</span>
         </a>
-        <nav class="nav-links" aria-label="Sections">
+        <nav class="nav-links" id="nav-links" aria-label="Sections">
           <a href="#demo">Demo</a>
-          <a href="#features">Features</a>
+          <a href="#tools">Tools</a>
           <a href="#safety">Safety</a>
-          <a href="#compare">Compare</a>
+          <a href="#privacy">Privacy</a>
           <a href="#install">Install</a>
           <a href="#faq">FAQ</a>
         </nav>
         <div class="nav-actions">
           <button
-            class="icon-btn theme-toggle"
+            class="icon-btn"
             id="theme-toggle"
             type="button"
-            aria-label="Theme: system"
+            aria-label="Switch to light theme"
           >
-            <svg data-icon="system" viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="3" y="4" width="18" height="12" rx="2" />
-              <path d="M8 20h8M12 16v4" />
-            </svg>
-            <svg data-icon="light" viewBox="0 0 24 24" aria-hidden="true">
+            <svg class="when-dark" viewBox="0 0 24 24" aria-hidden="true">
               <circle cx="12" cy="12" r="4" />
               <path
                 d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"
               />
             </svg>
-            <svg data-icon="dark" viewBox="0 0 24 24" aria-hidden="true">
+            <svg class="when-light" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
             </svg>
           </button>
           <a
-            class="btn btn-quiet btn-sm"
+            class="btn btn-ghost btn-sm hide-sm"
             href="https://github.com/Devanshgoel-123/diskpilot"
             data-track="github"
             data-where="nav"
             target="_blank"
             rel="noopener"
           >
-            <svg class="ico" aria-hidden="true"><use href="#i-github" /></svg>
-            <span class="hide-sm">GitHub</span>
+            <svg class="ico" aria-hidden="true"><use href="#i-github" /></svg>GitHub
           </a>
           <a
-            class="btn btn-primary btn-sm hide-xs"
+            class="btn btn-primary btn-sm"
             href="https://github.com/Devanshgoel-123/diskpilot/releases/latest/download/DiskPilot.dmg"
             data-track="download"
             data-where="nav"
             >Download</a
           >
+          <button
+            class="icon-btn menu-btn"
+            id="menu-btn"
+            type="button"
+            aria-expanded="false"
+            aria-controls="nav-links"
+            aria-label="Open menu"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+          </button>
         </div>
       </div>
     </header>
 
     <main id="main">
-      <!-- Hero -->
-      <section class="hero">
+      <!-- 1. Hero -->
+      <section class="hero" aria-labelledby="hero-title">
         <div class="wrap">
-          <div class="hero-copy">
-            <h1>Find the gigabytes hiding in your Mac.</h1>
-            <div class="hero-side">
-              <p class="lede">
-                Understand your developer storage. Find forgotten build artifacts. Reclaim space
-                without risking your work.
-              </p>
+          <p class="hero-tag">
+            <span class="dot-live" aria-hidden="true"></span>Free and open source for macOS
+          </p>
+          <h1 id="hero-title">Your Mac is full.<br />Let's find out why.</h1>
+          <div class="hero-row">
+            <p class="lede">
+              DiskPilot shows what's eating your storage, finds what Docker, Xcode, node_modules and
+              your AI tools left behind, and cleans it up only after you've reviewed it.
+            </p>
+            <div class="hero-cta">
               <div class="cta-row">
                 <a
-                  class="btn btn-primary"
+                  class="btn btn-primary btn-lg"
                   href="https://github.com/Devanshgoel-123/diskpilot/releases/latest/download/DiskPilot.dmg"
                   data-track="download"
                   data-where="hero"
@@ -185,7 +168,7 @@
                   Download for Mac
                 </a>
                 <a
-                  class="btn btn-quiet"
+                  class="btn btn-ghost btn-lg"
                   href="https://github.com/Devanshgoel-123/diskpilot"
                   data-track="github"
                   data-where="hero"
@@ -193,234 +176,229 @@
                   rel="noopener"
                 >
                   <svg class="ico" aria-hidden="true"><use href="#i-github" /></svg>
-                  View on GitHub
+                  View source
                 </a>
               </div>
               <p class="fine">
-                Free and MIT licensed. macOS 11 or later, Apple silicon and Intel.
-                <a href="#install">Install notes</a>
+                MIT licensed. macOS 11 or later, Apple silicon and Intel.
+                <span class="release" data-release hidden></span>
               </p>
             </div>
           </div>
         </div>
 
-        <!-- The app's Overview, rebuilt in HTML with example data. -->
         <div class="wrap wrap-wide">
-          <figure class="stage">
-            <div
-              class="app"
-              id="hero-app"
-              role="group"
-              aria-label="DiskPilot Overview with example data"
-            >
-              <aside class="app-side" aria-hidden="true">
-                <div class="lights"><i></i><i></i><i></i></div>
-                <div class="app-brand">
-                  <img src="/logo.svg" alt="" width="18" height="18" />DiskPilot
-                </div>
-                <ul class="app-nav">
-                  <li class="on">
-                    <svg><use href="#i-gauge" /></svg>Overview
-                  </li>
-                  <li class="app-nav-h">Analyze</li>
-                  <li>
-                    <svg><use href="#i-folder" /></svg>Storage
-                  </li>
-                  <li>
-                    <svg><use href="#i-copy" /></svg>Duplicates
-                  </li>
-                  <li>
-                    <svg><use href="#i-app" /></svg>Applications
-                  </li>
-                  <li>
-                    <svg><use href="#i-code" /></svg>Developer Tools
-                  </li>
-                  <li>
-                    <svg><use href="#i-box" /></svg>Docker
-                  </li>
-                  <li class="app-nav-h">Clean up</li>
-                  <li>
-                    <svg><use href="#i-sparkle" /></svg>Cleanup<b>62</b>
-                  </li>
-                  <li>
-                    <svg><use href="#i-history" /></svg>History
-                  </li>
-                </ul>
-                <div class="app-side-foot">
-                  <span>Scanned 4 minutes ago</span>
-                  <code>~</code>
-                </div>
-              </aside>
-              <div class="app-main">
-                <div class="app-head">
-                  <strong>Overview</strong>
-                  <span class="app-btn" aria-hidden="true"
-                    ><svg><use href="#i-refresh" /></svg>Rescan</span
-                  >
-                </div>
-                <div class="app-scroll">
-                  <div class="ov-top">
-                    <div>
-                      <p class="a-label">Startup disk</p>
-                      <p class="ov-used"><b>130 GB</b> used of 245 GB</p>
-                    </div>
-                    <dl class="ov-stats">
-                      <div>
-                        <dt>Scanned</dt>
-                        <dd><span class="tab-num">68.4 GB</span></dd>
-                      </div>
-                      <div>
-                        <dt>Files</dt>
-                        <dd><span class="tab-num">912,408</span></dd>
-                      </div>
-                      <div>
-                        <dt>Likely recoverable</dt>
-                        <dd class="good">
-                          <span class="tab-num" id="hero-recoverable">26.5 GB</span>
-                        </dd>
-                      </div>
-                    </dl>
-                  </div>
-                  <div
-                    class="strip"
-                    id="hero-strip"
-                    role="list"
-                    aria-label="Disk usage by category"
-                  ></div>
-                  <div
-                    class="legend"
-                    id="hero-legend"
-                    role="group"
-                    aria-label="Choose a category"
-                  ></div>
-                  <div class="ov-grid">
-                    <section class="ov-col">
-                      <h3 class="a-h">Start here</h3>
-                      <p class="a-sub" id="hero-start-sub">
-                        The largest items DiskPilot can explain and clean up.
-                      </p>
-                      <ul class="start" id="hero-start" aria-live="polite"></ul>
-                    </section>
-                    <section class="ov-col">
-                      <h3 class="a-h">Where your space goes</h3>
-                      <p class="a-sub">68.4 GB in your home folder</p>
-                      <ul class="where" id="hero-where"></ul>
-                    </section>
-                  </div>
-                </div>
-              </div>
+          <figure class="shot shot-hero">
+            <div class="window">
+              <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+              <picture>
+                <source
+                  media="(max-width: 640px)"
+                  srcset="/shots/overview-m-dark.jpg"
+                  data-shot-m="overview"
+                  width="1140"
+                  height="600"
+                />
+                <img
+                  data-shot="overview"
+                  src="/shots/overview-dark.jpg"
+                  width="2200"
+                  height="1375"
+                  alt="DiskPilot's Overview: 130 GB used of 245 GB, a bar of usage by category, cleanup suggestions such as Rust build output (11.0 GB, likely safe) and a breakdown of where space goes."
+                  fetchpriority="high"
+                />
+              </picture>
             </div>
-            <figcaption>
-              The Overview, rebuilt in HTML with example data. Choose a category to see what
-              DiskPilot would suggest in it.
-            </figcaption>
+            <figcaption>The real app. Numbers come from a sample scan, not your Mac.</figcaption>
           </figure>
         </div>
+      </section>
 
-        <div class="wrap">
-          <div class="tools" aria-label="Tools DiskPilot understands">
-            <p>Knows where these keep their data</p>
-            <ul>
-              <li>Docker</li>
-              <li>Xcode</li>
-              <li>Node.js</li>
-              <li>pnpm</li>
-              <li>Yarn</li>
-              <li>Bun</li>
-              <li>Rust</li>
-              <li>Python</li>
-              <li>Hugging Face</li>
-              <li>Ollama</li>
-              <li>Gradle</li>
-              <li>Homebrew</li>
-              <li>Cursor</li>
-              <li>VS Code</li>
-              <li>Claude Code</li>
-              <li>Codex</li>
-              <li>GitHub Copilot</li>
-            </ul>
+      <!-- 2. The problem -->
+      <section class="section problem" id="problem" aria-labelledby="problem-title">
+        <div class="wrap problem-grid">
+          <div class="problem-copy">
+            <h2 id="problem-title">macOS says “System Data.” That's all it says.</h2>
+            <p>
+              On a developer's Mac, that grey block is build output, package caches, Docker's disk
+              image, simulator runtimes and editor data for projects you deleted months ago. None of
+              it is labeled, so none of it feels safe to touch.
+            </p>
+            <p>DiskPilot names every part of it, and tells you which parts you'd never miss.</p>
+          </div>
+
+          <div class="resolve" id="resolve" data-state="before">
+            <div class="resolve-row">
+              <p class="resolve-label">What Storage settings shows</p>
+              <div class="disk disk-mac" aria-hidden="true">
+                <span class="seg-sys" style="--w: 68.4">System Data</span>
+                <span class="seg-apps" style="--w: 24">Apps</span>
+                <span class="seg-docs" style="--w: 37.6"></span>
+                <span class="seg-free" style="--w: 115"></span>
+              </div>
+            </div>
+            <div class="resolve-row">
+              <p class="resolve-label">What DiskPilot shows</p>
+              <div class="disk disk-dp" id="resolve-bar" role="img" aria-label=""></div>
+              <ul class="resolve-legend" id="resolve-legend"></ul>
+            </div>
+            <p class="note">Illustration with sample data.</p>
           </div>
         </div>
       </section>
 
-      <!-- Interactive cleanup demonstration -->
-      <section class="section" id="demo">
+      <!-- 3. Demonstration -->
+      <section class="section demo" id="demo" aria-labelledby="demo-title">
         <div class="wrap">
           <div class="head">
-            <h2>Every suggestion comes with its reasons.</h2>
+            <h2 id="demo-title">See what DiskPilot finds.</h2>
             <p>
-              Select an item to see the exact path, why DiskPilot flagged it, how much space it
-              frees and what happens after. Then walk through the review step DiskPilot puts before
-              every cleanup.
+              Three steps, the same order every time. Try them here with sample data; nothing on
+              your Mac is read or changed.
             </p>
           </div>
-        </div>
-        <div class="wrap wrap-wide">
-          <figure class="stage">
+
+          <ol class="stepper" role="tablist" aria-label="Demonstration steps" id="stepper">
+            <li role="presentation">
+              <button role="tab" id="tab-scan" aria-controls="stage-scan" aria-selected="true">
+                <span class="n">1</span><span><b>Scan</b><small>Measure, read-only</small></span>
+              </button>
+            </li>
+            <li role="presentation">
+              <button
+                role="tab"
+                id="tab-understand"
+                aria-controls="stage-understand"
+                aria-selected="false"
+                tabindex="-1"
+              >
+                <span class="n">2</span
+                ><span><b>Understand</b><small>What it is and who made it</small></span>
+              </button>
+            </li>
+            <li role="presentation">
+              <button
+                role="tab"
+                id="tab-clean"
+                aria-controls="stage-clean"
+                aria-selected="false"
+                tabindex="-1"
+              >
+                <span class="n">3</span
+                ><span><b>Review and clean</b><small>You confirm every item</small></span>
+              </button>
+            </li>
+          </ol>
+
+          <div class="console" id="console">
+            <!-- Stage 1: scan -->
+            <div class="stage" role="tabpanel" id="stage-scan" aria-labelledby="tab-scan">
+              <div class="stage-head">
+                <div>
+                  <p class="k" id="scan-k">Scan</p>
+                  <p class="v"><code>~</code> your home folder</p>
+                </div>
+                <dl class="counters">
+                  <div>
+                    <dt>Files</dt>
+                    <dd id="scan-files">0</dd>
+                  </div>
+                  <div>
+                    <dt>Measured</dt>
+                    <dd id="scan-bytes">0 GB</dd>
+                  </div>
+                  <div>
+                    <dt>Likely recoverable</dt>
+                    <dd class="good" id="scan-rec">0 GB</dd>
+                  </div>
+                </dl>
+              </div>
+              <div class="progress" aria-hidden="true"><span id="scan-progress"></span></div>
+              <ul class="cats" id="scan-cats"></ul>
+              <div class="stage-foot">
+                <p id="scan-status" aria-live="polite">Ready to scan.</p>
+                <div class="stage-actions">
+                  <button type="button" class="btn btn-ghost btn-sm" id="scan-run">
+                    <svg class="ico" aria-hidden="true"><use href="#i-refresh" /></svg>Scan again
+                  </button>
+                  <button type="button" class="btn btn-primary btn-sm" data-goto="understand">
+                    Next: understand it
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Stage 2: understand -->
             <div
-              class="app app-cleanup"
-              id="demo-app"
-              role="group"
-              aria-label="Interactive cleanup demonstration with example data"
+              class="stage stage-understand"
+              role="tabpanel"
+              id="stage-understand"
+              aria-labelledby="tab-understand"
+              hidden
             >
-              <div class="app-main">
-                <div class="app-head">
-                  <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
-                  <strong>Cleanup</strong>
-                  <div class="seg" role="tablist" aria-label="Filter by safety tier" id="demo-tabs">
-                    <button role="tab" aria-selected="true" data-tier="all">All</button>
-                    <button role="tab" aria-selected="false" tabindex="-1" data-tier="safe">
-                      Likely safe
-                    </button>
-                    <button role="tab" aria-selected="false" tabindex="-1" data-tier="review">
-                      Review first
-                    </button>
-                    <button role="tab" aria-selected="false" tabindex="-1" data-tier="keep">
-                      Keep
-                    </button>
-                  </div>
+              <div class="split">
+                <div class="picker" role="listbox" aria-label="Folders found" id="picker"></div>
+                <div class="explain" id="explain" aria-live="polite"></div>
+              </div>
+              <div class="stage-foot">
+                <p>Choose a folder to see what DiskPilot knows about it.</p>
+                <div class="stage-actions">
+                  <button type="button" class="btn btn-primary btn-sm" data-goto="clean">
+                    Next: review and clean
+                  </button>
                 </div>
-                <div class="cl-body">
-                  <div class="cl-table-wrap">
-                    <table class="cl-table">
-                      <caption class="sr-only">
-                        Example cleanup suggestions
-                      </caption>
-                      <thead>
-                        <tr>
-                          <th scope="col" class="c-sel"><span class="sr-only">Select</span></th>
-                          <th scope="col">Name</th>
-                          <th scope="col" class="c-loc">Location</th>
-                          <th scope="col" class="c-size">Size</th>
-                          <th scope="col" class="c-tier">Safety</th>
-                        </tr>
-                      </thead>
-                      <tbody id="demo-rows"></tbody>
-                    </table>
-                  </div>
-                  <aside
-                    class="inspector"
-                    id="demo-inspector"
-                    aria-live="polite"
-                    aria-label="Selected item"
-                  ></aside>
+              </div>
+            </div>
+
+            <!-- Stage 3: review and clean -->
+            <div
+              class="stage stage-clean"
+              role="tabpanel"
+              id="stage-clean"
+              aria-labelledby="tab-clean"
+              hidden
+            >
+              <div class="clean-top">
+                <div
+                  class="seg"
+                  role="radiogroup"
+                  aria-label="Filter by safety tier"
+                  id="tier-filter"
+                >
+                  <button role="radio" aria-checked="true" data-tier="all">All</button>
+                  <button role="radio" aria-checked="false" tabindex="-1" data-tier="safe">
+                    <i class="t-dot safe"></i>Likely safe
+                  </button>
+                  <button role="radio" aria-checked="false" tabindex="-1" data-tier="review">
+                    <i class="t-dot review"></i>Review first
+                  </button>
+                  <button role="radio" aria-checked="false" tabindex="-1" data-tier="keep">
+                    <i class="t-dot keep"></i>Keep
+                  </button>
                 </div>
-                <div class="cl-foot">
-                  <span id="demo-selected">Nothing selected</span>
-                  <button class="a-primary" id="demo-review" type="button" disabled>
+                <p class="clean-note">
+                  <svg aria-hidden="true"><use href="#i-shield" /></svg>Trash first. Every path is
+                  checked again before it moves.
+                </p>
+              </div>
+              <ul class="rows" id="rows" aria-label="Cleanup suggestions"></ul>
+              <div class="stage-foot">
+                <p id="sel-label" aria-live="polite">Nothing selected</p>
+                <div class="stage-actions">
+                  <button type="button" class="btn btn-primary btn-sm" id="review-btn" disabled>
                     Review cleanup…
                   </button>
                 </div>
               </div>
 
-              <!-- Review sheet: the step DiskPilot puts before every cleanup. -->
-              <div class="sheet-scrim" id="demo-sheet" hidden>
+              <!-- The review step DiskPilot puts before every cleanup. -->
+              <div class="sheet-scrim" id="sheet" hidden>
                 <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
-                  <div class="sheet-body" id="sheet-review">
+                  <div id="sheet-review">
                     <h3 id="sheet-title">Review cleanup</h3>
-                    <p class="a-sub">
-                      These paths will move to the Trash. Each one is measured and checked again
-                      just before it moves.
+                    <p class="muted">
+                      These paths move to the Trash. Each one is measured and checked again just
+                      before it moves.
                     </p>
                     <ul class="sheet-list" id="sheet-list"></ul>
                     <div class="sheet-total">
@@ -432,412 +410,435 @@
                       <span>I reviewed these paths</span>
                     </label>
                     <div class="sheet-actions">
-                      <button type="button" class="a-quiet" id="sheet-cancel">Cancel</button>
-                      <button type="button" class="a-primary" id="sheet-go" disabled>
+                      <button type="button" class="btn btn-ghost btn-sm" id="sheet-cancel">
+                        Cancel
+                      </button>
+                      <button type="button" class="btn btn-primary btn-sm" id="sheet-go" disabled>
                         Move to Trash
                       </button>
                     </div>
                   </div>
-                  <div class="sheet-body sheet-done" id="sheet-done" hidden>
+                  <div id="sheet-done" hidden>
                     <span class="done-mark" aria-hidden="true"
                       ><svg><use href="#i-undo" /></svg
                     ></span>
-                    <h3 id="done-title">Moved to the Trash</h3>
-                    <p id="done-text"></p>
-                    <ul class="done-facts">
-                      <li>
-                        <svg aria-hidden="true"><use href="#i-check" /></svg>Nothing was deleted.
-                        Every item can be put back from the Trash.
-                      </li>
-                      <li>
-                        <svg aria-hidden="true"><use href="#i-check" /></svg>The cleanup is recorded
-                        in History with each item's result.
-                      </li>
-                      <li>
-                        <svg aria-hidden="true"><use href="#i-check" /></svg>The space comes back
-                        when you empty the Trash, from the Overview or Cleanup.
-                      </li>
+                    <h3>Moved to the Trash</h3>
+                    <p id="done-text" class="muted"></p>
+                    <ul class="ticks">
+                      <li>Nothing was deleted. Every item can be put back from the Trash.</li>
+                      <li>The cleanup is recorded in History, with each item's result.</li>
+                      <li>The space comes back when you empty the Trash.</li>
                     </ul>
                     <div class="sheet-actions">
-                      <button type="button" class="a-quiet" id="sheet-reset">
-                        Start the demonstration again
+                      <button type="button" class="btn btn-ghost btn-sm" id="sheet-reset">
+                        Start over
                       </button>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-            <figcaption>
-              A demonstration with example data. It runs in this page only and never reads or
-              changes anything on your Mac.
-            </figcaption>
-          </figure>
+          </div>
+          <p class="note">Sample data, running in this page only.</p>
         </div>
       </section>
 
-      <!-- Feature storytelling -->
-      <section class="section stories" id="features">
+      <!-- 4. Developer tools -->
+      <section class="section tools" id="tools" aria-labelledby="tools-title">
+        <div class="wrap">
+          <div class="head head-split">
+            <h2 id="tools-title">It knows where your tools keep their data.</h2>
+            <p>
+              Generic cleaners see folders. DiskPilot sees the tool, the project and the version
+              behind each one, and checks whether any of it is still used.
+            </p>
+          </div>
+        </div>
+        <div class="wrap wrap-wide">
+          <figure class="shot reveal">
+            <div class="window">
+              <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+              <picture>
+                <source
+                  media="(max-width: 640px)"
+                  srcset="/shots/devtools-m-dark.jpg"
+                  data-shot-m="devtools"
+                  width="1140"
+                  height="575"
+                />
+                <img
+                  data-shot="devtools"
+                  src="/shots/devtools-dark.jpg"
+                  width="2000"
+                  height="1250"
+                  loading="lazy"
+                  alt="DiskPilot's Developer Tools page: Rust 12.5 GB, Cursor 8.3 GB with 81 workspace folders for projects that no longer exist, Node.js 6.4 GB, Claude Code 1.6 GB with superseded versions, and a check for credentials in AI transcripts."
+                />
+              </picture>
+            </div>
+            <figcaption>Developer Tools in the real app, with sample data.</figcaption>
+          </figure>
+        </div>
+        <div class="wrap">
+          <div class="index">
+            <div>
+              <h3>Containers</h3>
+              <ul>
+                <li>Docker Desktop disk image</li>
+                <li>Images, containers and build cache, sized by Docker itself</li>
+                <li>OrbStack and Colima</li>
+              </ul>
+            </div>
+            <div>
+              <h3>Xcode</h3>
+              <ul>
+                <li><code>DerivedData</code>, matched to its workspace</li>
+                <li>Archives and device support</li>
+                <li>Simulator runtimes and devices</li>
+              </ul>
+            </div>
+            <div>
+              <h3>JavaScript</h3>
+              <ul>
+                <li><code>node_modules</code> in projects untouched for months</li>
+                <li>npm, pnpm, Yarn and Bun caches</li>
+                <li>Next.js build output, nvm versions</li>
+              </ul>
+            </div>
+            <div>
+              <h3>Rust, Python, Java</h3>
+              <ul>
+                <li><code>target/</code>, Cargo registry, rustup toolchains</li>
+                <li>Virtual environments and <code>__pycache__</code></li>
+                <li>Gradle, Maven, CocoaPods and the Android SDK</li>
+              </ul>
+            </div>
+            <div>
+              <h3>Editors</h3>
+              <ul>
+                <li>Cursor and VS Code workspace storage for deleted projects</li>
+                <li>Extensions, logs and downloaded updates</li>
+                <li>JetBrains caches</li>
+              </ul>
+            </div>
+            <div>
+              <h3>AI tools</h3>
+              <ul>
+                <li>Older Claude Code versions, Codex, Gemini CLI, Copilot</li>
+                <li>Ollama and LM Studio models no one uses</li>
+                <li>Hugging Face cache, and Homebrew downloads</li>
+              </ul>
+            </div>
+          </div>
+          <aside class="callout">
+            <svg aria-hidden="true"><use href="#i-lock" /></svg>
+            <p>
+              <b>Credentials in AI transcripts.</b> Claude Code, Codex CLI and Gemini CLI keep every
+              conversation on disk, including keys that were pasted or printed. DiskPilot can check
+              them for well-known credential formats. The check runs offline and shows only a masked
+              form of each value.
+            </p>
+          </aside>
+        </div>
+      </section>
+
+      <!-- 5. Explainable storage intelligence -->
+      <section class="section explain-sec" id="explainable" aria-labelledby="explain-title">
+        <div class="wrap anatomy">
+          <div class="anatomy-copy">
+            <h2 id="explain-title">A name, a rule and a reason for every folder.</h2>
+            <p>
+              A parallel Rust scanner measures what each folder really occupies on disk. Then a
+              classifier names it and says why. Every rule can be read in the source.
+            </p>
+            <ul class="plain">
+              <li>Stays on one volume and never follows symbolic links</li>
+              <li>Counts hard links once</li>
+              <li>Shows what it doesn't understand as Unknown, and never suggests it</li>
+            </ul>
+          </div>
+
+          <div class="specimen reveal" aria-label="Example: how DiskPilot describes a folder">
+            <div class="spec-head">
+              <span
+                ><svg aria-hidden="true"><use href="#i-folder" /></svg>DerivedData</span
+              >
+              <b>31.7 GB</b>
+            </div>
+            <code class="spec-path">~/Library/Developer/Xcode/DerivedData</code>
+            <dl class="spec-rows">
+              <div>
+                <dt>Category</dt>
+                <dd><i class="sw" style="--c: var(--cat-build)"></i>Build artifacts</dd>
+              </div>
+              <div>
+                <dt>Rule</dt>
+                <dd><code>xcode.derived-data</code></dd>
+              </div>
+              <div>
+                <dt>Confidence</dt>
+                <dd>High</dd>
+              </div>
+              <div>
+                <dt>What it is</dt>
+                <dd>
+                  Build products, indexes and logs for each project Xcode has opened. Xcode
+                  recreates them on the next build.
+                </dd>
+              </div>
+              <div>
+                <dt>Suggestion</dt>
+                <dd>
+                  <span class="badge safe"><i></i>Likely safe</span>
+                </dd>
+              </div>
+            </dl>
+            <p class="note">Example.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. Safety -->
+      <section class="section safety" id="safety" aria-labelledby="safety-title">
         <div class="wrap">
           <div class="head">
-            <h2>Built around how a developer's disk actually fills up.</h2>
+            <h2 id="safety-title">Your storage. Your decision.</h2>
             <p>
-              Generic cleaners see folders. DiskPilot sees the project, the tool and the version
-              that created them, and checks whether any of it is still used.
+              DiskPilot never calls something safe because it's large or old. Every cleanup goes
+              through the same steps, and the one in the middle is you.
             </p>
           </div>
 
-          <article class="story">
-            <div class="story-copy">
-              <h3>Storage intelligence, not just sizes</h3>
-              <p>
-                A parallel Rust scanner measures what each folder really occupies on disk, and a
-                classifier names it: one of eleven categories, the rule that matched, a confidence
-                and a sentence on what the data is. You see why
-                <code>~/Library/Developer</code> is 30 GB, not only that it is.
-              </p>
-              <ul class="facts">
-                <li>Stays on one volume and never follows symbolic links</li>
-                <li>Hard links counted once</li>
-                <li>Every rule can be read in the source</li>
-              </ul>
-            </div>
-            <div class="frag frag-class" aria-label="Example: how DiskPilot describes a folder">
-              <div class="f-row f-head">
-                <span
-                  ><svg aria-hidden="true"><use href="#i-folder" /></svg>DerivedData</span
-                >
-                <b class="tab-num">31.7 GB</b>
-              </div>
-              <code class="f-path">~/Library/Developer/Xcode/DerivedData</code>
-              <div class="class-card">
-                <p class="class-meta">
-                  <i style="--c: var(--cat-build)"></i>Build artifacts<span>High confidence</span>
-                </p>
-                <p class="class-title">Xcode derived data</p>
-                <p>
-                  Build products, indexes and logs for each project Xcode has opened. Xcode
-                  recreates them on the next build, which takes longer the first time.
-                </p>
-                <code class="class-rule">rule: xcode.derived-data</code>
-              </div>
-            </div>
-          </article>
+          <ol class="flow" aria-label="The cleanup workflow">
+            <li>
+              <b>Scan</b>
+              <span>Read-only. Nothing changes.</span>
+            </li>
+            <li>
+              <b>Suggest</b>
+              <span>A tier, the reason and the risk for each item.</span>
+            </li>
+            <li class="gate">
+              <b>You review</b>
+              <span>The exact paths and space, confirmed by you.</span>
+            </li>
+            <li>
+              <b>Check again</b>
+              <span>Each path is re-checked just before it moves.</span>
+            </li>
+            <li>
+              <b>Trash</b>
+              <span>Recoverable until you empty the Trash.</span>
+            </li>
+            <li>
+              <b>History</b>
+              <span>Every action and its result is recorded.</span>
+            </li>
+          </ol>
 
-          <article class="story">
-            <div class="story-copy">
-              <h3>Docker, measured by Docker</h3>
+          <div class="tiers">
+            <div>
+              <span class="badge safe"><i></i>Likely safe</span>
               <p>
-                Images, containers and build cache, with sizes from Docker's own report and the
-                virtual disk that holds them. Every action shows the exact command before it runs,
-                and checks Docker's state again just before it does.
+                Data the tool rebuilds on its own: package caches, build output, app caches, logs.
               </p>
-              <ul class="facts">
-                <li>Volumes are never removed</li>
-                <li>No force flags, no broad prunes</li>
-                <li>Running containers are never touched</li>
-              </ul>
             </div>
-            <div class="frag frag-docker" aria-label="Example: a Docker action preview">
-              <p class="a-label">Exact command, shown before it runs</p>
-              <code class="cmd"
-                ><svg aria-hidden="true"><use href="#i-terminal" /></svg>docker builder prune --all
-                --force</code
-              >
-              <ul class="f-list">
-                <li>
-                  <span><i class="dot" style="--c: var(--tier-safe)"></i>Unused build cache</span
-                  ><b class="tab-num">3.1 GB</b>
-                </li>
-                <li>
-                  <span
-                    ><i class="dot" style="--c: var(--tier-review)"></i>Images no container
-                    uses</span
-                  ><b class="tab-num">1.8 GB</b>
-                </li>
-                <li class="muted">
-                  <span
-                    ><svg aria-hidden="true"><use href="#i-lock" /></svg>Volumes, never
-                    removed</span
-                  ><b class="tab-num">2.4 GB</b>
-                </li>
-              </ul>
+            <div>
+              <span class="badge review"><i></i>Review first</span>
+              <p>
+                Probably unused, but something may depend on it: data for deleted projects, old
+                versions, stale backups.
+              </p>
             </div>
-          </article>
+            <div>
+              <span class="badge keep"><i></i>Keep</span>
+              <p>
+                Important, or not understood well enough: conversation history, sign-in data,
+                settings, Docker volumes, your own files.
+              </p>
+            </div>
+          </div>
+        </div>
 
-          <article class="story">
-            <div class="story-copy">
-              <h3>Artifacts from projects you deleted</h3>
-              <p>
-                Editors, Xcode and coding agents keep data for every project they have opened, long
-                after the project is gone. DiskPilot reads where each folder came from and checks
-                that the project still exists on disk.
-              </p>
-              <ul class="facts">
-                <li>Cursor and VS Code workspace storage</li>
-                <li>Xcode DerivedData, matched to its workspace</li>
-                <li>Dependency folders in projects untouched for months</li>
-              </ul>
+        <div class="wrap wrap-wide">
+          <figure class="shot shot-crop reveal">
+            <div class="window">
+              <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+              <picture>
+                <source
+                  media="(max-width: 640px)"
+                  srcset="/shots/cleanup-m-dark.jpg"
+                  data-shot-m="cleanup"
+                  width="1140"
+                  height="410"
+                />
+                <img
+                  data-shot="cleanup"
+                  src="/shots/cleanup-dark.jpg"
+                  width="2000"
+                  height="691"
+                  loading="lazy"
+                  alt="DiskPilot's Cleanup page: tabs for Likely safe 23.2 GB, Review first 10.3 GB and Keep 11.7 GB, a note that every path is re-checked before anything happens, and selected items such as Rust build output and application caches."
+                />
+              </picture>
             </div>
-            <div class="frag" aria-label="Example: data left behind by deleted projects">
-              <ul class="f-list f-paths">
-                <li>
-                  <span><code>~/code/checkout-v1</code><em>Project folder missing</em></span>
-                  <b class="tab-num">2.9 GB</b>
-                </li>
-                <li>
-                  <span><code>~/code/landing-2024</code><em>Project folder missing</em></span>
-                  <b class="tab-num">1.1 GB</b>
-                </li>
-                <li>
-                  <span
-                    ><code>~/code/old-dashboard/node_modules</code
-                    ><em>Manifest unchanged for 14 months</em></span
-                  >
-                  <b class="tab-num">1.4 GB</b>
-                </li>
-                <li>
-                  <span><code>~/code/spike-grpc</code><em>Project folder missing</em></span>
-                  <b class="tab-num">640 MB</b>
-                </li>
-              </ul>
-            </div>
-          </article>
+            <figcaption>Cleanup in the real app, with sample data.</figcaption>
+          </figure>
+        </div>
 
-          <article class="story">
-            <div class="story-copy">
-              <h3>AI coding agents and local models</h3>
-              <p>
-                Claude Code, Codex, Cursor and Copilot leave versions, update downloads, logs and
-                backups behind. Ollama and LM Studio keep model layers no model uses any more.
-                DiskPilot finds them and never suggests your conversation history.
-              </p>
-              <ul class="facts">
-                <li>The version in use is never marked</li>
-                <li>Checks agent transcripts for pasted API keys, shown masked</li>
-              </ul>
-            </div>
-            <div class="frag" aria-label="Example: agent versions on disk">
-              <p class="a-label">
-                Claude Code versions in <code>~/.local/share/claude/versions</code>
-              </p>
-              <ul class="f-list">
-                <li>
-                  <span><code>2.1.316</code><em class="in-use">In use</em></span
-                  ><b class="tab-num">310 MB</b>
-                </li>
-                <li>
-                  <span><code>2.1.314</code><em>Older version</em></span
-                  ><b class="tab-num">279 MB</b>
-                </li>
-                <li>
-                  <span><code>2.1.312</code><em>Older version</em></span
-                  ><b class="tab-num">276 MB</b>
-                </li>
-              </ul>
-              <ul class="f-list f-sep">
-                <li>
-                  <span>Cursor downloaded update<em>Installer</em></span
-                  ><b class="tab-num">1.6 GB</b>
-                </li>
-                <li>
-                  <span>Ollama layers no model uses<em>Leftover</em></span
-                  ><b class="tab-num">4.1 GB</b>
-                </li>
-              </ul>
-            </div>
-          </article>
-
-          <article class="story" id="assistant">
-            <div class="story-copy">
-              <h3>Ask about your disk in plain language</h3>
-              <p>
-                The optional assistant answers questions like &ldquo;What can I safely clean
-                up?&rdquo; from DiskPilot's own results. It uses your own Anthropic API key, kept in
-                the macOS Keychain, and is off until you turn it on in Settings.
-              </p>
-              <ul class="facts">
-                <li>Read-only: it cannot delete, move or run anything</li>
-                <li>Suggestions open in Cleanup for your review</li>
-                <li>Never sends file contents, and private folders only as totals</li>
-              </ul>
-            </div>
-            <div class="frag frag-ask" aria-label="Example: a question to the assistant">
-              <p class="ask-q">What can I safely clean up?</p>
-              <p class="ask-a">
-                About 26 GB is regenerable. The largest is Rust build output in
-                <code>~/diskpilot/src-tauri/target</code>, which the next build recreates. The
-                Cursor update is already installed, so its download is no longer needed.
-              </p>
-              <ul class="f-list f-sep">
-                <li>
-                  <span><i class="dot" style="--c: var(--tier-safe)"></i>Rust build output</span
-                  ><b class="tab-num">11.0 GB</b>
-                </li>
-                <li>
-                  <span
-                    ><i class="dot" style="--c: var(--tier-safe)"></i>Cursor downloaded update</span
-                  ><b class="tab-num">1.6 GB</b>
-                </li>
-              </ul>
-              <p class="a-label ask-foot">Highlighted for review in Cleanup</p>
-            </div>
-          </article>
-
-          <article class="story" id="safety">
-            <div class="story-copy">
-              <h3>Three tiers, and the evidence behind each</h3>
-              <p>
-                DiskPilot never calls something safe because it is large or old. A suggestion is
-                only as strong as what DiskPilot can show about it, and anything it does not
-                understand well enough is left alone.
-              </p>
-            </div>
-            <div class="frag frag-tiers" aria-label="The three safety tiers">
-              <div class="tier">
-                <span class="badge safe"><i></i>Likely safe</span>
-                <p>
-                  Regenerable data the tool rebuilds on its own: package caches, build output, app
-                  caches, logs.
-                </p>
-              </div>
-              <div class="tier">
-                <span class="badge review"><i></i>Review first</span>
-                <p>
-                  Probably unused, but something may depend on it: data for deleted projects, old
-                  versions, stale backups.
-                </p>
-              </div>
-              <div class="tier">
-                <span class="badge keep"><i></i>Keep</span>
-                <p>
-                  Important or not understood well enough: conversation history, sign-in, settings,
-                  Docker volumes, your files.
-                </p>
-              </div>
-            </div>
-          </article>
-
-          <article class="story" id="how-it-works">
-            <div class="story-copy">
-              <h3>Trash first, and nothing without your review</h3>
-              <p>
-                Every cleanup moves through the same five steps in the same order. The plan you
-                review is single-use and expires after ten minutes, and the last step checks every
-                path again just before it acts.
-              </p>
-              <ul class="facts">
-                <li>System and key home folders are refused outright</li>
-                <li>Empty Trash shows exactly what it removes</li>
-              </ul>
-            </div>
-            <ol class="frag pipeline" aria-label="The five cleanup steps">
-              <li><b>Scan</b><span>Measures real on-disk size, read-only</span></li>
-              <li><b>Classify</b><span>Names each folder with a rule and a confidence</span></li>
-              <li>
-                <b>Recommend</b
-                ><span>A tier, the reason, the risk and a command you can run yourself</span>
-              </li>
-              <li><b>Preview</b><span>The exact paths and space, confirmed by you</span></li>
-              <li class="gate">
-                <b>Execute</b
-                ><span>Re-checks each path, moves it to the Trash, records the result</span>
-              </li>
-            </ol>
-          </article>
+        <div class="wrap">
+          <ul class="rules">
+            <li>System folders and key home folders are refused outright.</li>
+            <li>Docker volumes are never removed, and every Docker command is shown first.</li>
+            <li>A reviewed plan is single-use and expires after ten minutes.</li>
+            <li>Empty Trash removes only the exact items you reviewed.</li>
+          </ul>
         </div>
       </section>
 
-      <!-- Compare -->
-      <section class="section" id="compare">
+      <!-- 7. Privacy -->
+      <section class="section privacy" id="privacy" aria-labelledby="privacy-title">
         <div class="wrap">
           <div class="head">
-            <h2>Where DiskPilot fits</h2>
+            <h2 id="privacy-title">Nothing leaves your Mac unless you ask.</h2>
+            <p>No account, no telemetry. Scanning, analysis and cleanup all run on this Mac.</p>
+          </div>
+          <div class="privacy-grid">
+            <div class="ledger">
+              <h3>Stays on this Mac</h3>
+              <ul>
+                <li>Every scan, size and path</li>
+                <li>Cleanup history and saved results</li>
+                <li>Private folders such as Mail and Messages, which DiskPilot only ever sizes</li>
+                <li>Your files' contents, which DiskPilot never reads</li>
+              </ul>
+            </div>
+            <div class="ledger ledger-opt">
+              <h3>Only when you ask the assistant</h3>
+              <p>
+                The optional assistant answers questions like “What can I safely clean up?” with
+                your own Anthropic API key, kept in the macOS Keychain. It's off until you turn it
+                on.
+              </p>
+              <ul>
+                <li>Your question and the storage data it needs: names, paths and sizes</li>
+                <li>Sent straight from your Mac to Anthropic's API</li>
+                <li>Read-only: it can't delete, move or run anything</li>
+              </ul>
+            </div>
+            <div class="ledger">
+              <h3>Checkable</h3>
+              <ul>
+                <li>Open source under the MIT license</li>
+                <li>Every release is built from its tag by GitHub Actions</li>
+                <li>Each download carries a signed record of the commit that built it</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 8. Comparison -->
+      <section class="section compare-sec" id="compare" aria-labelledby="compare-title">
+        <div class="wrap">
+          <div class="head head-split">
+            <h2 id="compare-title">Where DiskPilot fits</h2>
             <p>
               Disk visualizers show sizes. Cleaner suites remove system junk. Single-purpose dev
               tools clean one thing. DiskPilot explains all of a developer's storage and cleans it
               through one reviewed workflow.
             </p>
           </div>
-          <div class="table-wrap">
-            <table class="compare">
-              <caption class="sr-only">
-                DiskPilot compared with other kinds of storage tools
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col"><span class="sr-only">Aspect</span></th>
-                  <th scope="col" class="us">DiskPilot</th>
-                  <th scope="col">
-                    Disk visualizers<span>DaisyDisk, GrandPerspective, OmniDiskSweeper</span>
-                  </th>
-                  <th scope="col">Cleaner suites<span>CleanMyMac</span></th>
-                  <th scope="col">
-                    Single-purpose dev tools<span>DevCleaner for Xcode, kondo, npkill</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <th scope="row">Open source</th>
-                  <td class="us">Yes, MIT</td>
-                  <td>Some</td>
-                  <td>No</td>
-                  <td>Mostly</td>
-                </tr>
-                <tr>
-                  <th scope="row">Explains what a folder is</th>
-                  <td class="us">Rule, confidence and a plain sentence</td>
-                  <td>Sizes only</td>
-                  <td>Junk categories</td>
-                  <td>Only its own targets</td>
-                </tr>
-                <tr>
-                  <th scope="row">Developer coverage</th>
-                  <td class="us">Docker, Xcode, Node, Rust, Python, editors, AI agents</td>
-                  <td>None specific</td>
-                  <td>General system data</td>
-                  <td>One tool or project folders</td>
-                </tr>
-                <tr>
-                  <th scope="row">Knows when a project is gone</th>
-                  <td class="us">Checks editor, Xcode and agent data against the disk</td>
-                  <td>No</td>
-                  <td>Not its focus</td>
-                  <td>Varies</td>
-                </tr>
-                <tr>
-                  <th scope="row">Before anything is removed</th>
-                  <td class="us">Tiered preview, Trash first, history</td>
-                  <td>You decide by hand</td>
-                  <td>Guided cleanup</td>
-                  <td>Prompt or list</td>
-                </tr>
-                <tr>
-                  <th scope="row">Visual disk map</th>
-                  <td class="us">Bars and sortable lists</td>
-                  <td>Their strength</td>
-                  <td>Yes</td>
-                  <td>No</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p class="footnote">
-            Categories describe typical behavior; check each product for details.
-          </p>
+          <table class="compare">
+            <caption class="sr-only">
+              DiskPilot compared with other kinds of storage tools
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col"><span class="sr-only">Aspect</span></th>
+                <th scope="col" class="us">DiskPilot</th>
+                <th scope="col">
+                  Disk visualizers<small>DaisyDisk, GrandPerspective, OmniDiskSweeper</small>
+                </th>
+                <th scope="col">Cleaner suites<small>CleanMyMac</small></th>
+                <th scope="col">
+                  Single-purpose dev tools<small>DevCleaner for Xcode, kondo, npkill</small>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Open source</th>
+                <td class="us" data-label="DiskPilot">Yes, MIT</td>
+                <td data-label="Disk visualizers">Some</td>
+                <td data-label="Cleaner suites">No</td>
+                <td data-label="Single-purpose dev tools">Mostly</td>
+              </tr>
+              <tr>
+                <th scope="row">Explains what a folder is</th>
+                <td class="us" data-label="DiskPilot">Rule, confidence and a plain sentence</td>
+                <td data-label="Disk visualizers">Sizes only</td>
+                <td data-label="Cleaner suites">Junk categories</td>
+                <td data-label="Single-purpose dev tools">Only its own targets</td>
+              </tr>
+              <tr>
+                <th scope="row">Developer coverage</th>
+                <td class="us" data-label="DiskPilot">
+                  Docker, Xcode, Node, Rust, Python, editors, AI agents
+                </td>
+                <td data-label="Disk visualizers">None specific</td>
+                <td data-label="Cleaner suites">General system data</td>
+                <td data-label="Single-purpose dev tools">One tool or project folders</td>
+              </tr>
+              <tr>
+                <th scope="row">Knows when a project is gone</th>
+                <td class="us" data-label="DiskPilot">
+                  Checks editor, Xcode and agent data against the disk
+                </td>
+                <td data-label="Disk visualizers">No</td>
+                <td data-label="Cleaner suites">Not its focus</td>
+                <td data-label="Single-purpose dev tools">Varies</td>
+              </tr>
+              <tr>
+                <th scope="row">Before anything is removed</th>
+                <td class="us" data-label="DiskPilot">Tiered preview, Trash first, history</td>
+                <td data-label="Disk visualizers">You decide by hand</td>
+                <td data-label="Cleaner suites">Guided cleanup</td>
+                <td data-label="Single-purpose dev tools">Prompt or list</td>
+              </tr>
+              <tr>
+                <th scope="row">Visual disk map</th>
+                <td class="us" data-label="DiskPilot">Bars and sortable lists</td>
+                <td data-label="Disk visualizers">Their strength</td>
+                <td data-label="Cleaner suites">Yes</td>
+                <td data-label="Single-purpose dev tools">No</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="note">Categories describe typical behavior; check each product for details.</p>
         </div>
       </section>
 
-      <!-- Install -->
-      <section class="section" id="install">
+      <!-- 9. Install -->
+      <section class="section install" id="install" aria-labelledby="install-title">
         <div class="wrap">
           <div class="head">
-            <h2>Up and running in a minute</h2>
+            <h2 id="install-title">Up and running in a minute.</h2>
             <p>
-              DiskPilot is not yet notarized by Apple, so macOS asks you to confirm it the first
-              time you open it. After that it opens like any other app.
+              One download for Apple silicon and Intel Macs, macOS 11 or later.
+              <span class="release" data-release hidden></span>
             </p>
           </div>
+
+          <aside class="warn">
+            <svg aria-hidden="true"><use href="#i-shield" /></svg>
+            <p>
+              <b>DiskPilot isn't notarized by Apple yet.</b> The first time you open it, macOS says
+              it can't verify the developer. Step 3 below is how you allow it, once. After that it
+              opens like any other app.
+            </p>
+          </aside>
+
           <ol class="steps">
             <li>
               <h3>Download</h3>
@@ -848,7 +849,7 @@
                   data-track="download"
                   data-where="install"
                   >DiskPilot.dmg</a
-                >. One file runs on Apple silicon and Intel Macs.
+                >. One file runs on every Mac.
               </p>
             </li>
             <li>
@@ -858,8 +859,8 @@
             <li>
               <h3>Allow it once</h3>
               <p>
-                Open DiskPilot. When macOS says it cannot verify the developer, choose Done, then go
-                to System Settings, Privacy &amp; Security, and click Open Anyway next to DiskPilot.
+                Open DiskPilot and choose Done when macOS warns you. Then open System Settings,
+                Privacy &amp; Security, and click Open Anyway next to DiskPilot.
               </p>
             </li>
             <li>
@@ -870,7 +871,19 @@
               </p>
             </li>
           </ol>
-          <p class="footnote">
+
+          <div class="verify">
+            <div>
+              <h3>Check the download</h3>
+              <p>
+                Each release lists its SHA-256 checksum and a signed record of how it was built.
+                With the GitHub CLI:
+              </p>
+            </div>
+            <pre><code>shasum -a 256 DiskPilot.dmg
+gh attestation verify DiskPilot.dmg -R Devanshgoel-123/diskpilot</code></pre>
+          </div>
+          <p class="note">
             Prefer to build it yourself? The
             <a
               href="https://github.com/Devanshgoel-123/diskpilot#installation"
@@ -880,85 +893,21 @@
               rel="noopener"
               >source and build steps</a
             >
-            are on GitHub. Updates are published there as new releases.
+            are on GitHub, along with
+            <a
+              href="https://github.com/Devanshgoel-123/diskpilot/releases"
+              target="_blank"
+              rel="noopener"
+              >every release</a
+            >.
           </p>
         </div>
       </section>
 
-      <!-- Windows -->
-      <section class="section" id="windows">
-        <div class="wrap">
-          <div class="win">
-            <div class="head">
-              <h2>Coming to Windows</h2>
-              <p>
-                The engine is Rust and the shell is Tauri, which already builds for Windows. The
-                work is teaching DiskPilot how Windows stores things, with the same safety rules.
-              </p>
-              <a
-                class="btn btn-quiet"
-                href="https://github.com/Devanshgoel-123/diskpilot"
-                data-track="github"
-                data-where="windows"
-                target="_blank"
-                rel="noopener"
-                >Watch the repository for Windows releases</a
-              >
-            </div>
-            <dl class="win-list">
-              <div>
-                <dt>NTFS-aware scanning</dt>
-                <dd>
-                  Real allocated size, hard links counted once, junctions and symlinks never
-                  followed, long paths supported.
-                </dd>
-              </div>
-              <div>
-                <dt>Cloud files left alone</dt>
-                <dd>
-                  OneDrive placeholders are measured without downloading them, and never counted as
-                  local data.
-                </dd>
-              </div>
-              <div>
-                <dt>Recycle Bin first</dt>
-                <dd>
-                  The same preview-then-confirm flow, moving items to the Recycle Bin instead of
-                  deleting them.
-                </dd>
-              </div>
-              <div>
-                <dt>Docker and WSL disks</dt>
-                <dd>
-                  Docker's WSL 2 disk file does not shrink after pruning. DiskPilot will explain why
-                  and show the compaction steps.
-                </dd>
-              </div>
-              <div>
-                <dt>Windows developer data</dt>
-                <dd>
-                  npm, pnpm and NuGet caches, Visual Studio and Gradle data, editors and agents
-                  under AppData.
-                </dd>
-              </div>
-              <div>
-                <dt>System folders protected</dt>
-                <dd>
-                  Windows, Program Files and the component store are off limits. Windows Update
-                  cleanup is left to Windows' own tools.
-                </dd>
-              </div>
-            </dl>
-          </div>
-        </div>
-      </section>
-
-      <!-- FAQ -->
-      <section class="section" id="faq">
+      <!-- 10. FAQ -->
+      <section class="section faq-sec" id="faq" aria-labelledby="faq-title">
         <div class="wrap faq-wrap">
-          <div class="head">
-            <h2>Questions people ask first</h2>
-          </div>
+          <h2 id="faq-title">Questions people ask first</h2>
           <div class="faq">
             <details>
               <summary>
@@ -1001,49 +950,63 @@
                 </svg>
               </summary>
               <p>
-                Apple shows that warning for apps that are not notarized through a paid Apple
-                developer account. DiskPilot is open source, so you can read every line or build it
-                yourself. Signed and notarized releases are planned.
+                Apple shows that warning for apps that aren't notarized through a paid Apple
+                developer account. DiskPilot is open source, so you can read every line, check how
+                each release was built, or build it yourself. Signed and notarized releases are
+                planned.
               </p>
             </details>
             <details>
               <summary>
-                When is Windows support coming?<svg aria-hidden="true"><use href="#i-plus" /></svg>
+                Is there a Windows version?<svg aria-hidden="true"><use href="#i-plus" /></svg>
               </summary>
               <p>
-                It is planned after signed macOS releases. Watch the GitHub repository to hear when
-                a preview is ready.
+                Not yet. It's planned after signed macOS releases. The engine is Rust and the shell
+                is Tauri, which already builds for Windows; the work is teaching DiskPilot how
+                Windows stores things, with the same rules: NTFS-aware sizes, OneDrive placeholders
+                left alone, the Recycle Bin first, Docker's WSL disk explained, and system folders
+                off limits. Watch the
+                <a
+                  href="https://github.com/Devanshgoel-123/diskpilot"
+                  data-track="github"
+                  data-where="faq"
+                  target="_blank"
+                  rel="noopener"
+                  >GitHub repository</a
+                >
+                to hear when a preview is ready.
               </p>
             </details>
           </div>
         </div>
       </section>
 
-      <!-- Final call to action -->
-      <section class="final">
+      <!-- 11. Final call to action -->
+      <section class="final" aria-labelledby="final-title">
         <div class="wrap">
-          <div class="final-inner">
-            <h2>Take back your disk, one reviewed step at a time.</h2>
-            <div class="cta-row">
-              <a
-                class="btn btn-primary"
-                href="https://github.com/Devanshgoel-123/diskpilot/releases/latest/download/DiskPilot.dmg"
-                data-track="download"
-                data-where="footer-cta"
-              >
-                <svg class="ico" aria-hidden="true"><use href="#i-download" /></svg>
-                Download for Mac
-              </a>
-              <a
-                class="btn btn-quiet"
-                href="https://github.com/Devanshgoel-123/diskpilot"
-                data-track="github"
-                data-where="footer-cta"
-                target="_blank"
-                rel="noopener"
-                >View source on GitHub</a
-              >
-            </div>
+          <h2 id="final-title">Find out where your space went.</h2>
+          <p>Free, open source, and nothing moves until you say so.</p>
+          <div class="cta-row">
+            <a
+              class="btn btn-primary btn-lg"
+              href="https://github.com/Devanshgoel-123/diskpilot/releases/latest/download/DiskPilot.dmg"
+              data-track="download"
+              data-where="footer-cta"
+            >
+              <svg class="ico" aria-hidden="true"><use href="#i-download" /></svg>
+              Download for Mac
+            </a>
+            <a
+              class="btn btn-ghost btn-lg"
+              href="https://github.com/Devanshgoel-123/diskpilot"
+              data-track="github"
+              data-where="footer-cta"
+              target="_blank"
+              rel="noopener"
+            >
+              <svg class="ico" aria-hidden="true"><use href="#i-github" /></svg>
+              View source on GitHub
+            </a>
           </div>
         </div>
       </section>
@@ -1052,7 +1015,7 @@
     <footer class="footer">
       <div class="wrap footer-inner">
         <span class="footer-brand"
-          ><img src="/logo.svg" alt="" width="22" height="22" />DiskPilot is free software under the
+          ><img src="/logo.svg" alt="" width="20" height="20" />DiskPilot is free software under the
           MIT license.</span
         >
         <span
@@ -1061,7 +1024,6 @@
         >
       </div>
     </footer>
-
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
