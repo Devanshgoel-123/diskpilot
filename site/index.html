@@ -647,6 +647,41 @@
             </div>
           </article>
 
+          <article class="story" id="assistant">
+            <div class="story-copy">
+              <h3>Ask about your disk in plain language</h3>
+              <p>
+                The optional assistant answers questions like &ldquo;What can I safely clean
+                up?&rdquo; from DiskPilot's own results. It uses your own Anthropic API key, kept in
+                the macOS Keychain, and is off until you turn it on in Settings.
+              </p>
+              <ul class="facts">
+                <li>Read-only: it cannot delete, move or run anything</li>
+                <li>Suggestions open in Cleanup for your review</li>
+                <li>Never sends file contents, and private folders only as totals</li>
+              </ul>
+            </div>
+            <div class="frag frag-ask" aria-label="Example: a question to the assistant">
+              <p class="ask-q">What can I safely clean up?</p>
+              <p class="ask-a">
+                About 26 GB is regenerable. The largest is Rust build output in
+                <code>~/diskpilot/src-tauri/target</code>, which the next build recreates. The
+                Cursor update is already installed, so its download is no longer needed.
+              </p>
+              <ul class="f-list f-sep">
+                <li>
+                  <span><i class="dot" style="--c: var(--tier-safe)"></i>Rust build output</span
+                  ><b class="tab-num">11.0 GB</b>
+                </li>
+                <li>
+                  <span><i class="dot" style="--c: var(--tier-safe)"></i>Cursor downloaded update</span
+                  ><b class="tab-num">1.6 GB</b>
+                </li>
+              </ul>
+              <p class="a-label ask-foot">Highlighted for review in Cleanup</p>
+            </div>
+          </article>
+
           <article class="story" id="safety">
             <div class="story-copy">
               <h3>Three tiers, and the evidence behind each</h3>

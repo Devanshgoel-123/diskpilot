@@ -2377,3 +2377,23 @@ h1 {
     transition-duration: 1ms !important;
   }
 }
+
+/* Assistant example */
+.ask-q {
+  margin: 0 0 12px auto;
+  width: fit-content;
+  max-width: 85%;
+  padding: 8px 12px;
+  border-radius: 12px 12px 4px 12px;
+  background: var(--a-line-2);
+  font-weight: 500;
+}
+
+.ask-a {
+  margin: 0;
+  color: var(--a-ink);
+}
+
+.ask-foot {
+  margin-top: 10px;
+}
