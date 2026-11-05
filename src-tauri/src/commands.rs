@@ -33,6 +33,9 @@ use crate::trash;
 
 pub const EVENT_SCAN_PROGRESS: &str = "scan://progress";
 pub const EVENT_SCAN_FINISHED: &str = "scan://finished";
+/// Results for everything except app containers, which are still being
+/// measured. Payload: the scan id. `scan://finished` follows.
+pub const EVENT_SCAN_PARTIAL: &str = "scan://partial";
 
 /// Run blocking work off the main thread.
 async fn blocking<T: Send + 'static>(
@@ -111,7 +114,7 @@ pub fn start_scan(
         slot.running = Some(cancel.clone());
     }
     let id = format!("scan-{}", now_ms());
-    let opts = ScanOptions::new(id.clone(), root, state.home.clone());
+    let opts = ScanOptions::new(id.clone(), root, state.home.clone()).deferring_app_containers();
     std::thread::Builder::new()
         .name("diskpilot-scan".into())
         .spawn(move || run_scan(app, opts, cancel))
@@ -122,11 +125,30 @@ pub fn start_scan(
 fn run_scan(app: AppHandle, opts: ScanOptions, cancel: Arc<AtomicBool>) {
     let started_at_ms = now_ms();
     let emitter = app.clone();
-    let result = scanner::scan(&opts, &cancel, &move |p| {
-        let _ = emitter.emit(EVENT_SCAN_PROGRESS, p);
-    });
-
     let state = app.state::<AppState>();
+    // Results on screen before this scan, restored if it is cancelled or
+    // fails after publishing partial results.
+    let previous = std::sync::Mutex::new(None);
+    let result = scanner::scan_with_partial(
+        &opts,
+        &cancel,
+        &move |p| {
+            let _ = emitter.emit(EVENT_SCAN_PROGRESS, p);
+        },
+        &|partial| {
+            let recs = scan_recommendations(&opts.home, &partial);
+            let mut slot = state.slot();
+            let before = (slot.last.take(), std::mem::take(&mut slot.recommendations));
+            *previous.lock().unwrap_or_else(|e| e.into_inner()) = Some(before);
+            slot.last = Some(Arc::new(partial));
+            slot.recommendations = Arc::new(recs);
+            drop(slot);
+            state.plans().clear();
+            let _ = app.emit(EVENT_SCAN_PARTIAL, &opts.id);
+        },
+    );
+    let previous = previous.into_inner().unwrap_or_else(|e| e.into_inner());
+
     let mut saved: Option<Arc<ScanOutcome>> = None;
     let (status, error, record) = match result {
         Ok(outcome) => {
@@ -150,12 +172,23 @@ fn run_scan(app: AppHandle, opts: ScanOptions, cancel: Arc<AtomicBool>) {
             slot.recommendations = Arc::new(recs);
             slot.running = None;
             drop(slot);
-            state.plans().clear();
+            // Plans made from partial results stay valid: each holds its own
+            // paths and re-checks them before acting.
+            if previous.is_none() {
+                state.plans().clear();
+            }
             saved = Some(outcome);
             (ScanStatus::Completed, None, record)
         }
         Err(err) => {
-            state.slot().running = None;
+            let mut slot = state.slot();
+            slot.running = None;
+            if let Some((last, recommendations)) = previous {
+                slot.last = last;
+                slot.recommendations = recommendations;
+                drop(slot);
+                state.plans().clear();
+            }
             let status = if matches!(err, ScanError::Cancelled) {
                 ScanStatus::Cancelled
             } else {
