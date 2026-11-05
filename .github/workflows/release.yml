@@ -26,6 +26,9 @@ concurrency:
 jobs:
   macos:
     name: Build (macOS universal)
+    # Releases are published only from the public repository, never from
+    # the private development copy.
+    if: github.repository == 'Devanshgoel-123/diskpilot'
     runs-on: macos-15-intel
     permissions:
       contents: read
@@ -131,6 +134,7 @@ jobs:
   publish:
     name: Attest and publish
     needs: macos
+    if: github.repository == 'Devanshgoel-123/diskpilot'
     runs-on: ubuntu-latest
     permissions:
       contents: write

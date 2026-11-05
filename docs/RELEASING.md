@@ -2,12 +2,21 @@
 
 Releases are built on GitHub Actions from a tag, never from a local machine.
 
+## Where work happens
+
+Features are developed in a private repository, `Devanshgoel-123/diskpilot-dev`, and reach this public repository when they are released. In a local clone, `origin` is the public repository and `private` is the development one, with `remote.pushDefault` set to `private`, so a plain `git push` never publishes anything.
+
+- Day to day: branch, commit and `git push` (to `private`). Open pull requests in `diskpilot-dev`.
+- The Rust checks in CI and the Release workflow run only in the public repository. In the private one, run `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` and `cargo test` in `src-tauri` before merging.
+- Contributions to the public repository: merge them there, then bring them into the private one with `git pull origin main` and `git push`.
+- The full history becomes public with each release, so never commit anything to the private repository that should stay private, such as keys or customer data.
+
 ## Steps
 
 1. Make sure `main` is green in CI.
 2. Bump the version in `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, and refresh `src-tauri/Cargo.lock` (`cargo check` in `src-tauri`).
 3. Write the release notes in `docs/releases/vX.Y.Z.md`. Describe what changed for the person using the app, not the code.
-4. Commit as `release: X.Y.Z`, tag `vX.Y.Z`, and push `main` and the tag.
+4. Commit as `release: X.Y.Z` and tag `vX.Y.Z`. Push to `private` first, then publish: `git push origin main vX.Y.Z`. This is the step that makes the release's code public.
 5. The Release workflow builds the universal app, checks its signature and architectures, records a signed build provenance attestation, and publishes `DiskPilot.dmg` with its SHA-256 checksum and the notes.
 6. Download the published DMG, check the checksum and run `gh attestation verify DiskPilot.dmg -R Devanshgoel-123/diskpilot`, then open it on a Mac to confirm it launches.
 

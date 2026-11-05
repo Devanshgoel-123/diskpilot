@@ -35,6 +35,9 @@ jobs:
 
   engine:
     name: Rust engine (fmt, clippy, tests)
+    # macOS runners cost ten times the minutes in a private repository, so
+    # the private development copy relies on running these checks locally.
+    if: github.repository == 'Devanshgoel-123/diskpilot'
     runs-on: macos-15-intel
     defaults:
       run:
