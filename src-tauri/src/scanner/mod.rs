@@ -46,6 +46,11 @@ pub struct ScanOptions {
     /// inside `~/Library/Caches` inherits "Application caches"). Disable to
     /// classify relative to the root only.
     pub inherit_ancestor_context: bool,
+    /// Folder whose subfolders are measured last. macOS checks every folder
+    /// opened inside another app's container (~/Library/Containers), one
+    /// check at a time, which can take most of a scan for little data. The
+    /// rest of the scan is published first; see [`scan_with_partial`].
+    pub defer_children_of: Option<PathBuf>,
 }
 
 impl ScanOptions {
@@ -58,7 +63,15 @@ impl ScanOptions {
             locations_limit: 300,
             heavy_dirs_limit: 200,
             inherit_ancestor_context: true,
+            defer_children_of: None,
         }
+    }
+
+    /// Measure other apps' containers after everything else.
+    #[must_use]
+    pub fn deferring_app_containers(mut self) -> Self {
+        self.defer_children_of = Some(self.home.join("Library").join("Containers"));
+        self
     }
 }
 
@@ -129,6 +142,12 @@ struct Agg {
     dirs: u64,
 }
 
+struct Deferred {
+    path: PathBuf,
+    meta: Metadata,
+    ctx: Option<Context>,
+}
+
 struct Shared<'a> {
     opts: &'a ScanOptions,
     classifier: Classifier,
@@ -149,6 +168,12 @@ struct Shared<'a> {
     seen_inodes: Mutex<HashSet<(u64, u64)>>,
     locations: Mutex<Vec<LocationCandidate>>,
     current: Mutex<PathBuf>,
+    /// Canonical folder whose subfolders are set aside, if any.
+    defer_parent: Option<PathBuf>,
+    deferred: Mutex<Vec<Deferred>>,
+    deferred_parent_names: Mutex<Option<std::sync::Arc<HashSet<OsString>>>>,
+    containers_total: AtomicU64,
+    containers_done: AtomicU64,
 }
 
 /// Probe that answers from directory listings the scanner already has.
@@ -307,6 +332,15 @@ impl Shared<'_> {
             if ft.is_dir() {
                 if meta.dev() != self.root_dev {
                     self.skipped_volumes.fetch_add(1, Ordering::Relaxed);
+                } else if self.defer_parent.as_deref() == Some(path) {
+                    self.deferred
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .push(Deferred {
+                            path: child,
+                            meta,
+                            ctx: ctx.clone(),
+                        });
                 } else {
                     subdirs.push((child, meta));
                 }
@@ -345,6 +379,20 @@ impl Shared<'_> {
             if b > 0 || f > 0 {
                 self.add_category(cat, b, f);
             }
+        }
+
+        if self.defer_parent.as_deref() == Some(path) {
+            let set_aside = self
+                .deferred
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .len();
+            self.containers_total
+                .store(set_aside as u64, Ordering::Relaxed);
+            *self
+                .deferred_parent_names
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(std::sync::Arc::new(names.clone()));
         }
 
         let direct_bytes = agg.bytes;
@@ -408,6 +456,31 @@ impl Shared<'_> {
             bytes_scanned: self.bytes.load(Ordering::Relaxed),
             current_path: current,
             elapsed_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            containers_total: self.containers_total.load(Ordering::Relaxed),
+            containers_done: self.containers_done.load(Ordering::Relaxed),
+        }
+    }
+
+    /// Add a set-aside folder's totals to every ancestor up to the root.
+    fn add_to_ancestors(&self, child: &Path, agg: Agg, root: &Path) {
+        let mut index = self.index.lock().unwrap_or_else(|e| e.into_inner());
+        let mut child_bytes = agg.bytes;
+        let mut cur = child;
+        while let Some(parent) = cur.parent() {
+            if !parent.starts_with(root) {
+                break;
+            }
+            if let Some(s) = index.get_mut(parent) {
+                s.bytes += agg.bytes;
+                s.files += agg.files;
+                s.dirs += agg.dirs;
+                s.largest_child_dir = s.largest_child_dir.max(child_bytes);
+                child_bytes = s.bytes;
+            }
+            if parent == root {
+                break;
+            }
+            cur = parent;
         }
     }
 }
@@ -434,6 +507,19 @@ pub fn scan(
     opts: &ScanOptions,
     cancel: &AtomicBool,
     on_progress: &(dyn Fn(ScanProgress) + Sync),
+) -> Result<ScanOutcome, ScanError> {
+    scan_with_partial(opts, cancel, on_progress, &|_| {})
+}
+
+/// Like [`scan`], but when [`ScanOptions::defer_children_of`] set folders
+/// aside, `on_partial` first receives the results without them. The final
+/// outcome includes everything. Partial results are complete and exact for
+/// every folder outside the set-aside ones; their ancestors grow later.
+pub fn scan_with_partial(
+    opts: &ScanOptions,
+    cancel: &AtomicBool,
+    on_progress: &(dyn Fn(ScanProgress) + Sync),
+    on_partial: &(dyn Fn(ScanOutcome) + Sync),
 ) -> Result<ScanOutcome, ScanError> {
     let started_at_ms = now_ms();
     let started = Instant::now();
@@ -471,6 +557,17 @@ pub fn scan(
         seen_inodes: Mutex::new(HashSet::new()),
         locations: Mutex::new(Vec::new()),
         current: Mutex::new(root.clone()),
+        // Deferring only makes sense when the scan reaches the folder from
+        // above; a scan rooted inside it measures everything at once.
+        defer_parent: opts
+            .defer_children_of
+            .as_deref()
+            .and_then(|d| d.canonicalize().ok())
+            .filter(|d| d.starts_with(&root) && *d != root),
+        deferred: Mutex::new(Vec::new()),
+        deferred_parent_names: Mutex::new(None),
+        containers_total: AtomicU64::new(0),
+        containers_done: AtomicU64::new(0),
     };
 
     // Deep trees (nested node_modules) need generous stacks for recursion.
@@ -491,6 +588,33 @@ pub fn scan(
             }
         });
         pool.install(|| shared.scan_dir(&root, &root_meta, inherited, None));
+
+        let deferred =
+            std::mem::take(&mut *shared.deferred.lock().unwrap_or_else(|e| e.into_inner()));
+        if !deferred.is_empty() && !shared.cancelled() {
+            let elapsed = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+            on_partial(build_outcome(
+                &shared,
+                root.clone(),
+                started_at_ms,
+                now_ms(),
+                elapsed,
+            ));
+            let names = shared
+                .deferred_parent_names
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
+            pool.install(|| {
+                deferred.into_par_iter().for_each(|d| {
+                    let agg = shared.scan_dir(&d.path, &d.meta, d.ctx, names.as_deref());
+                    if !shared.cancelled() {
+                        shared.add_to_ancestors(&d.path, agg, &root);
+                    }
+                    shared.containers_done.fetch_add(1, Ordering::Relaxed);
+                });
+            });
+        }
         done.store(true, Ordering::Relaxed);
     });
 
@@ -502,7 +626,7 @@ pub fn scan(
     let finished_at_ms = now_ms();
     let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     Ok(build_outcome(
-        shared,
+        &shared,
         root,
         started_at_ms,
         finished_at_ms,
@@ -511,7 +635,7 @@ pub fn scan(
 }
 
 fn build_outcome(
-    shared: Shared<'_>,
+    shared: &Shared<'_>,
     root: PathBuf,
     started_at_ms: i64,
     finished_at_ms: i64,
@@ -531,12 +655,20 @@ fn build_outcome(
         .collect();
     categories.sort_by_key(|c| Reverse(c.bytes));
 
-    let heap = shared
+    let mut files: Vec<FileCandidate> = shared
         .top_files
-        .into_inner()
-        .unwrap_or_else(|e| e.into_inner());
-    let mut files: Vec<FileCandidate> = heap.into_iter().map(|Reverse(c)| c).collect();
-    files.sort_by_key(|c| Reverse(c.bytes));
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .iter()
+        .map(|Reverse(c)| FileCandidate {
+            bytes: c.bytes,
+            path: c.path.clone(),
+            logical: c.logical,
+            modified: c.modified,
+        })
+        .collect();
+    // Path breaks ties so equal sizes always list in the same order.
+    files.sort_by(|a, b| b.bytes.cmp(&a.bytes).then_with(|| a.path.cmp(&b.path)));
     let largest_files = files
         .into_iter()
         .map(|c| FileEntry {
@@ -553,24 +685,38 @@ fn build_outcome(
         })
         .collect();
 
-    let mut locations = shared
+    let index = shared
+        .index
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    // Sizes come from the index, which already includes set-aside folders
+    // merged into their ancestors.
+    let mut locations: Vec<(Context, u64, u64)> = shared
         .locations
-        .into_inner()
-        .unwrap_or_else(|e| e.into_inner());
-    locations.sort_by_key(|l| Reverse(l.bytes));
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .iter()
+        .map(|l| {
+            let (bytes, files) = index
+                .get(l.ctx.path.as_ref())
+                .map_or((l.bytes, l.files), |s| (s.bytes, s.files));
+            (l.ctx.clone(), bytes, files)
+        })
+        .collect();
+    locations.sort_by(|(a, ab, _), (b, bb, _)| bb.cmp(ab).then_with(|| a.path.cmp(&b.path)));
     locations.truncate(opts.locations_limit);
     let detected_locations = locations
         .into_iter()
-        .map(|l| DetectedLocation {
-            path: l.ctx.path.display().to_string(),
-            bytes: l.bytes,
-            file_count: l.files,
-            container: l.ctx.rule.kind == RuleKind::Container,
-            classification: Resolved::Dir(l.ctx).to_classification(),
+        .map(|(ctx, bytes, files)| DetectedLocation {
+            path: ctx.path.display().to_string(),
+            bytes,
+            file_count: files,
+            container: ctx.rule.kind == RuleKind::Container,
+            classification: Resolved::Dir(ctx).to_classification(),
         })
         .collect();
 
-    let index = shared.index.into_inner().unwrap_or_else(|e| e.into_inner());
     let heavy_directories = heavy_directories(&index, &root, opts.heavy_dirs_limit)
         .into_iter()
         .map(|(path, stats)| DirectorySize {
@@ -583,8 +729,9 @@ fn build_outcome(
 
     let error_samples = shared
         .error_samples
-        .into_inner()
-        .unwrap_or_else(|e| e.into_inner());
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
     let total_bytes = index.get(&root).map_or(0, |s| s.bytes);
 
     let summary = ScanSummary {
@@ -619,7 +766,7 @@ pub fn heavy_directories(index: &DirIndex, root: &Path, limit: usize) -> Vec<(Pa
         })
         .map(|(p, s)| (p.clone(), *s))
         .collect();
-    heavy.sort_by_key(|(_, s)| Reverse(s.bytes));
+    heavy.sort_by(|(a, x), (b, y)| y.bytes.cmp(&x.bytes).then_with(|| a.cmp(b)));
     heavy.truncate(limit);
     heavy
 }

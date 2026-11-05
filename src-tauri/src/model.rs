@@ -101,6 +101,11 @@ pub struct ScanProgress {
     pub bytes_scanned: u64,
     pub current_path: String,
     pub elapsed_ms: u64,
+    /// App containers set aside to measure after everything else. Zero when
+    /// the scan has none.
+    pub containers_total: u64,
+    /// App containers measured so far.
+    pub containers_done: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
