@@ -10,6 +10,7 @@ import type {
   AppBadge,
   AppStorageReport,
   AppEnvironment,
+  AssistantProvider,
   AssistantReply,
   AssistantStatus,
   CleanupMethod,
@@ -26,6 +27,7 @@ import type {
   SecretsReport,
   DirectoryListing,
   DiskInfo,
+  ModelInfo,
   DuplicateProgress,
   DuplicateReport,
   ItemDetails,
@@ -87,10 +89,14 @@ export const api = {
   getDevToolsReport: () => invoke<DevToolsReport | null>("get_dev_tools_report"),
 
   assistantStatus: () => invoke<AssistantStatus>("assistant_status"),
-  assistantSetKey: (key: string) => invoke<AssistantStatus>("assistant_set_key", { key }),
-  assistantClearKey: () => invoke<AssistantStatus>("assistant_clear_key"),
-  assistantAsk: (question: string, model: string) =>
-    invoke<AssistantReply>("assistant_ask", { question, model }),
+  assistantSetKey: (provider: AssistantProvider, key: string) =>
+    invoke<AssistantStatus>("assistant_set_key", { provider, key }),
+  assistantClearKey: (provider: AssistantProvider) =>
+    invoke<AssistantStatus>("assistant_clear_key", { provider }),
+  assistantModels: (provider: AssistantProvider) =>
+    invoke<ModelInfo[]>("assistant_models", { provider }),
+  assistantAsk: (question: string, provider: AssistantProvider, model: string) =>
+    invoke<AssistantReply>("assistant_ask", { question, provider, model }),
   assistantReset: () => invoke<null>("assistant_reset"),
 
   dockerOverview: () => invoke<DockerOverview>("docker_overview"),

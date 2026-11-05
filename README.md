@@ -102,7 +102,7 @@ Findings that can be cleaned up feed into the same recommendation and cleanup wo
 
 ### Assistant (optional)
 
-An optional assistant answers questions about your storage in plain language, for example "What can I safely clean up?" or "Which projects have dependencies I have not touched in months?". It is disabled by default and requires your own Anthropic API key, which is stored in the macOS Keychain. The assistant has read-only access to DiskPilot's data through a fixed set of tools. It cannot delete, move or run anything; when it suggests a cleanup, it highlights existing recommendations that you then review and confirm through the normal workflow.
+An optional assistant answers questions about your storage in plain language, for example "What can I safely clean up?" or "Which projects have dependencies I have not touched in months?". It is disabled by default and uses your own API key from Anthropic, OpenAI or OpenRouter (one key for models from many companies), stored in the macOS Keychain. The assistant has read-only access to DiskPilot's data through a fixed set of tools. It cannot delete, move or run anything; when it suggests a cleanup, it highlights existing recommendations that you then review and confirm through the normal workflow.
 
 ## Safety model
 
@@ -126,7 +126,7 @@ Scanner -> Classifier -> Recommendations -> Planner -> Safety gate -> Executor
 - Scanning, classification, recommendations, cleanup and Docker management run entirely on your Mac. There is no account, no telemetry and no cloud service.
 - DiskPilot works without Full Disk Access. macOS asks for permission the first time protected folders such as Desktop, Documents and Downloads are read, and folders such as Mail, Messages, iCloud Drive and the Photos library are skipped and listed as not measured.
 - If you grant Full Disk Access in System Settings, DiskPilot can also measure those folders. It reads sizes only, keeps the results on your Mac, and never shares what is inside them with the assistant: the assistant sees each of them as a single total.
-- The optional assistant is the only feature that uses the network. When you ask a question, the question and the storage data needed to answer it (folder and file names, paths with your home folder shown as `~`, sizes and categories; private folders such as Mail, Messages and Photos only as totals) are sent directly from your Mac to Anthropic's API. File contents are never read or sent. The API key never leaves the Rust process except in the request to Anthropic.
+- The optional assistant is the only feature that uses the network. When you ask a question, the question and the storage data needed to answer it (folder and file names, paths with your home folder shown as `~`, sizes and categories; private folders such as Mail, Messages and Photos only as totals) are sent directly from your Mac to the API of the provider you chose (`api.anthropic.com`, `api.openai.com` or `openrouter.ai`). File contents are never read or sent. The API key never leaves the Rust process except in the request to that provider's own host; redirects are never followed.
 
 ## Installation
 

@@ -9,7 +9,12 @@
     "dialog:allow-open",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://github.com/Devanshgoel-123/diskpilot*" }]
+      "allow": [
+        { "url": "https://github.com/Devanshgoel-123/diskpilot*" },
+        { "url": "https://console.anthropic.com/settings/keys" },
+        { "url": "https://platform.openai.com/api-keys" },
+        { "url": "https://openrouter.ai/settings/keys" }
+      ]
     }
   ]
 }

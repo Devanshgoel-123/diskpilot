@@ -27,7 +27,8 @@ export function AssistantPrompt() {
   const [dismissed, setDismissed] = useState(wasDismissed);
 
   // While the key status is loading, assume it is set up rather than flash.
-  if (dismissed || (enabled && (status === null || status.configured))) return null;
+  if (dismissed || (enabled && (status === null || status.providers.some((p) => p.configured))))
+    return null;
 
   const setUp = () => {
     navigate("settings");
@@ -53,7 +54,8 @@ export function AssistantPrompt() {
           <p className="font-medium text-foreground">Ask about your storage in plain language</p>
           <p className="mt-0.5 text-muted-foreground">
             The optional assistant answers questions like “What can I safely clean up?” using your
-            own Anthropic API key. It can only read DiskPilot’s results and never removes anything.
+            own API key from Anthropic, OpenAI or OpenRouter. It can only read DiskPilot’s results
+            and never removes anything.
           </p>
         </div>
       </div>
