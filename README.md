@@ -134,7 +134,7 @@ Scanner -> Classifier -> Recommendations -> Planner -> Safety gate -> Executor
 
 1. Download [DiskPilot.dmg](https://github.com/Devanshgoel-123/diskpilot/releases/latest/download/DiskPilot.dmg) from the [latest release](https://github.com/Devanshgoel-123/diskpilot/releases/latest). It is a universal build for Apple silicon and Intel Macs running macOS 11 or later.
 2. Open the disk image and drag DiskPilot into Applications.
-3. Open DiskPilot. Releases are not yet notarized by Apple, so the first time macOS reports that it cannot verify the developer. Choose **Done**, open **System Settings > Privacy & Security**, and select **Open Anyway** next to DiskPilot. On macOS 14 and earlier you can instead Control-click the app and choose **Open**.
+3. Open DiskPilot. Releases are not yet notarized by Apple, so the first time macOS says Apple cannot check it for malicious software. Choose **OK** (or **Done**), open **System Settings > Privacy & Security**, and select **Open Anyway** next to DiskPilot. On macOS 14 and earlier you can instead Control-click the app and choose **Open**.
 
 New versions are published as GitHub releases. DiskPilot does not update itself yet; download the new version and replace the app in Applications. Your scan history and settings are kept.
 
