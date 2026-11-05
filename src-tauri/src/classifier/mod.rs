@@ -497,6 +497,98 @@ mod tests {
     }
 
     #[test]
+    fn game_engine_flutter_and_container_tools_are_recognised() {
+        let p = FakeProbe::new(&[
+            "/Users/test/code/app/pubspec.yaml",
+            "/Users/test/games/Shooter/ProjectSettings",
+            "/Users/test/games/Arena/Config",
+        ]);
+        assert_eq!(
+            dir("/Users/test/code/app/build", &p).rule_id,
+            "flutter.build"
+        );
+        assert_eq!(
+            dir("/Users/test/code/app/.dart_tool", &p).rule_id,
+            "flutter.dart-tool"
+        );
+        assert_eq!(
+            dir("/Users/test/games/Shooter/Library", &p).rule_id,
+            "unity.library"
+        );
+        assert_eq!(
+            dir("/Users/test/games/Arena/DerivedDataCache", &p).rule_id,
+            "unreal.project-ddc"
+        );
+        assert_eq!(
+            dir("/Users/test/.pub-cache/hosted/pub.dev", &p).rule_id,
+            "flutter.pub-cache-hosted"
+        );
+        assert_eq!(
+            dir("/Users/test/.pub-cache/bin", &p).rule_id,
+            "flutter.pub-cache"
+        );
+        assert_eq!(
+            dir(
+                "/Users/test/Library/Application Support/Epic/UnrealEngine/Common/DerivedDataCache",
+                &p
+            )
+            .rule_id,
+            "unreal.shared-ddc"
+        );
+        assert_eq!(
+            dir("/Users/test/.local/share/containers/podman/machine", &p).rule_id,
+            "podman.storage"
+        );
+        assert_eq!(
+            dir("/Users/test/.minikube/cache/iso", &p).rule_id,
+            "minikube.cache"
+        );
+        assert_eq!(
+            dir("/Users/test/.minikube/machines", &p).rule_id,
+            "minikube.home"
+        );
+    }
+
+    #[test]
+    fn unity_and_unreal_rules_need_their_project_markers() {
+        let none = FakeProbe::empty();
+        // A plain folder named Library or DerivedDataCache is not a game project.
+        assert_ne!(
+            dir("/Users/test/games/Shooter/Library", &none).rule_id,
+            "unity.library"
+        );
+        assert_ne!(
+            dir("/Users/test/games/Arena/DerivedDataCache", &none).rule_id,
+            "unreal.project-ddc"
+        );
+        // The home Library is never a Unity cache.
+        let home_marker = FakeProbe::new(&["/Users/test/ProjectSettings"]);
+        assert_ne!(
+            dir("/Users/test/Library", &home_marker).rule_id,
+            "unity.library"
+        );
+    }
+
+    #[test]
+    fn windsurf_caches_are_separated_from_chat_history() {
+        let p = FakeProbe::empty();
+        let base = "/Users/test/Library/Application Support/Windsurf";
+        assert_eq!(
+            dir(&format!("{base}/CachedData/x"), &p).rule_id,
+            "windsurf.caches"
+        );
+        assert_eq!(dir(&format!("{base}/logs"), &p).rule_id, "windsurf.logs");
+        assert_eq!(
+            dir(&format!("{base}/User/workspaceStorage/abc"), &p).rule_id,
+            "windsurf.workspace-storage"
+        );
+        assert_eq!(
+            dir(&format!("{base}/User"), &p).rule_id,
+            "windsurf.app-data"
+        );
+    }
+
+    #[test]
     fn floor_ignores_ancestor_context() {
         let p = FakeProbe::empty();
         let floored = Classifier::new("/Users/test").with_floor("/Users/test/Library/Caches/x");

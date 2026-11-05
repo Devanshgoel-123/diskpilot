@@ -144,6 +144,31 @@ pub static DIR_RULES: &[DirRule] = &[
         "Docker CLI configuration",
         "Docker CLI contexts, plugins and credentials configuration. Usually small; required for the Docker CLI to work."
     ),
+    leaf!(
+        "podman.storage",
+        HomeRelative(&[".local", "share", "containers"]),
+        DockerStorage,
+        High,
+        "Podman data",
+        "Podman's machine VM disks, images and volumes. Never delete these files directly: volumes can hold databases. Manage it with `podman system prune` or `podman machine rm`."
+    ),
+    leaf!(
+        "minikube.cache",
+        HomeRelative(&[".minikube", "cache"]),
+        Cache,
+        High,
+        "Minikube download cache",
+        "VM images, container images and Kubernetes binaries downloaded by Minikube. Downloaded again the next time a cluster starts."
+    ),
+    container!(
+        "minikube.home",
+        HomeRelative(&[".minikube"]),
+        DockerStorage,
+        High,
+        false,
+        "Minikube data",
+        "Minikube's clusters, certificates and download cache. Remove clusters you no longer need with `minikube delete`."
+    ),
     // ---- Xcode & Apple developer tools --------------------------------------
     leaf!(
         "xcode.derived-data",
@@ -328,6 +353,31 @@ pub static DIR_RULES: &[DirRule] = &[
         "Android tooling data",
         "Android emulator (AVD) images, debug keystore and adb configuration. The debug keystore signs development builds; keep it if you publish apps signed with it."
     ),
+    leaf!(
+        "flutter.pub-cache-hosted",
+        HomeRelative(&[".pub-cache", "hosted"]),
+        Cache,
+        High,
+        "Dart & Flutter package cache",
+        "Packages downloaded by `flutter pub get` / `dart pub get`. Downloaded again the next time a project fetches its packages."
+    ),
+    container!(
+        "flutter.pub-cache",
+        HomeRelative(&[".pub-cache"]),
+        DeveloperTools,
+        High,
+        false,
+        "Dart & Flutter pub cache",
+        "Downloaded packages, git dependencies and globally activated Dart tools (`dart pub global activate`)."
+    ),
+    leaf!(
+        "unreal.shared-ddc",
+        HomeRelative(&["Library", "Application Support", "Epic", "UnrealEngine", "Common", "DerivedDataCache"]),
+        Cache,
+        High,
+        "Unreal Engine shared cache",
+        "Unreal Engine's shared Derived Data Cache: compiled shaders and cooked assets shared by all projects. Rebuilt when needed, which can take a long time."
+    ),
     // ---- AI coding agents ---------------------------------------------------
     leaf!(
         "ai.claude-code-versions",
@@ -444,6 +494,64 @@ pub static DIR_RULES: &[DirRule] = &[
         High,
         "VS Code workspace storage",
         "Per-project state such as open editors, extension data and chat history."
+    ),
+    leaf!(
+        "windsurf.caches",
+        HomeRelativeAny(&[
+            &["Library", "Application Support", "Windsurf", "Cache"],
+            &["Library", "Application Support", "Windsurf", "CachedData"],
+            &["Library", "Application Support", "Windsurf", "Code Cache"],
+            &["Library", "Application Support", "Windsurf", "GPUCache"],
+            &["Library", "Application Support", "Windsurf", "CachedExtensionVSIXs"],
+            &["Library", "Application Support", "Windsurf", "CachedProfilesData"],
+            &["Library", "Application Support", "Windsurf", "Service Worker", "CacheStorage"],
+        ]),
+        Cache,
+        High,
+        "Windsurf caches",
+        "Chromium and extension caches used by Windsurf's editor shell. Rebuilt automatically; quit Windsurf before removing them."
+    ),
+    leaf!(
+        "windsurf.logs",
+        HomeRelative(&["Library", "Application Support", "Windsurf", "logs"]),
+        Logs,
+        High,
+        "Windsurf logs",
+        "Diagnostic logs written by Windsurf, one folder per session."
+    ),
+    leaf!(
+        "windsurf.workspace-storage",
+        HomeRelative(&["Library", "Application Support", "Windsurf", "User", "workspaceStorage"]),
+        ApplicationData,
+        High,
+        "Windsurf workspace storage",
+        "Per-project state such as open editors, extension data and chat history."
+    ),
+    container!(
+        "windsurf.app-data",
+        HomeRelative(&["Library", "Application Support", "Windsurf"]),
+        ApplicationData,
+        High,
+        false,
+        "Windsurf app data",
+        "Windsurf's settings, workspace storage, logs and caches."
+    ),
+    leaf!(
+        "windsurf.home",
+        HomeRelative(&[".windsurf"]),
+        DeveloperTools,
+        High,
+        "Windsurf extensions",
+        "Windsurf's installed extensions and configuration."
+    ),
+    container!(
+        "windsurf.codeium",
+        HomeRelative(&[".codeium"]),
+        DeveloperTools,
+        Medium,
+        false,
+        "Codeium / Windsurf AI data",
+        "Data used by Windsurf's and Codeium's AI features, such as the language server and local indexes."
     ),
     container!(
         "cursor.app-data",
@@ -735,6 +843,50 @@ pub static DIR_RULES: &[DirRule] = &[
         High,
         "JavaScript build cache",
         "Build cache generated by a JavaScript framework or bundler. Regenerated on the next build."
+    ),
+    leaf!(
+        "flutter.dart-tool",
+        NameWithSibling {
+            names: &[".dart_tool"],
+            siblings: &["pubspec.yaml"]
+        },
+        BuildArtifacts,
+        High,
+        "Dart tool cache",
+        "Package configuration and build cache for a Dart or Flutter project. Recreated by `flutter pub get`."
+    ),
+    leaf!(
+        "flutter.build",
+        NameWithSibling {
+            names: &["build"],
+            siblings: &["pubspec.yaml"]
+        },
+        BuildArtifacts,
+        High,
+        "Flutter build output",
+        "Compiled app builds for a Flutter project. `flutter clean` removes them; they are rebuilt on the next build."
+    ),
+    leaf!(
+        "unity.library",
+        NameWithSibling {
+            names: &["Library"],
+            siblings: &["ProjectSettings"]
+        },
+        BuildArtifacts,
+        High,
+        "Unity project cache",
+        "Unity's Library folder: imported assets and caches for this project. Unity rebuilds it by reimporting the project, which can take a long time for big projects."
+    ),
+    leaf!(
+        "unreal.project-ddc",
+        NameWithSibling {
+            names: &["DerivedDataCache"],
+            siblings: &["Config"]
+        },
+        BuildArtifacts,
+        Medium,
+        "Unreal project cache",
+        "An Unreal Engine project's Derived Data Cache (compiled shaders and cooked assets). Rebuilt when the project next opens, which can take a long time."
     ),
     leaf!(
         "node.dist",

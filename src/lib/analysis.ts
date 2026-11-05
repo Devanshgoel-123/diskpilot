@@ -53,9 +53,9 @@ export interface ToolGroup {
 const TOOL_DEFS: { id: string; name: string; description: string; prefixes: string[] }[] = [
   {
     id: "docker",
-    name: "Docker",
-    description: "Container VM disks and CLI configuration.",
-    prefixes: ["docker."],
+    name: "Docker & containers",
+    description: "Docker, OrbStack, Colima, Podman and Minikube storage.",
+    prefixes: ["docker.", "podman.", "minikube."],
   },
   {
     id: "xcode",
@@ -86,6 +86,24 @@ const TOOL_DEFS: { id: string; name: string; description: string; prefixes: stri
     name: "VS Code",
     description: "App data, workspace storage and extensions.",
     prefixes: ["vscode."],
+  },
+  {
+    id: "windsurf",
+    name: "Windsurf",
+    description: "App data, workspace storage, extensions and AI data.",
+    prefixes: ["windsurf."],
+  },
+  {
+    id: "flutter",
+    name: "Flutter & Dart",
+    description: "Pub package cache, build output and .dart_tool folders.",
+    prefixes: ["flutter."],
+  },
+  {
+    id: "game-engines",
+    name: "Unity & Unreal",
+    description: "Unity Library folders and Unreal Derived Data Caches.",
+    prefixes: ["unity.", "unreal."],
   },
   {
     id: "rust",
