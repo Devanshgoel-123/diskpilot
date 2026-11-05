@@ -308,6 +308,15 @@ pub const CURSOR_EXTRA: Agent = Agent {
     ],
 };
 
+/// Windsurf: the editor caches in [`super::editors`] cover it; no extra
+/// locations are known yet.
+pub const WINDSURF_EXTRA: Agent = Agent {
+    id: "windsurf",
+    name: "Windsurf",
+    quit: "Quit Windsurf first.",
+    entries: &[],
+};
+
 /// Cleanable data in VS Code beyond the editor caches in [`super::editors`].
 pub const VSCODE_EXTRA: Agent = Agent {
     id: "vscode",

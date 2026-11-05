@@ -1,4 +1,4 @@
-//! Cursor and VS Code: workspace storage per project, installed vs. leftover
+//! Cursor, VS Code and Windsurf: workspace storage per project, installed vs. leftover
 //! extension folders, and caches.
 
 use std::collections::HashSet;
@@ -46,6 +46,20 @@ pub fn vscode(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
             app_bundle: PathBuf::from("/Applications/Visual Studio Code.app"),
             app_support: ctx.home_path("Library/Application Support/Code"),
             extensions: ctx.home_path(".vscode/extensions"),
+        },
+    )
+}
+
+pub fn windsurf(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
+    analyze(
+        ctx,
+        EditorPaths {
+            id: "windsurf",
+            extras: &agent_data::WINDSURF_EXTRA,
+            name: "Windsurf",
+            app_bundle: PathBuf::from("/Applications/Windsurf.app"),
+            app_support: ctx.home_path("Library/Application Support/Windsurf"),
+            extensions: ctx.home_path(".windsurf/extensions"),
         },
     )
 }

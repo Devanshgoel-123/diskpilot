@@ -286,6 +286,7 @@ pub fn analyze(ctx: &Ctx) -> (DevToolsReport, Vec<Recommendation>) {
     for (report, mut r) in [
         editors::cursor(ctx),
         editors::vscode(ctx),
+        editors::windsurf(ctx),
         agent_data::claude_code(ctx),
         agent_data::claude_desktop(ctx),
         agent_data::codex(ctx),

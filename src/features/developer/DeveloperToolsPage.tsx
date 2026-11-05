@@ -33,6 +33,7 @@ import { TranscriptSecrets } from "./TranscriptSecrets";
 const TOOL_ICON: Record<string, LucideIcon> = {
   cursor: MousePointer2,
   vscode: Code2,
+  windsurf: Code2,
   "claude-code": SquareTerminal,
   "claude-desktop": Sparkles,
   codex: Cloud,
@@ -49,6 +50,7 @@ const TOOL_ICON: Record<string, LucideIcon> = {
 const TOOL_COLOR: Record<string, string> = {
   cursor: "var(--cat-developer-tools)",
   vscode: "var(--cat-application-data)",
+  windsurf: "var(--cat-cache)",
   "claude-code": "var(--cat-user-data)",
   "claude-desktop": "var(--cat-user-data)",
   codex: "var(--cat-application-data)",
@@ -66,6 +68,7 @@ const TOOL_COLOR: Record<string, string> = {
 const TOOL_APP_PATH: Record<string, string> = {
   cursor: ".cursor",
   vscode: ".vscode",
+  windsurf: ".windsurf",
   "claude-code": ".claude",
   "claude-desktop": "Library/Application Support/Claude",
   codex: ".codex",
