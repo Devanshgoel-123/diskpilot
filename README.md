@@ -136,6 +136,16 @@ Scanner -> Classifier -> Recommendations -> Planner -> Safety gate -> Executor
 2. Open the disk image and drag DiskPilot into Applications.
 3. Open DiskPilot. Releases are not yet notarized by Apple, so the first time macOS says Apple cannot check it for malicious software. Choose **OK** (or **Done**), open **System Settings > Privacy & Security**, and select **Open Anyway** next to DiskPilot. On macOS 14 and earlier you can instead Control-click the app and choose **Open**.
 
+### Homebrew
+
+```sh
+brew tap devanshgoel-123/tap
+brew trust devanshgoel-123/tap
+brew install --cask diskpilot
+```
+
+Update with `brew upgrade --cask diskpilot`. The first open shows the same macOS warning as the download above, and is allowed the same way.
+
 New versions are published as GitHub releases. DiskPilot does not update itself yet; download the new version and replace the app in Applications. Your scan history and settings are kept.
 
 ### Build from source
