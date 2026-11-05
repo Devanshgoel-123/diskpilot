@@ -34,6 +34,7 @@ const PRIVATE_AREAS: &[(&str, &str)] = &[
     ("Library/Biome", "Usage history"),
     ("Library/Suggestions", "Usage history"),
     ("Library/IdentityServices", "Messages"),
+    ("Library/Application Support/MobileSync", "iPhone backups"),
     (".Trash", "Trash"),
 ];
 /// Bundles that hold a personal library wherever they are stored.

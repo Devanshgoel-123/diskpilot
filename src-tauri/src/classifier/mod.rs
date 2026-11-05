@@ -550,6 +550,17 @@ mod tests {
     }
 
     #[test]
+    fn iphone_backups_are_user_data() {
+        let p = FakeProbe::empty();
+        let c = dir(
+            "/Users/test/Library/Application Support/MobileSync/Backup/00008110-0001",
+            &p,
+        );
+        assert_eq!(c.rule_id, "devices.iphone-backups");
+        assert_eq!(c.category, Category::UserData);
+    }
+
+    #[test]
     fn unity_and_unreal_rules_need_their_project_markers() {
         let none = FakeProbe::empty();
         // A plain folder named Library or DerivedDataCache is not a game project.

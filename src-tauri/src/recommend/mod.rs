@@ -132,6 +132,28 @@ fn build(c: Candidate, now_ms: i64) -> Recommendation {
             }
         }
     }
+    if p.rule_id == "devices.iphone-backups" {
+        if let Some(info) = backup_info(&c.path) {
+            if let Some(name) = &info.device_name {
+                title = format!("{} · {}", c.classification.label, name);
+            }
+            let mut device = Vec::new();
+            if let Some(model) = &info.product_type {
+                device.push(model.clone());
+            }
+            if let Some(version) = &info.product_version {
+                device.push(format!("iOS {version}"));
+            }
+            if !device.is_empty() {
+                notes.push(format!("Device: {}.", device.join(", ")));
+            }
+            if let Some(ms) = info.last_backup_ms {
+                last_activity = Some(ms);
+                let days = (now_ms - ms) / DAY_MS;
+                notes.push(format!("Last backed up {days} days ago."));
+            }
+        }
+    }
     if p.rule_id.starts_with("pnpm.") {
         notes.push(
             "Estimated reclaim is an upper bound: files hard-linked into projects stay on disk."
@@ -167,6 +189,44 @@ fn build(c: Candidate, now_ms: i64) -> Recommendation {
         source: "scan".into(),
         marker: None,
     }
+}
+
+/// What a device backup's Info.plist says about it.
+#[derive(Debug, Default, PartialEq)]
+pub struct BackupInfo {
+    pub device_name: Option<String>,
+    pub product_type: Option<String>,
+    pub product_version: Option<String>,
+    pub last_backup_ms: Option<i64>,
+}
+
+/// Read a Finder/iTunes backup's Info.plist. Large files are skipped rather
+/// than loaded (the plist can embed app data).
+pub fn backup_info(backup: &Path) -> Option<BackupInfo> {
+    const MAX_PLIST: u64 = 16 * 1024 * 1024;
+    let file = backup.join("Info.plist");
+    let meta = std::fs::metadata(&file).ok()?;
+    if !meta.is_file() || meta.len() > MAX_PLIST {
+        return None;
+    }
+    let value = plist::Value::from_file(&file).ok()?;
+    let dict = value.as_dictionary()?;
+    let text = |key: &str| {
+        dict.get(key)
+            .and_then(|v| v.as_string())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+    };
+    Some(BackupInfo {
+        device_name: text("Device Name").or_else(|| text("Display Name")),
+        product_type: text("Product Type"),
+        product_version: text("Product Version"),
+        last_backup_ms: dict
+            .get("Last Backup Date")
+            .and_then(|v| v.as_date())
+            .and_then(|d| to_ms(std::time::SystemTime::from(d))),
+    })
 }
 
 /// Most recent modification among a project's dependency manifests.
@@ -433,6 +493,50 @@ mod tests {
         assert_eq!(recs.len(), 1);
         assert_eq!(recs[0].tier, Tier::ReviewFirst);
         assert!(recs[0].title.contains("Big.dmg"));
+    }
+
+    #[test]
+    fn iphone_backups_are_listed_per_device_with_details() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("Backup");
+        let backup = root.join("00008110-000A1B2C3D4E5F6A");
+        std::fs::create_dir_all(&backup).unwrap();
+        let mut info = plist::Dictionary::new();
+        info.insert("Device Name".into(), "Test iPhone".into());
+        info.insert("Product Type".into(), "iPhone14,5".into());
+        info.insert("Product Version".into(), "17.4".into());
+        let date = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        info.insert("Last Backup Date".into(), plist::Value::Date(date.into()));
+        plist::Value::Dictionary(info)
+            .to_file_xml(backup.join("Info.plist"))
+            .unwrap();
+
+        let s = summary(
+            vec![loc(
+                root.to_str().unwrap(),
+                9_000_000_000,
+                "devices.iphone-backups",
+            )],
+            vec![],
+        );
+        let mut index = DirIndex::new();
+        index.insert(backup.clone(), stats(8_000_000_000));
+        let now = 1_700_000_000_000 + 40 * DAY_MS;
+        let recs = recommend(&s, &index, &Classifier::new(HOME), now);
+        assert_eq!(recs.len(), 1);
+        let r = &recs[0];
+        assert_eq!(r.title, format!("{} · Test iPhone", r.classification.label));
+        assert_eq!(r.tier, Tier::ReviewFirst);
+        assert_eq!(r.methods, vec![CleanupMethod::Trash]);
+        assert_eq!(r.last_activity_ms, Some(1_700_000_000_000));
+        assert!(r.notes.iter().any(|n| n == "Device: iPhone14,5, iOS 17.4."));
+        assert!(r.notes.iter().any(|n| n == "Last backed up 40 days ago."));
+    }
+
+    #[test]
+    fn backup_without_info_plist_has_no_details() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(backup_info(dir.path()), None);
     }
 
     #[test]

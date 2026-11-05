@@ -347,6 +347,18 @@ pub static POLICIES: &[Policy] = &[
         before_you_start: Some("Close the project in Unreal Editor first."),
     },
     Policy {
+        rule_id: "devices.iphone-backups",
+        tier: ReviewFirst,
+        methods: TRASH_ONLY,
+        safe_because: "Old backups of devices you no longer own, or that also back up to iCloud, are usually not needed.",
+        risks: "If this is the only backup of a device, its photos, messages and app data are lost with it if the device is lost or reset.",
+        proposed_action: "Move this backup to the Trash",
+        alternative: None,
+        expand: Children,
+        min_bytes: 100 * MB,
+        before_you_start: Some("Check the device's backups in Finder (select the device, then Manage Backups) and make sure you have a newer backup you trust."),
+    },
+    Policy {
         rule_id: "library.logs",
         tier: ReviewFirst,
         methods: TRASH_OR_DELETE,

@@ -187,6 +187,14 @@ pub static DIR_RULES: &[DirRule] = &[
         "App archives created for distribution. They contain dSYM debug symbols needed to symbolicate crash reports for shipped builds, so they are not simply regenerable."
     ),
     leaf!(
+        "devices.iphone-backups",
+        HomeRelative(&["Library", "Application Support", "MobileSync", "Backup"]),
+        UserData,
+        High,
+        "iPhone & iPad backups",
+        "Local backups of iPhones and iPads made by Finder (or iTunes), one folder per backup. A backup may be the only copy of a device's photos, messages and app data."
+    ),
+    leaf!(
         "xcode.device-support",
         HomeRelative(&["Library", "Developer", "Xcode", "iOS DeviceSupport"]),
         DeveloperTools,
