@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://diskpilot.vercel.app/sitemap.xml
+Sitemap: https://diskpilot.live/sitemap.xml
