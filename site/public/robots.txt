@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://diskpilot.vercel.app/sitemap.xml
