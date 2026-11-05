@@ -1,6 +1,13 @@
 import { create } from "zustand";
 
-import { api, errorMessage, inDesktopApp, onScanFinished, onScanProgress } from "./api";
+import {
+  api,
+  errorMessage,
+  inDesktopApp,
+  onScanFinished,
+  onScanPartial,
+  onScanProgress,
+} from "./api";
 import { applyTheme, loadTheme, saveTheme, type ThemePreference } from "./theme";
 import type {
   AppEnvironment,
@@ -81,6 +88,8 @@ interface AppState {
   asking: boolean;
 
   scanning: boolean;
+  /** Results on screen are from the running scan, without app containers. */
+  partial: boolean;
   progress: ScanProgress | null;
   lastStatus: { status: ScanStatus; error: string | null } | null;
   error: string | null;
@@ -138,6 +147,7 @@ export const useApp = create<AppState>((set, get) => ({
   chat: [],
   asking: false,
   scanning: false,
+  partial: false,
   progress: null,
   lastStatus: null,
   error: null,
@@ -158,14 +168,38 @@ export const useApp = create<AppState>((set, get) => ({
     if (!subscribed) {
       subscribed = true;
       await onScanProgress((progress) => set({ progress }));
+      await onScanPartial(async () => {
+        const [summary, recommendations] = await Promise.all([
+          api.getScanSummary(),
+          api.getRecommendations(),
+        ]);
+        // The final results may already have arrived on a fast scan.
+        if (!get().scanning) return;
+        set({ summary, recommendations, partial: true, explorerPath: null });
+      });
       await onScanFinished(async (done) => {
-        set({ scanning: false, lastStatus: { status: done.status, error: done.error } });
-        if (done.status === "completed") {
+        const hadPartial = get().partial;
+        set({
+          scanning: false,
+          partial: false,
+          lastStatus: { status: done.status, error: done.error },
+        });
+        // A cancelled or failed scan that showed partial results puts the
+        // previous results back; fetch them as well.
+        if (done.status === "completed" || hadPartial) {
           const [summary, recommendations] = await Promise.all([
             api.getScanSummary(),
             api.getRecommendations(),
           ]);
-          set({ summary, recommendations, explorerPath: null });
+          // Keep the folder being browsed when the containers fill in.
+          const keepPlace = hadPartial && done.status === "completed";
+          set(
+            keepPlace
+              ? { summary, recommendations }
+              : { summary, recommendations, explorerPath: null },
+          );
+        }
+        if (done.status === "completed") {
           // Version and per-tool checks feed Cleanup too, so refresh them now.
           void get().analyzeDevTools();
         }
@@ -196,7 +230,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   startScan: async () => {
-    set({ error: null, lastStatus: null, progress: null });
+    set({ error: null, lastStatus: null, progress: null, partial: false });
     try {
       await api.startScan(get().scanRoot ?? undefined);
       set({ scanning: true });

@@ -7,7 +7,8 @@ import { useApp } from "@/lib/store";
 
 /** Global scan button / live progress, shown in every page header. */
 export function ScanControl() {
-  const { desktop, scanning, progress, summary, scanRoot, env, startScan, cancelScan } = useApp();
+  const { desktop, scanning, partial, progress, summary, scanRoot, env, startScan, cancelScan } =
+    useApp();
   if (!desktop) return null;
 
   const target = tildify(scanRoot ?? env?.homeDir ?? "~", env?.homeDir);
@@ -21,9 +22,16 @@ export function ScanControl() {
             {formatCount(progress?.filesScanned ?? 0)} files ·{" "}
             {formatBytes(progress?.bytesScanned ?? 0)}
           </p>
-          <p className="max-w-[260px] truncate font-mono text-2xs text-subtle-foreground">
-            {progress ? tildify(progress.currentPath, env?.homeDir) : "Starting…"}
-          </p>
+          {partial && progress ? (
+            <p className="tabular max-w-[260px] truncate text-2xs text-subtle-foreground">
+              Measuring app containers: {formatCount(progress.containersDone)} of{" "}
+              {formatCount(progress.containersTotal)}
+            </p>
+          ) : (
+            <p className="max-w-[260px] truncate font-mono text-2xs text-subtle-foreground">
+              {progress ? tildify(progress.currentPath, env?.homeDir) : "Starting…"}
+            </p>
+          )}
         </div>
         <Button variant="secondary" onClick={() => void cancelScan()}>
           <Square />
