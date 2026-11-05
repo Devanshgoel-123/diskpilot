@@ -171,3 +171,37 @@ jobs:
             gh release create "$TAG" DiskPilot.dmg DiskPilot.dmg.sha256 \
               --verify-tag --title "DiskPilot ${TAG#v}" --notes-file notes.md
           fi
+
+  homebrew:
+    name: Update the Homebrew tap
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions: {}
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      # A fine-grained token with Contents: write on Devanshgoel-123/homebrew-tap
+      # only. Without it this job does nothing.
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release
+          path: out
+      - name: Bump the cask
+        if: env.TAP_TOKEN != ''
+        run: |
+          version="${TAG#v}"
+          sha="$(cut -d' ' -f1 out/DiskPilot.dmg.sha256)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.]+)?$ ]] || { echo "::error::bad version $version"; exit 1; }
+          [[ "$sha" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::bad checksum"; exit 1; }
+          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/Devanshgoel-123/homebrew-tap.git" tap
+          cd tap
+          sed -i -E "s/^  version \".*\"$/  version \"${version}\"/; s/^  sha256 \".*\"$/  sha256 \"${sha}\"/" Casks/diskpilot.rb
+          git diff --exit-code --quiet && { echo "Cask already at $version"; exit 0; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "diskpilot ${version}"
+          git push
+      - name: Note when the tap is not updated
+        if: env.TAP_TOKEN == ''
+        run: echo "::notice::HOMEBREW_TAP_TOKEN is not set; update Casks/diskpilot.rb in the tap by hand."
