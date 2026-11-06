@@ -6,6 +6,7 @@
 
 use std::fs;
 use std::io;
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
@@ -39,11 +40,8 @@ impl FileOps for RealFileOps {
             ));
         }
         if meta.is_dir() {
-            if contains_other_volume(path, meta.dev())? {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "it contains another mounted volume, so DiskPilot will not delete it",
-                ));
+            if let Some(reason) = removal_blocker(path, meta.dev())? {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, reason));
             }
             fs::remove_dir_all(path)
         } else {
@@ -52,24 +50,43 @@ impl FileOps for RealFileOps {
     }
 }
 
-/// Whether any folder under `dir` is on a different device, such as a disk
-/// image or network share mounted inside it. `remove_dir_all` would descend
-/// into it and erase that volume's contents. Links are never followed.
-fn contains_other_volume(dir: &Path, dev: u64) -> io::Result<bool> {
+/// Why `remove_dir_all` must not run on `dir`, checked before anything is
+/// removed. A folder on another device (a disk image or network share mounted
+/// inside) would have that volume's contents erased. A folder this user cannot
+/// write to, such as a module in Go's read-only module cache, would stop the
+/// removal partway and leave the tree half deleted. Links are never followed.
+fn removal_blocker(dir: &Path, dev: u64) -> io::Result<Option<&'static str>> {
     let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {
+        if !writable(&d) {
+            return Ok(Some(
+                "it contains read-only folders, so DiskPilot will not delete it",
+            ));
+        }
         for entry in fs::read_dir(&d)? {
             let path = entry?.path();
             let meta = path.symlink_metadata()?;
             if meta.is_dir() {
                 if meta.dev() != dev {
-                    return Ok(true);
+                    return Ok(Some(
+                        "it contains another mounted volume, so DiskPilot will not delete it",
+                    ));
                 }
                 stack.push(path);
             }
         }
     }
-    Ok(false)
+    Ok(None)
+}
+
+/// Whether this user may remove entries from `dir`, by the kernel's own
+/// check, so ownership and ACLs count.
+fn writable(dir: &Path) -> bool {
+    let Ok(c_path) = std::ffi::CString::new(dir.as_os_str().as_bytes()) else {
+        return false;
+    };
+    // SAFETY: `c_path` is a valid NUL-terminated string for the whole call.
+    unsafe { libc::access(c_path.as_ptr(), libc::W_OK | libc::X_OK) == 0 }
 }
 
 pub fn execute(
@@ -284,6 +301,44 @@ mod tests {
             outside.join("keep.txt").exists(),
             "symlink target must be untouched"
         );
+    }
+
+    #[test]
+    fn deleting_a_tree_with_read_only_folders_touches_nothing() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        // Go's module cache: extracted modules are 0555 so builds cannot edit them.
+        let target = home.join("go/pkg/mod");
+        let module = target.join("golang.org/x/text@v0.1.0");
+        fs::create_dir_all(module.join("language")).unwrap();
+        fs::write(module.join("language/tags.go"), "package language").unwrap();
+        fs::write(target.join("a-writable-file"), "x").unwrap();
+        let set_mode = |mode| {
+            for d in [module.join("language"), module.clone()] {
+                fs::set_permissions(d, fs::Permissions::from_mode(mode)).unwrap();
+            }
+        };
+        set_mode(0o555);
+
+        let record = execute(
+            &plan(CleanupMethod::Delete, &[&target]),
+            &home,
+            &home,
+            &RealFileOps,
+        );
+        let left_alone =
+            target.join("a-writable-file").exists() && module.join("language/tags.go").exists();
+        set_mode(0o755);
+        assert!(
+            left_alone,
+            "a failed delete must not remove part of the tree"
+        );
+        assert_eq!(record.status, ActionStatus::Failed);
+        assert!(record.items[0]
+            .error
+            .as_deref()
+            .is_some_and(|e| e.contains("read-only")));
     }
 
     #[test]
