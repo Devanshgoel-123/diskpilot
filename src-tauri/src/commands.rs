@@ -371,29 +371,65 @@ pub fn reveal_in_finder(state: State<'_, AppState>, path: String) -> AppResult<(
     }
 }
 
-/// A Quick Look thumbnail (PNG bytes) of a file inside the scanned folder, so
-/// people can see a photo, video or document before deciding to remove it.
-/// Read-only; folders and symbolic links are refused.
+/// A Quick Look thumbnail (PNG bytes) of a file DiskPilot listed, so people
+/// can see a photo, video or document before deciding to remove it.
+///
+/// Quick Look renders text, PDFs and documents legibly, so this must not be
+/// a way to read arbitrary files: only a path that Files by type or the
+/// duplicate search listed is accepted, exactly as listed, and only while it
+/// is still that same regular file with no symbolic link anywhere on its way.
 #[tauri::command]
 pub async fn file_thumbnail(
     state: State<'_, AppState>,
     path: String,
     size: f64,
 ) -> AppResult<tauri::ipc::Response> {
-    let outcome = last_scan(&state)?;
+    let listed = {
+        let slot = state.slot();
+        let dups = state.duplicates();
+        let by_type = slot.last.iter().flat_map(|o| {
+            o.summary
+                .file_kinds
+                .iter()
+                .flat_map(|g| g.files.iter().map(|f| f.path.as_str()))
+        });
+        let duplicates = dups.report.iter().flat_map(|r| {
+            r.groups
+                .iter()
+                .flat_map(|g| g.files.iter().map(|f| f.path.as_str()))
+        });
+        by_type.chain(duplicates).any(|p| p == path)
+    };
+    if !listed {
+        return Err(AppError::Other(
+            "Only files DiskPilot listed can be previewed".into(),
+        ));
+    }
     blocking(move || {
-        let path = path_in_scan(&path, &outcome)?;
-        let meta = path
-            .symlink_metadata()
-            .map_err(|_| SafetyError::Missing(path.display().to_string()))?;
-        if !meta.is_file() {
-            return Err(AppError::Other("Only files can be previewed".into()));
-        }
+        let path = previewable_file(&path)?;
         crate::preview::thumbnail_png(&path, size)
             .map(tauri::ipc::Response::new)
             .ok_or_else(|| AppError::Other("macOS could not make a preview of this file".into()))
     })
     .await
+}
+
+/// The path, if it is still a regular file reached without any symbolic
+/// link (a folder on the way swapped for a link would lead elsewhere).
+fn previewable_file(raw: &str) -> AppResult<PathBuf> {
+    let path = safety::parse_user_path(raw)?;
+    let meta = path
+        .symlink_metadata()
+        .map_err(|_| SafetyError::Missing(path.display().to_string()))?;
+    if !meta.is_file() {
+        return Err(AppError::Other("Only files can be previewed".into()));
+    }
+    if path.canonicalize().ok().as_deref() != Some(path.as_path()) {
+        return Err(AppError::Other(
+            "This file moved since it was listed".into(),
+        ));
+    }
+    Ok(path)
 }
 
 #[tauri::command]
@@ -1045,4 +1081,32 @@ fn unique_id(prefix: &str, now: i64) -> String {
     }
     let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
     format!("{prefix}-{now}-{hex}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::previewable_file;
+
+    #[test]
+    fn previews_only_regular_files_reached_without_links() {
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        let photos = home.join("Photos");
+        std::fs::create_dir_all(&photos).unwrap();
+        std::fs::write(photos.join("a.jpg"), "x").unwrap();
+        std::fs::create_dir_all(home.join("elsewhere")).unwrap();
+        std::fs::write(home.join("elsewhere/secret.txt"), "key").unwrap();
+        std::os::unix::fs::symlink(home.join("elsewhere"), home.join("linked")).unwrap();
+        std::os::unix::fs::symlink(home.join("elsewhere/secret.txt"), photos.join("b.jpg"))
+            .unwrap();
+        let s = |p: std::path::PathBuf| p.display().to_string();
+
+        assert!(previewable_file(&s(photos.join("a.jpg"))).is_ok());
+        // A folder on the way that is a link, the file itself a link, a folder.
+        assert!(previewable_file(&s(home.join("linked/secret.txt"))).is_err());
+        assert!(previewable_file(&s(photos.join("b.jpg"))).is_err());
+        assert!(previewable_file(&s(photos.clone())).is_err());
+        assert!(previewable_file(&s(photos.join("../elsewhere/secret.txt"))).is_err());
+        assert!(previewable_file(&s(photos.join("missing.jpg"))).is_err());
+    }
 }
