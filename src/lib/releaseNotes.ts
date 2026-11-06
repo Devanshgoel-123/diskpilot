@@ -5,13 +5,25 @@ const files = import.meta.glob<string>("../../docs/releases/*.md", {
   eager: true,
 });
 
-/** Drops sections about downloading, which only make sense on GitHub. */
+/**
+ * Drops sections about downloading, verifying or installing, at any heading
+ * level, since those only make sense on GitHub. A dropped section ends at the
+ * next heading of the same or a higher level.
+ */
 export function inAppNotes(markdown: string): string {
   const out: string[] = [];
-  let skipping = false;
+  let skipLevel: number | null = null;
+  let inCode = false;
   for (const line of markdown.split("\n")) {
-    if (line.startsWith("## ")) skipping = /^## (Download|Verify|Install)/.test(line);
-    if (!skipping) out.push(line);
+    if (line.startsWith("```")) inCode = !inCode;
+    const heading = inCode ? null : /^(#{2,6}) (.*)$/.exec(line);
+    if (heading) {
+      const [, hashes = "", title = ""] = heading;
+      const level = hashes.length;
+      if (skipLevel !== null && level <= skipLevel) skipLevel = null;
+      if (skipLevel === null && /^(Download|Verify|Install)/.test(title)) skipLevel = level;
+    }
+    if (skipLevel === null) out.push(line);
   }
   return out.join("\n").trim();
 }
