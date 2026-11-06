@@ -4,8 +4,10 @@
 //! and every execution rebuilds that preview from fresh Docker state and
 //! refuses to run if a precondition no longer holds. Nothing is ever
 //! force-removed or pruned broadly. Volumes are removed only one at a time, at
-//! the user's explicit request, when no container (running or stopped) uses
-//! them; DiskPilot never suggests or automates removing a volume.
+//! the user's explicit request, when no other container (running or stopped)
+//! uses them: either on their own, or ticked one by one when removing the
+//! container that uses them. DiskPilot never suggests or automates removing a
+//! volume.
 
 use std::time::Duration;
 
@@ -19,10 +21,26 @@ use crate::scanner::now_ms;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum DockerAction {
-    StopContainer { id: String },
-    RemoveContainer { id: String },
-    RemoveImage { id: String },
-    RemoveVolume { name: String },
+    StopContainer {
+        id: String,
+    },
+    /// Remove a container. `stop_first` allows a running container, which is
+    /// stopped normally before it is removed. `volumes` are volumes the user
+    /// ticked to delete along with it; each must be used by this container
+    /// and no other.
+    RemoveContainer {
+        id: String,
+        #[serde(default, rename = "stopFirst")]
+        stop_first: bool,
+        #[serde(default)]
+        volumes: Vec<String>,
+    },
+    RemoveImage {
+        id: String,
+    },
+    RemoveVolume {
+        name: String,
+    },
     PruneBuildCache,
 }
 
@@ -46,13 +64,38 @@ pub struct AffectedItem {
     pub bytes: Option<u64>,
 }
 
+/// One command of an action, run in order; a failure stops the rest.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerStep {
+    /// The exact argument vector that will run, starting with "docker".
+    pub command: Vec<String>,
+    /// What the step acts on, for history.
+    pub target: String,
+    /// Space this step frees, when known.
+    pub bytes: Option<u64>,
+}
+
+/// A volume the container uses, offered for deletion alongside it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VolumeChoice {
+    pub name: String,
+    pub bytes: Option<u64>,
+    pub compose_project: Option<String>,
+    pub selected: bool,
+    /// Set when the volume cannot be deleted with this container.
+    pub kept_because: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DockerActionPreview {
     pub action: DockerAction,
     pub title: String,
-    /// The exact argument vector that will run, starting with "docker".
-    pub command: Vec<String>,
+    pub steps: Vec<DockerStep>,
+    /// Volumes the user can choose to delete too (container removal only).
+    pub volume_choices: Vec<VolumeChoice>,
     pub destructive: bool,
     pub affected: Vec<AffectedItem>,
     pub effects: Vec<String>,
@@ -97,10 +140,62 @@ pub fn validate_volume_name(name: &str) -> Result<&str, DockerError> {
     }
 }
 
-fn cmd(args: &[&str]) -> Vec<String> {
-    std::iter::once("docker")
-        .chain(args.iter().copied())
-        .map(str::to_string)
+fn step(args: &[&str], target: &str, bytes: Option<u64>) -> DockerStep {
+    DockerStep {
+        command: std::iter::once("docker")
+            .chain(args.iter().copied())
+            .map(str::to_string)
+            .collect(),
+        target: target.to_string(),
+        bytes,
+    }
+}
+
+/// The named volumes container `c` uses, and whether each can be deleted
+/// with it: only when no other container, running or stopped, uses it.
+/// Bind mounts and names Docker shortened are not volumes we can match, so
+/// they are left out.
+fn volume_choices(
+    c: &super::DockerContainer,
+    o: &DockerOverview,
+    selected: &[String],
+) -> Vec<VolumeChoice> {
+    let mut seen = std::collections::BTreeSet::new();
+    c.mounts
+        .iter()
+        .filter(|m| seen.insert(m.as_str()))
+        .filter_map(|m| o.volumes.iter().find(|v| &v.name == m))
+        .map(|v| {
+            let others: std::collections::BTreeSet<&str> = o
+                .containers
+                .iter()
+                .filter(|other| other.id != c.id && other.mounts.iter().any(|m| m == &v.name))
+                .map(|other| other.name.as_str())
+                .chain(
+                    v.used_by
+                        .iter()
+                        .map(String::as_str)
+                        .filter(|n| *n != c.name),
+                )
+                .collect();
+            let kept_because = if !others.is_empty() {
+                Some(format!(
+                    "Also used by {}.",
+                    others.into_iter().collect::<Vec<_>>().join(", ")
+                ))
+            } else if v.links.is_some_and(|n| n > 1) {
+                Some("Another container also uses it.".into())
+            } else {
+                None
+            };
+            VolumeChoice {
+                selected: kept_because.is_none() && selected.iter().any(|s| s == &v.name),
+                name: v.name.clone(),
+                bytes: v.size_bytes,
+                compose_project: v.compose_project.clone(),
+                kept_because,
+            }
+        })
         .collect()
 }
 
@@ -112,7 +207,8 @@ pub fn preview(
     let mut p = DockerActionPreview {
         action: action.clone(),
         title: String::new(),
-        command: Vec::new(),
+        steps: Vec::new(),
+        volume_choices: Vec::new(),
         destructive: action.is_destructive(),
         affected: Vec::new(),
         effects: Vec::new(),
@@ -134,7 +230,7 @@ pub fn preview(
                 .ok_or_else(|| DockerError::Blocked("Container no longer exists.".into()))?;
             p.title = format!("Stop container {}", c.name);
             // A normal stop: Docker asks the processes to exit, then waits.
-            p.command = cmd(&["stop", id]);
+            p.steps.push(step(&["stop", id], &c.name, None));
             p.affected.push(AffectedItem {
                 label: c.name.clone(),
                 detail: format!("{} · {}", c.image, c.status),
@@ -153,7 +249,11 @@ pub fn preview(
                 ));
             }
         }
-        DockerAction::RemoveContainer { id } => {
+        DockerAction::RemoveContainer {
+            id,
+            stop_first,
+            volumes,
+        } => {
             validate_id(id)?;
             let c = o
                 .containers
@@ -161,34 +261,98 @@ pub fn preview(
                 .find(|c| &c.id == id)
                 .ok_or_else(|| DockerError::Blocked("Container no longer exists.".into()))?;
             p.title = format!("Remove container {}", c.name);
-            // No -f (never remove running containers) and no -v (never volumes).
-            p.command = cmd(&["rm", id]);
+            if c.running {
+                if *stop_first {
+                    p.steps.push(step(&["stop", id], &c.name, None));
+                    p.effects.push(
+                        "Stops the container normally first: Docker asks its processes to exit, then waits."
+                            .into(),
+                    );
+                } else {
+                    p.blocked = Some("The container is running. Stop it first.".into());
+                }
+            }
+            // No -f (never force-remove) and no -v (volumes only when ticked).
+            p.steps.push(step(&["rm", id], &c.name, Some(c.size_bytes)));
             p.affected.push(AffectedItem {
                 label: c.name.clone(),
                 detail: format!("{} · {}", c.image, c.status),
                 bytes: Some(c.size_bytes),
             });
-            p.reclaim_bytes = Some(c.size_bytes);
             p.effects.push(
                 "Deletes the container and its writable layer (files changed inside it that are not in a volume)."
                     .into(),
             );
-            if c.running {
-                p.blocked = Some("The container is running. Stop it first.".into());
+
+            p.volume_choices = volume_choices(c, o, volumes);
+            for name in volumes {
+                validate_volume_name(name)?;
+                match p.volume_choices.iter().find(|v| &v.name == name) {
+                    Some(v) if v.kept_because.is_none() => {}
+                    Some(v) => {
+                        p.blocked = Some(format!(
+                            "Volume {name} cannot be deleted: {}",
+                            v.kept_because.as_deref().unwrap_or_default()
+                        ));
+                    }
+                    None => {
+                        p.blocked = Some(format!("{} does not use a volume named {name}.", c.name));
+                    }
+                }
             }
-            if !c.mounts.is_empty() {
+            let mut deleted = Vec::new();
+            for v in p.volume_choices.iter().filter(|v| v.selected) {
+                p.steps
+                    .push(step(&["volume", "rm", &v.name], &v.name, v.bytes));
+                p.affected.push(AffectedItem {
+                    label: v.name.clone(),
+                    detail: match &v.compose_project {
+                        Some(project) => format!("Volume · Compose project “{project}”"),
+                        None => "Volume".into(),
+                    },
+                    bytes: v.bytes,
+                });
+                deleted.push(v.name.as_str());
+            }
+            let kept: Vec<&str> = p
+                .volume_choices
+                .iter()
+                .filter(|v| !v.selected)
+                .map(|v| v.name.as_str())
+                .collect();
+            if !deleted.is_empty() {
+                p.effects.push(format!(
+                    "Permanently deletes volume{} {}, with everything stored in {}. This does not go to the Trash and cannot be undone.",
+                    if deleted.len() == 1 { "" } else { "s" },
+                    deleted.join(", "),
+                    if deleted.len() == 1 { "it" } else { "them" }
+                ));
+            }
+            if !kept.is_empty() {
                 p.effects
-                    .push(format!("Its volumes are kept: {}.", c.mounts.join(", ")));
+                    .push(format!("These volumes are kept: {}.", kept.join(", ")));
             }
+            p.reclaim_bytes = Some(p.steps.iter().filter_map(|s| s.bytes).sum());
             if let Some(project) = &c.compose_project {
                 p.warnings.push(format!(
-                    "Part of Compose project “{project}”. `docker compose up` will create it again."
+                    "Part of Compose project “{project}”. `docker compose up` will create it again{}.",
+                    if deleted.is_empty() {
+                        ""
+                    } else {
+                        ", with empty volumes in place of the deleted ones"
+                    }
                 ));
             }
             p.warnings.push(
                 "A stopped container is not necessarily unused: you may want to run it again."
                     .into(),
             );
+            if !deleted.is_empty() {
+                p.warnings.push(
+                    "Back up any volume data you might need first, for example with `docker run --rm -v VOLUME:/data -v \"$PWD\":/backup alpine tar czf /backup/volume.tgz /data`."
+                        .into(),
+                );
+            }
         }
         DockerAction::RemoveImage { id } => {
             validate_id(id)?;
@@ -204,7 +368,8 @@ pub fn preview(
             };
             p.title = format!("Remove image {name}");
             // No -f: Docker refuses to remove images that containers use.
-            p.command = cmd(&["image", "rm", id]);
+            p.steps
+                .push(step(&["image", "rm", id], &name, Some(img.unique_bytes)));
             p.affected.push(AffectedItem {
                 label: name,
                 detail: format!("ID {}", short_id(&img.id)),
@@ -243,7 +408,8 @@ pub fn preview(
                 .ok_or_else(|| DockerError::Blocked("Volume no longer exists.".into()))?;
             p.title = format!("Delete volume {}", v.name);
             // No -f: Docker refuses to remove a volume any container uses.
-            p.command = cmd(&["volume", "rm", name]);
+            p.steps
+                .push(step(&["volume", "rm", name], name, v.size_bytes));
             p.affected.push(AffectedItem {
                 label: v.name.clone(),
                 detail: match &v.compose_project {
@@ -291,7 +457,11 @@ pub fn preview(
         DockerAction::PruneBuildCache => {
             let unused: Vec<_> = o.build_cache.iter().filter(|b| !b.in_use).collect();
             p.title = "Remove unused build cache".into();
-            p.command = cmd(&["builder", "prune", "--all", "--force"]);
+            p.steps.push(step(
+                &["builder", "prune", "--all", "--force"],
+                "Unused build cache",
+                None,
+            ));
             let total: u64 = unused.iter().map(|b| b.size_bytes).sum();
             // Records can share data, so their sizes overlap; prefer Docker's
             // own reclaimable figure when it reports one.
@@ -301,6 +471,9 @@ pub fn preview(
             } else {
                 total
             });
+            if let Some(s) = p.steps.last_mut() {
+                s.bytes = p.reclaim_bytes;
+            }
             if unused.iter().any(|b| b.shared) || (reported > 0 && reported < total) {
                 p.effects.push(
                     "Some records share data, so their individual sizes add up to more than is freed."
@@ -359,36 +532,59 @@ pub fn execute(
     if let Some(reason) = &preview.blocked {
         return Err(DockerError::Blocked(reason.clone()));
     }
-    let args: Vec<&str> = preview.command.iter().skip(1).map(String::as_str).collect();
     let started = now_ms();
-    let outcome = cli.run(&args, Duration::from_secs(180));
-    let command_line = preview.command.join(" ");
-    let (succeeded, output, error) = match outcome {
-        Ok(out) => (true, out.trim().to_string(), None),
-        Err(e) => (false, String::new(), Some(e.to_string())),
-    };
+    let mut items = Vec::new();
+    let mut outputs = Vec::new();
+    let mut error = None;
+    for step in &preview.steps {
+        let line = step.command.join(" ");
+        if error.is_some() {
+            items.push(CleanupItemResult {
+                target: step.target.clone(),
+                operation: line,
+                bytes: 0,
+                status: ItemStatus::Skipped,
+                error: Some("Not run because an earlier step failed.".into()),
+            });
+            continue;
+        }
+        let args: Vec<&str> = step.command.iter().skip(1).map(String::as_str).collect();
+        match cli.run(&args, Duration::from_secs(180)) {
+            Ok(out) => {
+                let out = out.trim();
+                if !out.is_empty() {
+                    outputs.push(out.to_string());
+                }
+                items.push(CleanupItemResult {
+                    target: step.target.clone(),
+                    operation: line,
+                    bytes: step.bytes.unwrap_or(0),
+                    status: ItemStatus::Succeeded,
+                    error: None,
+                });
+            }
+            Err(e) => {
+                let message = e.to_string();
+                items.push(CleanupItemResult {
+                    target: step.target.clone(),
+                    operation: line,
+                    bytes: 0,
+                    status: ItemStatus::Failed,
+                    error: Some(message.clone()),
+                });
+                error = Some(message);
+            }
+        }
+    }
+    let succeeded = error.is_none();
+    let output = outputs.join("\n");
 
     let record = action.is_destructive().then(|| {
-        let bytes = if succeeded {
-            preview.reclaim_bytes.unwrap_or(0)
-        } else {
-            0
-        };
-        let items = vec![CleanupItemResult {
-            target: preview
-                .affected
-                .first()
-                .map(|a| a.label.clone())
-                .unwrap_or_else(|| preview.title.clone()),
-            operation: command_line.clone(),
-            bytes,
-            status: if succeeded {
-                ItemStatus::Succeeded
-            } else {
-                ItemStatus::Failed
-            },
-            error: error.clone(),
-        }];
+        let bytes = items
+            .iter()
+            .filter(|i| i.status == ItemStatus::Succeeded)
+            .map(|i| i.bytes)
+            .sum();
         CleanupRecord {
             id: format!("docker-{started}"),
             kind: "docker".into(),
@@ -600,6 +796,69 @@ mod tests {
     const DANGLING: &str =
         "sha256:ef60141d283bb798a5e9b4820aeda6a8995f25244ec5359b0d76dd849de69db8";
 
+    fn remove(id: &str, stop_first: bool, volumes: &[&str]) -> DockerAction {
+        DockerAction::RemoveContainer {
+            id: id.into(),
+            stop_first,
+            volumes: volumes.iter().map(|v| v.to_string()).collect(),
+        }
+    }
+
+    fn commands(p: &DockerActionPreview) -> Vec<Vec<&str>> {
+        p.steps
+            .iter()
+            .map(|s| s.command.iter().map(String::as_str).collect())
+            .collect()
+    }
+
+    #[test]
+    fn a_running_container_can_be_stopped_then_removed() {
+        let p = preview(&remove(WEB, true, &[]), &sample()).unwrap();
+        assert!(p.blocked.is_none());
+        assert_eq!(
+            commands(&p),
+            vec![vec!["docker", "stop", WEB], vec!["docker", "rm", WEB]]
+        );
+    }
+
+    #[test]
+    fn ticked_volumes_are_deleted_after_the_container() {
+        let p = preview(&remove(DB, false, &["ledger_pg"]), &sample()).unwrap();
+        assert!(p.blocked.is_none());
+        assert_eq!(
+            commands(&p),
+            vec![
+                vec!["docker", "rm", DB],
+                vec!["docker", "volume", "rm", "ledger_pg"]
+            ]
+        );
+        assert!(p.volume_choices[0].selected);
+        assert_eq!(p.reclaim_bytes, Some(63 + 49_480_000));
+        assert!(p.effects.iter().any(|e| e.contains("cannot be undone")));
+    }
+
+    #[test]
+    fn volumes_the_container_does_not_own_alone_cannot_be_ticked() {
+        let mut o = sample();
+        // Another container mounts ledger_pg too.
+        let mut other = o.containers[1].clone();
+        other.id = "b".repeat(64);
+        other.name = "ledger-backup-1".into();
+        o.containers.push(other);
+        let p = preview(&remove(DB, false, &["ledger_pg"]), &o).unwrap();
+        assert!(p.volume_choices[0]
+            .kept_because
+            .as_deref()
+            .unwrap()
+            .contains("ledger-backup-1"));
+        assert!(p.blocked.as_deref().unwrap().contains("ledger_pg"));
+
+        // A volume this container does not use, or a bad name, never runs.
+        let q = preview(&remove(DB, false, &["orphan_data"]), &sample()).unwrap();
+        assert!(q.blocked.is_some());
+        assert!(preview(&remove(DB, false, &["-f"]), &sample()).is_err());
+    }
+
     #[test]
     fn rejects_anything_that_is_not_an_id() {
         assert!(validate_id(WEB).is_ok());
@@ -614,20 +873,19 @@ mod tests {
 
     #[test]
     fn running_containers_cannot_be_removed() {
-        let p = preview(&DockerAction::RemoveContainer { id: WEB.into() }, &sample()).unwrap();
+        let p = preview(&remove(WEB, false, &[]), &sample()).unwrap();
         assert!(p.blocked.is_some());
-        assert_eq!(p.command, vec!["docker", "rm", WEB]);
+        assert_eq!(commands(&p), vec![vec!["docker", "rm", WEB]]);
     }
 
     #[test]
     fn removing_a_stopped_container_keeps_volumes_and_never_forces() {
-        let p = preview(&DockerAction::RemoveContainer { id: DB.into() }, &sample()).unwrap();
+        let p = preview(&remove(DB, false, &[]), &sample()).unwrap();
         assert!(p.blocked.is_none());
-        assert!(!p
-            .command
-            .iter()
-            .any(|a| a == "-f" || a == "-v" || a == "--volumes"));
-        assert!(p.effects.iter().any(|e| e.contains("ledger_pg")));
+        assert_eq!(commands(&p), vec![vec!["docker", "rm", DB]]);
+        assert!(p.effects.iter().any(|e| e.contains("kept: ledger_pg")));
+        assert_eq!(p.volume_choices.len(), 1);
+        assert!(!p.volume_choices[0].selected);
         assert!(p.warnings.iter().any(|w| w.contains("Compose")));
     }
 
@@ -659,8 +917,8 @@ mod tests {
         assert_eq!(p.affected.len(), 1);
         assert_eq!(p.reclaim_bytes, Some(120_000_000));
         assert_eq!(
-            p.command,
-            vec!["docker", "builder", "prune", "--all", "--force"]
+            commands(&p),
+            vec![vec!["docker", "builder", "prune", "--all", "--force"]]
         );
     }
 
@@ -669,7 +927,7 @@ mod tests {
         let p = preview(&DockerAction::StopContainer { id: WEB.into() }, &sample()).unwrap();
         assert!(p.blocked.is_none());
         assert!(!p.destructive);
-        assert_eq!(p.command, vec!["docker", "stop", WEB]);
+        assert_eq!(commands(&p), vec![vec!["docker", "stop", WEB]]);
         let stopped = preview(&DockerAction::StopContainer { id: DB.into() }, &sample()).unwrap();
         assert!(stopped.blocked.is_some());
     }
@@ -699,7 +957,10 @@ mod tests {
         .unwrap();
         assert!(p.blocked.is_none());
         assert!(p.destructive);
-        assert_eq!(p.command, vec!["docker", "volume", "rm", "orphan_data"]);
+        assert_eq!(
+            commands(&p),
+            vec![vec!["docker", "volume", "rm", "orphan_data"]]
+        );
         assert_eq!(p.reclaim_bytes, Some(98_300_000));
         assert!(p.effects.iter().any(|e| e.contains("cannot be undone")));
         assert!(preview(&DockerAction::RemoveVolume { name: "-f".into() }, &sample()).is_err());
@@ -716,7 +977,7 @@ mod tests {
     fn nothing_runs_when_docker_is_down() {
         let mut o = sample();
         o.status.state = DockerState::NotRunning;
-        let p = preview(&DockerAction::RemoveContainer { id: DB.into() }, &o).unwrap();
+        let p = preview(&remove(DB, false, &[]), &o).unwrap();
         assert!(p.blocked.is_some());
     }
 
