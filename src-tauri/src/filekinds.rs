@@ -228,6 +228,44 @@ mod tests {
     }
 
     #[test]
+    fn a_file_swapped_for_a_link_or_folder_is_refused() {
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        let elsewhere = home.join("elsewhere.mp4");
+        std::fs::write(&elsewhere, vec![1u8; 10]).unwrap();
+        let (link, folder) = (home.join("link.mp4"), home.join("folder.mp4"));
+        // Both were 10-byte videos at scan time; now one is a link to another
+        // file of the same size, the other a folder.
+        std::os::unix::fs::symlink(&elsewhere, &link).unwrap();
+        std::fs::create_dir(&folder).unwrap();
+        let groups = vec![FileKindGroup {
+            kind: FileKind::Videos,
+            bytes: 20,
+            file_count: 2,
+            files: vec![entry(&link, 10), entry(&folder, 10)],
+        }];
+        let selected: Vec<String> = [&link, &folder]
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect();
+        let classify = |_: &Path| crate::test_support::recommendation().classification;
+        let (recs, rejected) = removal_recommendations(&groups, &selected, &classify);
+        assert!(recs.is_empty());
+        assert!(rejected
+            .iter()
+            .all(|r| r.reason == "It changed since the scan. Scan again."));
+        assert_eq!(rejected.len(), 2);
+        assert!(elsewhere.exists());
+    }
+
+    #[test]
+    fn nothing_selected_plans_nothing() {
+        let classify = |_: &Path| crate::test_support::recommendation().classification;
+        let (recs, rejected) = removal_recommendations(&[], &[], &classify);
+        assert!(recs.is_empty() && rejected.is_empty());
+    }
+
+    #[test]
     fn types_come_from_the_extension_in_any_case() {
         assert_eq!(FileKind::of(OsStr::new("trip.MP4")), Some(FileKind::Videos));
         assert_eq!(
