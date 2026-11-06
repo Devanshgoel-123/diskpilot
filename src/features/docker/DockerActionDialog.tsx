@@ -3,6 +3,7 @@ import { type CSSProperties, useEffect, useState } from "react";
 
 import { CopyButton } from "@/components/shared/CopyButton";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +31,18 @@ export function DockerActionDialog({
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<DockerActionResult | null>(null);
+  // Deleting a volume cannot be undone, so its name must be typed to confirm.
+  const mustType = action.type === "removeVolume" ? action.name : null;
+  const [typed, setTyped] = useState("");
+  const confirmed = mustType === null || typed.trim() === mustType;
+  const confirmLabel =
+    action.type === "removeVolume"
+      ? "Delete volume"
+      : action.type === "stopContainer"
+        ? "Stop container"
+        : preview?.destructive
+          ? "Confirm removal"
+          : "Confirm";
 
   useEffect(() => {
     let live = true;
@@ -167,6 +180,23 @@ export function DockerActionDialog({
               {result.error ?? (result.output || "(no output)")}
             </pre>
           ) : null}
+          {mustType && preview && !preview.blocked && !result ? (
+            <label className="flex flex-col gap-1.5 text-xs">
+              <span>
+                Type <span className="selectable font-mono font-medium">{mustType}</span> to
+                confirm. The data cannot be recovered.
+              </span>
+              <Input
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                aria-label={`Type ${mustType} to confirm`}
+                className="font-mono"
+              />
+            </label>
+          ) : null}
           {error ? <p className="text-xs text-critical">{error}</p> : null}
         </div>
 
@@ -180,13 +210,13 @@ export function DockerActionDialog({
               </Button>
               <Button
                 onClick={() => void run()}
-                disabled={!preview || !!preview.blocked || running}
+                disabled={!preview || !!preview.blocked || running || !confirmed}
                 className={cn(
                   preview?.destructive && "bg-critical text-white hover:bg-critical/90",
                 )}
               >
                 {running ? <Loader2 className="animate-spin" /> : null}
-                {running ? "Running…" : preview?.destructive ? "Confirm removal" : "Confirm"}
+                {running ? "Running…" : confirmLabel}
               </Button>
             </>
           )}

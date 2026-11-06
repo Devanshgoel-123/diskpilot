@@ -2,8 +2,10 @@
 //!
 //! Every action has a preview that lists the exact command and its effects,
 //! and every execution rebuilds that preview from fresh Docker state and
-//! refuses to run if a precondition no longer holds. There is deliberately no
-//! action that removes volumes, force-removes anything, or prunes broadly.
+//! refuses to run if a precondition no longer holds. Nothing is ever
+//! force-removed or pruned broadly. Volumes are removed only one at a time, at
+//! the user's explicit request, when no container (running or stopped) uses
+//! them; DiskPilot never suggests or automates removing a volume.
 
 use std::time::Duration;
 
@@ -17,8 +19,10 @@ use crate::scanner::now_ms;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum DockerAction {
+    StopContainer { id: String },
     RemoveContainer { id: String },
     RemoveImage { id: String },
+    RemoveVolume { name: String },
     PruneBuildCache,
 }
 
@@ -28,6 +32,7 @@ impl DockerAction {
             self,
             DockerAction::RemoveContainer { .. }
                 | DockerAction::RemoveImage { .. }
+                | DockerAction::RemoveVolume { .. }
                 | DockerAction::PruneBuildCache
         )
     }
@@ -120,6 +125,34 @@ pub fn preview(
     }
 
     match action {
+        DockerAction::StopContainer { id } => {
+            validate_id(id)?;
+            let c = o
+                .containers
+                .iter()
+                .find(|c| &c.id == id)
+                .ok_or_else(|| DockerError::Blocked("Container no longer exists.".into()))?;
+            p.title = format!("Stop container {}", c.name);
+            // A normal stop: Docker asks the processes to exit, then waits.
+            p.command = cmd(&["stop", id]);
+            p.affected.push(AffectedItem {
+                label: c.name.clone(),
+                detail: format!("{} · {}", c.image, c.status),
+                bytes: None,
+            });
+            p.effects.push(
+                "Stops the container's processes. Its files and volumes are kept, and you can start it again in Docker Desktop or with `docker start`."
+                    .into(),
+            );
+            if !c.running {
+                p.blocked = Some("The container is already stopped.".into());
+            }
+            if let Some(project) = &c.compose_project {
+                p.warnings.push(format!(
+                    "Part of Compose project “{project}”. Other services in it may stop working while this one is stopped."
+                ));
+            }
+        }
         DockerAction::RemoveContainer { id } => {
             validate_id(id)?;
             let c = o
@@ -141,7 +174,7 @@ pub fn preview(
                     .into(),
             );
             if c.running {
-                p.blocked = Some("The container is running. Stop it in Docker Desktop or with `docker stop` first.".into());
+                p.blocked = Some("The container is running. Stop it first.".into());
             }
             if !c.mounts.is_empty() {
                 p.effects
@@ -200,6 +233,60 @@ pub fn preview(
                 p.warnings
                     .push("You will need to pull or rebuild this image to use it again.".into());
             }
+        }
+        DockerAction::RemoveVolume { name } => {
+            validate_volume_name(name)?;
+            let v = o
+                .volumes
+                .iter()
+                .find(|v| &v.name == name)
+                .ok_or_else(|| DockerError::Blocked("Volume no longer exists.".into()))?;
+            p.title = format!("Delete volume {}", v.name);
+            // No -f: Docker refuses to remove a volume any container uses.
+            p.command = cmd(&["volume", "rm", name]);
+            p.affected.push(AffectedItem {
+                label: v.name.clone(),
+                detail: match &v.compose_project {
+                    Some(project) => format!("{} · Compose project “{project}”", v.driver),
+                    None => v.driver.clone(),
+                },
+                bytes: v.size_bytes,
+            });
+            p.reclaim_bytes = v.size_bytes;
+            p.effects.push(
+                "Permanently deletes everything stored in the volume, such as database files and uploads. It does not go to the Trash and cannot be undone."
+                    .into(),
+            );
+            let users: Vec<&str> = o
+                .containers
+                .iter()
+                .filter(|c| c.mounts.iter().any(|m| m == name))
+                .map(|c| c.name.as_str())
+                .chain(v.used_by.iter().map(String::as_str))
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            if !users.is_empty() || v.links.is_some_and(|n| n > 0) {
+                p.blocked = Some(if users.is_empty() {
+                    "A container uses this volume. Remove that container first.".into()
+                } else {
+                    format!(
+                        "Used by container{} {}. Remove {} first.",
+                        if users.len() == 1 { "" } else { "s" },
+                        users.join(", "),
+                        if users.len() == 1 { "it" } else { "them" }
+                    )
+                });
+            }
+            if let Some(project) = &v.compose_project {
+                p.warnings.push(format!(
+                    "Belongs to Compose project “{project}”. `docker compose up` creates an empty volume in its place; the old data is not restored."
+                ));
+            }
+            p.warnings.push(
+                "If you might need this data, back it up first, for example with `docker run --rm -v VOLUME:/data -v \"$PWD\":/backup alpine tar czf /backup/volume.tgz /data`."
+                    .into(),
+            );
         }
         DockerAction::PruneBuildCache => {
             let unused: Vec<_> = o.build_cache.iter().filter(|b| !b.in_use).collect();
@@ -465,7 +552,7 @@ pub fn diagnostics(o: &DockerOverview, vm_disk: Option<(u64, u64)>) -> Vec<Diagn
         f.push(finding(
             Warning,
             format!("{} volume{} not attached to any container", orphan_volumes.len(), if orphan_volumes.len() == 1 { "" } else { "s" }),
-            "Volumes often hold databases. DiskPilot never removes volumes; if you are sure one is unneeded, back it up and remove it yourself with `docker volume rm`.",
+            "Volumes often hold databases. DiskPilot never removes volumes on its own. If you are sure one is unneeded, back it up, then delete it from the Volumes list, where you confirm by typing its name.",
             Some(orphan_volumes.iter().filter_map(|v| v.size_bytes).sum()),
         ));
     }
@@ -578,6 +665,54 @@ mod tests {
     }
 
     #[test]
+    fn stopping_keeps_data_and_only_applies_to_running_containers() {
+        let p = preview(&DockerAction::StopContainer { id: WEB.into() }, &sample()).unwrap();
+        assert!(p.blocked.is_none());
+        assert!(!p.destructive);
+        assert_eq!(p.command, vec!["docker", "stop", WEB]);
+        let stopped = preview(&DockerAction::StopContainer { id: DB.into() }, &sample()).unwrap();
+        assert!(stopped.blocked.is_some());
+    }
+
+    #[test]
+    fn volumes_used_by_any_container_cannot_be_deleted() {
+        // ledger_pg belongs to a stopped container: still blocked.
+        let p = preview(
+            &DockerAction::RemoveVolume {
+                name: "ledger_pg".into(),
+            },
+            &sample(),
+        )
+        .unwrap();
+        assert!(p.blocked.as_deref().unwrap().contains("ledger-db-1"));
+        assert!(p.warnings.iter().any(|w| w.contains("Compose")));
+    }
+
+    #[test]
+    fn deleting_an_unused_volume_is_one_plain_command() {
+        let p = preview(
+            &DockerAction::RemoveVolume {
+                name: "orphan_data".into(),
+            },
+            &sample(),
+        )
+        .unwrap();
+        assert!(p.blocked.is_none());
+        assert!(p.destructive);
+        assert_eq!(p.command, vec!["docker", "volume", "rm", "orphan_data"]);
+        assert_eq!(p.reclaim_bytes, Some(98_300_000));
+        assert!(p.effects.iter().any(|e| e.contains("cannot be undone")));
+        assert!(preview(&DockerAction::RemoveVolume { name: "-f".into() }, &sample()).is_err());
+        assert!(preview(
+            &DockerAction::RemoveVolume {
+                name: "gone".into()
+            },
+            &sample()
+        )
+        .is_err());
+    }
+
+    #[test]
     fn nothing_runs_when_docker_is_down() {
         let mut o = sample();
         o.status.state = DockerState::NotRunning;
@@ -590,7 +725,7 @@ mod tests {
         let f = diagnostics(&sample(), Some((6_000_000_000, 64_000_000_000)));
         let vol = f.iter().find(|d| d.title.contains("volume")).unwrap();
         assert_eq!(vol.level, FindingLevel::Warning);
-        assert!(vol.detail.contains("never removes volumes"));
+        assert!(vol.detail.contains("never removes volumes on its own"));
         assert!(f.iter().any(|d| d.title.contains("untagged")));
         assert!(f.iter().any(|d| d.title.contains("build cache")));
     }

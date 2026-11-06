@@ -1,4 +1,4 @@
-import { Lock, MoreHorizontal, Search, Trash2 } from "lucide-react";
+import { MoreHorizontal, Search, Square, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -118,10 +118,16 @@ export function ContainersTable({
                   <Search />
                 </IconAction>
                 <RowMenu label={`Actions for ${c.name}`}>
+                  {c.running ? (
+                    <MenuItem onSelect={() => onAction({ type: "stopContainer", id: c.id })}>
+                      <Square />
+                      Stop container…
+                    </MenuItem>
+                  ) : null}
                   <MenuItem
                     destructive
                     disabled={c.running}
-                    hint={c.running ? "Stop it in Docker Desktop first." : null}
+                    hint={c.running ? "Stop it first." : null}
                     onSelect={() => onAction({ type: "removeContainer", id: c.id })}
                   >
                     <Trash2 />
@@ -213,8 +219,9 @@ export function ImagesTable({ images, onAction, onInspect }: Handlers & { images
 
 export function VolumesTable({
   volumes,
+  onAction,
   onInspect,
-}: Omit<Handlers, "onAction"> & { volumes: DockerVolume[] }) {
+}: Handlers & { volumes: DockerVolume[] }) {
   if (!volumes.length) return <Empty text="No volumes." />;
   return (
     <table className="w-full table-fixed text-[13px]">
@@ -231,13 +238,7 @@ export function VolumesTable({
         {volumes.map((v) => (
           <tr key={v.name} className="h-10 border-b border-border/60 last:border-0">
             <td className="truncate pr-2 pl-4">
-              <span className="flex min-w-0 items-center gap-2">
-                <Lock
-                  className="size-3 shrink-0 text-subtle-foreground"
-                  aria-label="Never removed by DiskPilot"
-                />
-                <span className="truncate font-mono text-xs">{v.name}</span>
-              </span>
+              <span className="truncate font-mono text-xs">{v.name}</span>
             </td>
             <td className="truncate px-2 text-xs text-muted-foreground">
               {v.composeProject ?? "—"}
@@ -260,6 +261,17 @@ export function VolumesTable({
                 >
                   <Search />
                 </IconAction>
+                <RowMenu label={`Actions for ${v.name}`}>
+                  <MenuItem
+                    destructive
+                    disabled={v.usedBy.length > 0}
+                    hint={v.usedBy.length > 0 ? "Remove the containers that use it first." : null}
+                    onSelect={() => onAction({ type: "removeVolume", name: v.name })}
+                  >
+                    <Trash2 />
+                    Delete volume…
+                  </MenuItem>
+                </RowMenu>
               </div>
             </td>
           </tr>

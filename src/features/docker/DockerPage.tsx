@@ -368,7 +368,11 @@ export function DockerPage() {
                       onInspect={setInspect}
                     />
                   ) : tab === "volumes" ? (
-                    <VolumesTable volumes={overview.volumes} onInspect={setInspect} />
+                    <VolumesTable
+                      volumes={overview.volumes}
+                      onAction={setAction}
+                      onInspect={setInspect}
+                    />
                   ) : (
                     <BuildCacheTable entries={overview.buildCache} />
                   )}

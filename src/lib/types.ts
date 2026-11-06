@@ -401,8 +401,10 @@ export interface DockerOverview {
 }
 
 export type DockerAction =
+  | { type: "stopContainer"; id: string }
   | { type: "removeContainer"; id: string }
   | { type: "removeImage"; id: string }
+  | { type: "removeVolume"; name: string }
   | { type: "pruneBuildCache" };
 
 export interface AffectedItem {
