@@ -9,6 +9,7 @@ import {
   onScanProgress,
 } from "./api";
 import { applyTheme, loadTheme, saveTheme, type ThemePreference } from "./theme";
+import { clearThumbnails } from "./thumbnails";
 import type {
   AppEnvironment,
   AssistantProvider,
@@ -461,3 +462,9 @@ export const useApp = create<AppState>((set, get) => ({
 
   dismissError: () => set({ error: null }),
 }));
+
+// A new scan may have found changed or replaced files: drop old thumbnails.
+// Keyed on the scan's start, so partial results during one scan keep them.
+useApp.subscribe((s, prev) => {
+  if (s.summary?.startedAtMs !== prev.summary?.startedAtMs) clearThumbnails();
+});

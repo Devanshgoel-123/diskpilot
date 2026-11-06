@@ -8,6 +8,7 @@ import { FileThumbnail } from "@/components/shared/FileThumbnail";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CleanupDialog } from "@/features/recommendations/CleanupDialog";
+import { clearThumbnails } from "@/lib/thumbnails";
 import { api, errorMessage, onDuplicatesProgress } from "@/lib/api";
 import { formatBytes, formatCount, formatRelative, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
@@ -276,6 +277,7 @@ export function DuplicatesPage() {
     setProgress(null);
     try {
       const r = await api.findDuplicates(minBytes);
+      clearThumbnails();
       setReport(r);
       setKeep({});
       setSelected(new Set());
