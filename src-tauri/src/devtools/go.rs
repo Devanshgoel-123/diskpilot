@@ -225,8 +225,11 @@ fn report(ctx: &Ctx, env: &GoEnv) -> (ToolReport, Vec<Recommendation>) {
         .collect();
     let summary = match (detected, toolchain_count) {
         (false, _) => "No Go tooling found.".into(),
-        (true, 0) => "Module cache, build cache and installed programs.".into(),
-        (true, n) => format!("{n} downloaded toolchain(s) in the module cache."),
+        (true, 0) => format!("{} location(s) analyzed.", roots.len()),
+        (true, n) => format!(
+            "{} location(s) analyzed, including {n} downloaded toolchain(s).",
+            roots.len()
+        ),
     };
     (
         ToolReport {
@@ -404,6 +407,7 @@ echo '{"GOVERSION": "go1.27.3", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "GOC
         let cache = &report.sections[0].items[0];
         assert_eq!(cache.label, "Build cache");
         assert_eq!(cache.recommendation_id, None);
+        assert_eq!(report.summary, "1 location(s) analyzed.");
         assert!(recs.is_empty());
     }
 
