@@ -3,6 +3,7 @@
  * engine only through this module, so it stays independent of how scanning
  * is implemented.
  */
+import type { CleanupActivity } from "@/lib/cleanupStats";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
@@ -70,6 +71,7 @@ export const api = {
     invoke<CleanupPlan>("create_cleanup_plan", { ids, method }),
   discardCleanupPlan: (planId: string) => invoke<null>("discard_cleanup_plan", { planId }),
   executeCleanupPlan: (planId: string) => invoke<CleanupRecord>("execute_cleanup_plan", { planId }),
+  getCleanupActivity: () => invoke<CleanupActivity[]>("get_cleanup_activity"),
   getCleanupHistory: (limit?: number) =>
     invoke<CleanupRecord[]>("get_cleanup_history", { limit: limit ?? null }),
 

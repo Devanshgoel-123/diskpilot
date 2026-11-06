@@ -1,3 +1,4 @@
+import { ClearedStatsLine } from "@/features/history/ClearedStats";
 import { FolderSearch, ScanSearch } from "lucide-react";
 import { useMemo } from "react";
 
@@ -67,6 +68,7 @@ export function OverviewPage() {
           <ResultsAge />
           <PrivateFoldersNotice />
           <TrashWaitingNotice />
+          <ClearedStatsLine />
           {disk ? (
             <StorageStrip
               disk={disk}
