@@ -48,7 +48,8 @@
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhBMjVGQkNDODNEOEZDMEYKUldRUC9OaUR6UHNsaXNoK0FMMnJSbTRtaWt0bXlJamVFeGVGZ0Z1NEVObGcvemkzd1lxUElyMEcK",
       "endpoints": [
         "https://github.com/Devanshgoel-123/diskpilot/releases/latest/download/latest.json"
-      ]
+      ],
+      "requireSignedVersion": true
     }
   }
 }

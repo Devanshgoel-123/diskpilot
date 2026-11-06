@@ -39,6 +39,11 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
           persist-credentials: false
+      # The tag, the app's version and the update manifest must agree, or
+      # every installed copy refuses the update. A published release cannot
+      # be changed, so this stops the build before anything is made.
+      - name: Check the versions match the tag
+        run: python3 scripts/check_release_versions.py "$TAG"
       # Release notes live on main; a tag may predate them.
       - name: Fetch release notes from main
         run: |
@@ -141,6 +146,8 @@ jobs:
             # The update must contain the same notarized, stapled app.
             archive=src-tauri/target/universal-apple-darwin/release/bundle/macos/DiskPilot.app.tar.gz
             test -s "$archive.sig"
+            # Signed with the key the app trusts, not just signed.
+            python3 scripts/check_update_key.py src-tauri/tauri.conf.json "$archive.sig"
             mkdir -p "$RUNNER_TEMP/update-check"
             tar -xzf "$archive" -C "$RUNNER_TEMP/update-check"
             codesign --verify --deep --strict "$RUNNER_TEMP/update-check/DiskPilot.app"
@@ -256,9 +263,11 @@ jobs:
     name: Update the Homebrew tap
     needs: publish
     runs-on: ubuntu-latest
-    permissions: {}
+    permissions:
+      contents: read
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
       # A fine-grained token with Contents: write on Devanshgoel-123/homebrew-tap
       # only. Without it this job does nothing.
       TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
@@ -273,11 +282,16 @@ jobs:
         id: published
         if: env.TAP_TOKEN != ''
         run: |
-          if curl -fsS -o /dev/null "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG"; then
-            echo "yes=1" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice::$TAG is still a draft; re-run this job after publishing it."
-          fi
+          # Authenticated, so a shared runner's rate limit is not mistaken
+          # for a draft. Drafts are not visible by tag: 404 means "not yet".
+          draft=$(gh api "repos/${{ github.repository }}/releases/tags/$TAG" --jq .draft 2>err.txt) || {
+            if grep -q "HTTP 404" err.txt; then
+              echo "::notice::$TAG is still a draft; re-run this job after publishing it."
+              exit 0
+            fi
+            cat err.txt; exit 1
+          }
+          [ "$draft" = "false" ] && echo "yes=1" >> "$GITHUB_OUTPUT"
       - name: Bump the cask
         if: env.TAP_TOKEN != '' && steps.published.outputs.yes == '1'
         run: |
