@@ -227,14 +227,34 @@ impl Walk {
 /// when it empties the Trash. Tools such as Go and DotSlash write their caches
 /// read-only, and the user already chose to delete these items. Only the
 /// owner's own permission bits change; locked (immutable) items and items
-/// owned by someone else stay as they are and are reported.
-fn unlock_dir(path: &Path, meta: &Metadata) {
+/// owned by someone else stay as they are and are reported. Returns whether
+/// the mode changed, so it can be put back if the folder is not removed.
+fn unlock_dir(path: &Path, meta: &Metadata) -> bool {
     // SAFETY: geteuid has no preconditions and cannot fail.
     let me = unsafe { libc::geteuid() };
     let mode = meta.mode();
-    if meta.uid() == me && mode & 0o700 != 0o700 {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(path, fs::Permissions::from_mode((mode | 0o700) & 0o7777));
+    meta.uid() == me && mode & 0o700 != 0o700 && chmod_nofollow(path, (mode | 0o700) & 0o7777)
+}
+
+/// chmod that never follows a symbolic link: if the folder was swapped for a
+/// link since it was checked, the link itself is left alone and nothing
+/// outside the Trash changes.
+fn chmod_nofollow(path: &Path, mode: u32) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+        return false;
+    };
+    let Ok(mode) = libc::mode_t::try_from(mode) else {
+        return false;
+    };
+    // SAFETY: `c_path` is NUL-terminated and outlives the call.
+    unsafe {
+        libc::fchmodat(
+            libc::AT_FDCWD,
+            c_path.as_ptr(),
+            mode,
+            libc::AT_SYMLINK_NOFOLLOW,
+        ) == 0
     }
 }
 
@@ -265,7 +285,13 @@ fn remove_tree(
             ));
             return false;
         }
-        unlock_dir(path, &meta);
+        let unlocked = unlock_dir(path, &meta);
+        // Put the owner's original permissions back if this folder stays.
+        let relock = || {
+            if unlocked {
+                chmod_nofollow(path, meta.mode() & 0o7777);
+            }
+        };
         let mut all = true;
         match fs::read_dir(path) {
             Ok(rd) => {
@@ -278,16 +304,19 @@ fn remove_tree(
                         }
                     }
                     if walk.cancelled {
+                        relock();
                         return false;
                     }
                 }
             }
             Err(e) => {
                 walk.fail(e);
+                relock();
                 return false;
             }
         }
         if !all {
+            relock();
             return false;
         }
         match fs::remove_dir(path) {
@@ -297,6 +326,7 @@ fn remove_tree(
             }
             Err(e) => {
                 walk.fail(e);
+                relock();
                 false
             }
         }
@@ -693,6 +723,28 @@ mod tests {
         let r = run(&preview, &trash, &AtomicBool::new(false));
         assert_eq!(r.record.status, ActionStatus::Succeeded);
         assert!(!trash.join("Old Project").exists());
+    }
+
+    #[test]
+    fn a_folder_that_stays_gets_its_read_only_mode_back() {
+        use std::os::unix::fs::MetadataExt;
+        let (_d, trash) = fixture();
+        let src = trash.join("Old Project/src");
+        let locked = src.join("a.rs");
+        set_locked(&locked, true);
+        fs::set_permissions(&src, fs::Permissions::from_mode(0o555)).unwrap();
+        let preview = inventory(&trash, "p".into(), 0).unwrap();
+        let r = run(&preview, &trash, &AtomicBool::new(false));
+        let mode = fs::symlink_metadata(&src).unwrap().mode() & 0o777;
+        fs::set_permissions(&src, fs::Permissions::from_mode(0o755)).unwrap();
+        set_locked(&locked, false);
+
+        assert_eq!(r.record.status, ActionStatus::Partial);
+        assert!(locked.exists());
+        assert_eq!(
+            mode, 0o555,
+            "the folder left in the Trash keeps its permissions"
+        );
     }
 
     #[test]
