@@ -905,32 +905,74 @@ pub async fn docker_overview(state: State<'_, AppState>) -> AppResult<DockerOver
     blocking(move || fetch_docker(&home).map(|(_, o)| o)).await
 }
 
+/// How long a reviewed Docker action can wait before it must be reviewed again.
+const DOCKER_REVIEW_TTL_MS: i64 = 10 * 60 * 1000;
+
+/// The container an action stops or removes, if any.
+fn target_container(action: &actions::DockerAction) -> Option<&str> {
+    match action {
+        actions::DockerAction::StopContainer { id }
+        | actions::DockerAction::RemoveContainer { id, .. } => Some(id),
+        _ => None,
+    }
+}
+
+/// Fresh Docker state, with the target container's `--rm` flag read.
+fn fetch_docker_for(
+    home: &Path,
+    action: &actions::DockerAction,
+) -> AppResult<(Option<DockerCli>, DockerOverview)> {
+    let (cli, mut o) = fetch_docker(home)?;
+    if let (Some(cli), Some(id)) = (&cli, target_container(action)) {
+        actions::validate_id(id).map_err(docker_error)?;
+        docker::mark_auto_remove(cli, &mut o, id).map_err(docker_error)?;
+    }
+    Ok((cli, o))
+}
+
 #[tauri::command]
 pub async fn docker_preview(
     state: State<'_, AppState>,
     action: actions::DockerAction,
 ) -> AppResult<actions::DockerActionPreview> {
     let home = state.home.clone();
-    blocking(move || {
-        let (_, o) = fetch_docker(&home)?;
+    let mut preview = blocking(move || {
+        let (_, o) = fetch_docker_for(&home, &action)?;
         actions::preview(&action, &o).map_err(docker_error)
     })
-    .await
+    .await?;
+    let now = now_ms();
+    preview.id = unique_id("docker", now);
+    let mut reviews = state.docker_reviews();
+    reviews.retain(|_, (_, at)| now - *at < DOCKER_REVIEW_TTL_MS);
+    reviews.insert(preview.id.clone(), (actions::Reviewed::of(&preview), now));
+    Ok(preview)
 }
 
-/// Run a predefined Docker action after the user confirmed its preview.
-/// Preconditions are re-checked against fresh Docker state.
+/// Run the Docker action the person reviewed (by preview id) and confirmed,
+/// with the name they typed when a volume is deleted. Preconditions and the
+/// exact commands are re-checked against fresh Docker state.
 #[tauri::command]
 pub async fn docker_execute(
     state: State<'_, AppState>,
-    action: actions::DockerAction,
+    preview_id: String,
+    typed: String,
 ) -> AppResult<actions::DockerActionResult> {
+    let (reviewed, at) = state
+        .docker_reviews()
+        .remove(&preview_id)
+        .ok_or_else(|| AppError::Other("This preview has expired. Review it again.".into()))?;
+    if now_ms() - at > DOCKER_REVIEW_TTL_MS {
+        return Err(AppError::Other(
+            "This preview has expired. Review it again.".into(),
+        ));
+    }
     let home = state.home.clone();
     let history = state.history.clone();
     blocking(move || {
-        let (cli, fresh) = fetch_docker(&home)?;
+        let (cli, fresh) = fetch_docker_for(&home, &reviewed.action)?;
         let cli = cli.ok_or_else(|| docker_error(docker::cli::DockerError::NotInstalled))?;
-        let result = actions::execute(&cli, &action, &fresh).map_err(docker_error)?;
+        let result = actions::execute(&cli, &reviewed, &typed, &fresh).map_err(docker_error)?;
         if let (Some(h), Some(record)) = (history, &result.record) {
             h.record_cleanup(record)?;
         }

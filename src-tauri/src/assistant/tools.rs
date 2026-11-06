@@ -413,7 +413,7 @@ pub fn run(ctx: &ToolContext, name: &str, input: &Value) -> ToolOutput {
                     })).collect::<Vec<_>>(),
                     "containers": o.containers.iter().map(|c| json!({"name": c.name, "image": c.image, "running": c.running})).collect::<Vec<_>>(),
                     "volumes": o.volumes.iter().map(|v| json!({"name": v.name, "size": v.size_bytes.map(gb), "used_by": v.used_by})).collect::<Vec<_>>(),
-                    "note": "Removal happens in DiskPilot's Docker page with a preview. Volumes are never removed by DiskPilot."
+                    "note": "Removal happens in DiskPilot's Docker page, after a preview the person confirms. DiskPilot deletes a volume only when the person ticks it (or picks it in the Volumes list) and types the name to confirm; volumes another container uses are never deleted."
                 })),
                 Err(e) => err(&e.to_string()),
             }

@@ -443,6 +443,8 @@ export interface VolumeChoice {
 }
 
 export interface DockerActionPreview {
+  /** Names this reviewed preview when executing it. */
+  id: string;
   action: DockerAction;
   title: string;
   steps: DockerStep[];
@@ -453,6 +455,8 @@ export interface DockerActionPreview {
   warnings: string[];
   blocked: string | null;
   reclaimBytes: number | null;
+  /** A name the person must type to confirm, when a volume is deleted. */
+  confirmName: string | null;
 }
 
 export interface DockerActionResult {

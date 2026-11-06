@@ -2,9 +2,9 @@
 //!
 //! Read operations build a [`DockerOverview`]. Every change goes through
 //! `actions`: a fixed set of predefined, parameterized operations that are
-//! previewed first and re-validated right before they run. DiskPilot never
-//! removes volumes and never runs a broad prune without listing what it
-//! affects.
+//! previewed first and re-validated right before they run. DiskPilot deletes
+//! a volume only when the person explicitly chooses it and types its name,
+//! and never runs a broad prune without listing what it affects.
 
 pub mod actions;
 pub mod cli;
@@ -88,7 +88,14 @@ pub struct DockerContainer {
     pub image_id: Option<String>,
     pub state: String,
     pub status: String,
+    /// Needs `docker stop` before it can be removed: running, restarting
+    /// (a crash loop) or paused.
     pub running: bool,
+    /// Started with `--rm`: Docker deletes it, with its anonymous volumes, as
+    /// soon as it stops. Not in `docker system df`; read with `inspect` for
+    /// the container an action targets (see [`mark_auto_remove`]).
+    #[serde(default)]
+    pub auto_remove: bool,
     pub created_at_ms: Option<i64>,
     /// Size of the container's writable layer.
     pub size_bytes: u64,
@@ -240,7 +247,8 @@ pub fn build_overview(
             name: c.names.split(',').next().unwrap_or("").to_string(),
             image_id: label(&c.labels, COMPOSE_IMAGE).map(str::to_string),
             compose_project: label(&c.labels, COMPOSE_PROJECT).map(str::to_string),
-            running: c.state == "running",
+            running: matches!(c.state.as_str(), "running" | "restarting" | "paused"),
+            auto_remove: false,
             created_at_ms: parse_timestamp(&c.created_at),
             size_bytes: parse_size(&c.size).unwrap_or(0),
             mounts: c
@@ -367,6 +375,36 @@ pub fn container_uses_image(c: &DockerContainer, id: &str, repo: &str, tag: &str
 }
 
 /// Index of names → containers, used by actions to explain dependencies.
+/// Read whether container `id` was started with `--rm` (read-only inspect)
+/// and record it on that container in `o`.
+pub fn mark_auto_remove(
+    cli: &DockerCli,
+    o: &mut DockerOverview,
+    id: &str,
+) -> Result<(), DockerError> {
+    let Some(c) = o.containers.iter_mut().find(|c| c.id == id) else {
+        return Ok(());
+    };
+    let out = cli.run(
+        &[
+            "inspect",
+            "--type",
+            "container",
+            "--format",
+            "{{.HostConfig.AutoRemove}}",
+            id,
+        ],
+        std::time::Duration::from_secs(20),
+    )?;
+    c.auto_remove = out.trim() == "true";
+    Ok(())
+}
+
+/// Anonymous volumes are named with 64 hex characters by Docker.
+pub fn is_anonymous_volume(name: &str) -> bool {
+    name.len() == 64 && name.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
 pub fn containers_by_id(o: &DockerOverview) -> HashMap<&str, &DockerContainer> {
     o.containers.iter().map(|c| (c.id.as_str(), c)).collect()
 }

@@ -1,8 +1,10 @@
 //! Predefined Docker operations.
 //!
-//! Every action has a preview that lists the exact command and its effects,
-//! and every execution rebuilds that preview from fresh Docker state and
-//! refuses to run if a precondition no longer holds. Nothing is ever
+//! Every action has a preview that lists the exact command and its effects.
+//! The engine keeps what was shown; execution rebuilds the preview from fresh
+//! Docker state and refuses to run unless it is exactly what the person
+//! reviewed, still allowed, and, for volume deletes, confirmed by typing the
+//! name. Nothing is ever
 //! force-removed or pruned broadly. Volumes are removed only one at a time, at
 //! the user's explicit request, when no other container (running or stopped)
 //! uses them: either on their own, or ticked one by one when removing the
@@ -91,6 +93,9 @@ pub struct VolumeChoice {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DockerActionPreview {
+    /// Set by the command that stores the preview; execution names it.
+    #[serde(default)]
+    pub id: String,
     pub action: DockerAction,
     pub title: String,
     pub steps: Vec<DockerStep>,
@@ -103,6 +108,9 @@ pub struct DockerActionPreview {
     /// Set when the action cannot run; the reason is shown instead.
     pub blocked: Option<String>,
     pub reclaim_bytes: Option<u64>,
+    /// A name the person must type to confirm, when a volume is deleted.
+    /// Checked by the engine, not only by the dialog.
+    pub confirm_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,6 +122,25 @@ pub struct DockerActionResult {
     pub error: Option<String>,
     /// History entry for destructive actions.
     pub record: Option<CleanupRecord>,
+}
+
+/// Why an action that stops a `--rm` container must not run: Docker would
+/// delete its anonymous volumes with it, which nobody reviewed.
+fn auto_remove_blocker(c: &super::DockerContainer) -> Option<String> {
+    let anonymous = c
+        .mounts
+        .iter()
+        .filter(|m| super::is_anonymous_volume(m))
+        .count();
+    (anonymous > 0).then(|| {
+        format!(
+            "{} was started with --rm, so stopping it makes Docker delete it together with {} anonymous volume{} and the data in {}. DiskPilot will not do that. If you want it, stop the container yourself.",
+            c.name,
+            anonymous,
+            if anonymous == 1 { "" } else { "s" },
+            if anonymous == 1 { "it" } else { "them" },
+        )
+    })
 }
 
 /// Container/image ids as Docker prints them: 12–64 hex chars, optionally
@@ -205,6 +232,7 @@ pub fn preview(
     o: &DockerOverview,
 ) -> Result<DockerActionPreview, DockerError> {
     let mut p = DockerActionPreview {
+        id: String::new(),
         action: action.clone(),
         title: String::new(),
         steps: Vec::new(),
@@ -215,6 +243,7 @@ pub fn preview(
         warnings: Vec::new(),
         blocked: None,
         reclaim_bytes: None,
+        confirm_name: None,
     };
     if o.status.state != DockerState::Running {
         p.blocked = Some(DockerError::NotRunning.to_string());
@@ -236,10 +265,20 @@ pub fn preview(
                 detail: format!("{} · {}", c.image, c.status),
                 bytes: None,
             });
-            p.effects.push(
-                "Stops the container's processes. Its files and volumes are kept, and you can start it again in Docker Desktop or with `docker start`."
-                    .into(),
-            );
+            if c.auto_remove {
+                p.effects.push(
+                    "It was started with --rm, so Docker deletes the container as soon as it stops. Its named volumes are kept."
+                        .into(),
+                );
+                if let Some(reason) = auto_remove_blocker(c) {
+                    p.blocked = Some(reason);
+                }
+            } else {
+                p.effects.push(
+                    "Stops the container's processes. Its files and volumes are kept, and you can start it again in Docker Desktop or with `docker start`."
+                        .into(),
+                );
+            }
             if !c.running {
                 p.blocked = Some("The container is already stopped.".into());
             }
@@ -261,6 +300,11 @@ pub fn preview(
                 .find(|c| &c.id == id)
                 .ok_or_else(|| DockerError::Blocked("Container no longer exists.".into()))?;
             p.title = format!("Remove container {}", c.name);
+            if c.auto_remove {
+                if let Some(reason) = auto_remove_blocker(c) {
+                    p.blocked = Some(reason);
+                }
+            }
             if c.running {
                 if *stop_first {
                     p.steps.push(step(&["stop", id], &c.name, None));
@@ -321,6 +365,7 @@ pub fn preview(
                 .map(|v| v.name.as_str())
                 .collect();
             if !deleted.is_empty() {
+                p.confirm_name = Some(c.name.clone());
                 p.effects.push(format!(
                     "Permanently deletes volume{} {}, with everything stored in {}. This does not go to the Trash and cannot be undone.",
                     if deleted.len() == 1 { "" } else { "s" },
@@ -407,6 +452,7 @@ pub fn preview(
                 .find(|v| &v.name == name)
                 .ok_or_else(|| DockerError::Blocked("Volume no longer exists.".into()))?;
             p.title = format!("Delete volume {}", v.name);
+            p.confirm_name = Some(v.name.clone());
             // No -f: Docker refuses to remove a volume any container uses.
             p.steps
                 .push(step(&["volume", "rm", name], name, v.size_bytes));
@@ -522,16 +568,69 @@ pub fn human(bytes: u64) -> String {
     }
 }
 
-/// Execute after re-validating against fresh state.
-pub fn execute(
-    cli: &DockerCli,
-    action: &DockerAction,
-    fresh: &DockerOverview,
-) -> Result<DockerActionResult, DockerError> {
-    let preview = preview(action, fresh)?;
-    if let Some(reason) = &preview.blocked {
+/// What the person reviewed and confirmed for one action.
+#[derive(Debug, Clone)]
+pub struct Reviewed {
+    pub action: DockerAction,
+    /// The exact commands the preview showed.
+    pub commands: Vec<Vec<String>>,
+    pub confirm_name: Option<String>,
+}
+
+impl Reviewed {
+    pub fn of(preview: &DockerActionPreview) -> Self {
+        Reviewed {
+            action: preview.action.clone(),
+            commands: preview.steps.iter().map(|s| s.command.clone()).collect(),
+            confirm_name: preview.confirm_name.clone(),
+        }
+    }
+}
+
+/// Whether `fresh` still runs exactly what was reviewed, and the person typed
+/// the required name. Checked by the engine so neither a stale dialog nor a
+/// script in the window can run something nobody confirmed.
+pub fn check_confirmed(
+    fresh: &DockerActionPreview,
+    reviewed: &Reviewed,
+    typed: &str,
+) -> Result<(), DockerError> {
+    if let Some(reason) = &fresh.blocked {
         return Err(DockerError::Blocked(reason.clone()));
     }
+    let now: Vec<&Vec<String>> = fresh.steps.iter().map(|s| &s.command).collect();
+    let then: Vec<&Vec<String>> = reviewed.commands.iter().collect();
+    if now != then || fresh.confirm_name != reviewed.confirm_name {
+        return Err(DockerError::Blocked(
+            "Docker changed since you reviewed this. Review it again.".into(),
+        ));
+    }
+    if let Some(name) = &reviewed.confirm_name {
+        if typed.trim() != name {
+            return Err(DockerError::Blocked(format!("Type {name} to confirm.")));
+        }
+    }
+    Ok(())
+}
+
+/// Execute what the person reviewed, after re-validating against fresh state.
+pub fn execute(
+    cli: &DockerCli,
+    reviewed: &Reviewed,
+    typed: &str,
+    fresh: &DockerOverview,
+) -> Result<DockerActionResult, DockerError> {
+    let action = &reviewed.action;
+    let preview = preview(action, fresh)?;
+    check_confirmed(&preview, reviewed, typed)?;
+    // A --rm container is deleted by Docker itself once stopped.
+    let auto_removed = match action {
+        DockerAction::RemoveContainer { id, .. } => fresh
+            .containers
+            .iter()
+            .any(|c| &c.id == id && c.auto_remove),
+        _ => false,
+    };
     let started = now_ms();
     let mut items = Vec::new();
     let mut outputs = Vec::new();
@@ -555,6 +654,18 @@ pub fn execute(
                 if !out.is_empty() {
                     outputs.push(out.to_string());
                 }
+                items.push(CleanupItemResult {
+                    target: step.target.clone(),
+                    operation: line,
+                    bytes: step.bytes.unwrap_or(0),
+                    status: ItemStatus::Succeeded,
+                    error: None,
+                });
+            }
+            Err(e) if auto_removed && is_rm(&step.command) && already_removed(&e.to_string()) => {
+                // Docker removed it when it stopped; wait until it is gone so
+                // the volumes it used are free to delete.
+                wait_until_gone(cli, &step.command[2]);
                 items.push(CleanupItemResult {
                     target: step.target.clone(),
                     operation: line,
@@ -591,7 +702,7 @@ pub fn execute(
             title: preview.title.clone(),
             started_at_ms: started,
             finished_at_ms: now_ms(),
-            status: ActionStatus::from_items(&items),
+            status: removal_status(&items),
             bytes_freed: bytes,
             bytes_trashed: 0,
             items,
@@ -605,6 +716,40 @@ pub fn execute(
         error,
         record,
     })
+}
+
+fn is_rm(command: &[String]) -> bool {
+    command.get(1).is_some_and(|c| c == "rm")
+}
+
+/// Docker's answer to `rm` for a container it is removing or has removed.
+fn already_removed(message: &str) -> bool {
+    message.contains("No such container") || message.contains("is already in progress")
+}
+
+fn wait_until_gone(cli: &DockerCli, id: &str) {
+    for _ in 0..20 {
+        let args = ["inspect", "--type", "container", "--format", "{{.Id}}", id];
+        if cli.run(&args, Duration::from_secs(10)).is_err() {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+}
+
+/// The action's status from the steps that remove something: a stop that
+/// worked before a failed removal is not a partial cleanup.
+fn removal_status(items: &[CleanupItemResult]) -> ActionStatus {
+    let removing: Vec<CleanupItemResult> = items
+        .iter()
+        .filter(|i| !i.operation.starts_with("docker stop "))
+        .cloned()
+        .collect();
+    if removing.is_empty() {
+        ActionStatus::from_items(items)
+    } else {
+        ActionStatus::from_items(&removing)
+    }
 }
 
 pub fn inspect(cli: &DockerCli, kind: &str, id: &str) -> Result<String, DockerError> {
@@ -818,6 +963,121 @@ mod tests {
         assert_eq!(
             commands(&p),
             vec![vec!["docker", "stop", WEB], vec!["docker", "rm", WEB]]
+        );
+    }
+
+    #[test]
+    fn stopping_a_rm_container_with_anonymous_volumes_is_refused() {
+        let mut o = sample();
+        let web = o.containers.iter_mut().find(|c| c.id == WEB).unwrap();
+        web.auto_remove = true;
+        web.mounts.push("9".repeat(64));
+        let stop = preview(&DockerAction::StopContainer { id: WEB.into() }, &o).unwrap();
+        assert!(stop.blocked.as_deref().unwrap().contains("--rm"));
+        assert!(stop
+            .effects
+            .iter()
+            .all(|e| !e.contains("volumes are kept, and")));
+        let rm = preview(&remove(WEB, true, &[]), &o).unwrap();
+        assert!(rm.blocked.as_deref().unwrap().contains("anonymous volume"));
+    }
+
+    #[test]
+    fn stopping_a_rm_container_says_docker_deletes_it() {
+        let mut o = sample();
+        o.containers
+            .iter_mut()
+            .find(|c| c.id == WEB)
+            .unwrap()
+            .auto_remove = true;
+        let stop = preview(&DockerAction::StopContainer { id: WEB.into() }, &o).unwrap();
+        assert!(stop.blocked.is_none());
+        assert!(stop.effects[0].contains("deletes the container as soon as it stops"));
+    }
+
+    #[test]
+    fn restarting_and_paused_containers_are_stopped_before_removal() {
+        for state in ["restarting", "paused"] {
+            let df = crate::docker::tests::DF_VERBOSE
+                .replace("\"State\":\"running\"", &format!("\"State\":\"{state}\""));
+            let o = crate::docker::build_overview(
+                crate::docker::tests::running_status(),
+                &df,
+                crate::docker::tests::DF_SUMMARY,
+            )
+            .unwrap();
+            let web = o.containers.iter().find(|c| c.id == WEB).unwrap();
+            assert!(web.running, "{state}");
+            let p = preview(&remove(WEB, true, &[]), &o).unwrap();
+            assert_eq!(commands(&p)[0], vec!["docker", "stop", WEB], "{state}");
+            let stop = preview(&DockerAction::StopContainer { id: WEB.into() }, &o).unwrap();
+            assert!(stop.blocked.is_none(), "{state}");
+        }
+    }
+
+    #[test]
+    fn volume_deletes_need_the_typed_name_and_the_reviewed_commands() {
+        let o = sample();
+        let shown = preview(&remove(DB, false, &["ledger_pg"]), &o).unwrap();
+        assert_eq!(
+            shown.confirm_name.as_deref(),
+            Some(shown.affected[0].label.as_str())
+        );
+        let reviewed = Reviewed::of(&shown);
+        let name = shown.confirm_name.clone().unwrap();
+
+        let fresh = preview(&reviewed.action, &o).unwrap();
+        assert!(check_confirmed(&fresh, &reviewed, &name).is_ok());
+        assert!(check_confirmed(&fresh, &reviewed, &format!("  {name} ")).is_ok());
+        assert!(check_confirmed(&fresh, &reviewed, "").is_err());
+        assert!(check_confirmed(&fresh, &reviewed, "something else").is_err());
+
+        // Docker changed after the review: the same action now runs more.
+        let mut changed = fresh.clone();
+        changed.steps.insert(0, step(&["stop", DB], "x", None));
+        let err = check_confirmed(&changed, &reviewed, &name).unwrap_err();
+        assert!(err.to_string().contains("changed since you reviewed"));
+
+        // A plain removal without volumes needs no typed name.
+        let plain = preview(&remove(DB, false, &[]), &o).unwrap();
+        assert_eq!(plain.confirm_name, None);
+        assert!(check_confirmed(&plain, &Reviewed::of(&plain), "").is_ok());
+
+        let vol = preview(
+            &DockerAction::RemoveVolume {
+                name: "orphan_data".into(),
+            },
+            &o,
+        )
+        .unwrap();
+        assert!(vol.blocked.is_none());
+        assert_eq!(vol.confirm_name.as_deref(), Some("orphan_data"));
+    }
+
+    #[test]
+    fn a_stop_alone_does_not_make_a_failed_removal_partial() {
+        let item = |op: &str, ok: bool| CleanupItemResult {
+            target: "t".into(),
+            operation: op.into(),
+            bytes: 0,
+            status: if ok {
+                ItemStatus::Succeeded
+            } else {
+                ItemStatus::Failed
+            },
+            error: None,
+        };
+        let failed = [item("docker stop x", true), item("docker rm x", false)];
+        assert_eq!(removal_status(&failed), ActionStatus::Failed);
+        let partial = [
+            item("docker stop x", true),
+            item("docker rm x", true),
+            item("docker volume rm v", false),
+        ];
+        assert_eq!(removal_status(&partial), ActionStatus::Partial);
+        assert_eq!(
+            removal_status(&[item("docker rm x", true)]),
+            ActionStatus::Succeeded
         );
     }
 

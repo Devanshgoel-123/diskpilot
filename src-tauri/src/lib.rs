@@ -72,6 +72,7 @@ pub fn run() {
                 data_dir,
                 trash: std::sync::Mutex::default(),
                 duplicates: std::sync::Mutex::default(),
+                docker_reviews: std::sync::Mutex::default(),
             });
             Ok(())
         })

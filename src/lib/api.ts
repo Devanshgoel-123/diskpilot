@@ -109,7 +109,9 @@ export const api = {
   dockerOverview: () => invoke<DockerOverview>("docker_overview"),
   dockerPreview: (action: DockerAction) =>
     invoke<DockerActionPreview>("docker_preview", { action }),
-  dockerExecute: (action: DockerAction) => invoke<DockerActionResult>("docker_execute", { action }),
+  /** Runs the reviewed preview `previewId`; `typed` is the name typed to confirm a volume delete. */
+  dockerExecute: (previewId: string, typed: string) =>
+    invoke<DockerActionResult>("docker_execute", { previewId, typed }),
   dockerInspect: (kind: "container" | "image" | "volume", id: string) =>
     invoke<string>("docker_inspect", { kind, id }),
   dockerDiagnostics: () => invoke<DiagnosticFinding[]>("docker_diagnostics"),

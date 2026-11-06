@@ -72,6 +72,9 @@ pub struct AppState {
     pub trash: Mutex<crate::trash::TrashSlot>,
     /// The last duplicate search and the one in progress.
     pub duplicates: Mutex<crate::duplicates::DuplicateSlot>,
+    /// Docker previews shown to the person, by id, with when they were made.
+    /// Executing names one; it is single use and short-lived.
+    pub docker_reviews: Mutex<HashMap<String, (crate::docker::actions::Reviewed, i64)>>,
 }
 
 impl AppState {
@@ -85,6 +88,14 @@ impl AppState {
 
     pub fn duplicates(&self) -> MutexGuard<'_, crate::duplicates::DuplicateSlot> {
         self.duplicates.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    pub fn docker_reviews(
+        &self,
+    ) -> MutexGuard<'_, HashMap<String, (crate::docker::actions::Reviewed, i64)>> {
+        self.docker_reviews
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn plans(&self) -> MutexGuard<'_, HashMap<String, CleanupPlan>> {

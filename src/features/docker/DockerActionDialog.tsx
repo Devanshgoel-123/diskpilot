@@ -29,20 +29,21 @@ export function DockerActionDialog({
 }) {
   // Ticking a volume changes the action, and the preview is rebuilt for it.
   const [action, setAction] = useState<DockerAction>(initial);
-  const [preview, setPreview] = useState<DockerActionPreview | null>(null);
+  // Each preview remembers the action it was made for. Only the current
+  // action's preview is shown, so a stale one (and its Confirm) never is.
+  const [shown, setShown] = useState<{ for: DockerAction; preview: DockerActionPreview } | null>(
+    null,
+  );
+  const preview = shown?.for === action ? shown.preview : null;
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<DockerActionResult | null>(null);
   const ticked = action.type === "removeContainer" ? (action.volumes ?? []) : [];
   const stopsFirst = preview?.steps[0]?.command[1] === "stop" && action.type === "removeContainer";
   // Deleting a volume cannot be undone, so a name must be typed to confirm:
-  // the volume's own, or the container's when volumes go with it.
-  const mustType =
-    action.type === "removeVolume"
-      ? action.name
-      : ticked.length
-        ? (preview?.affected[0]?.label ?? null)
-        : null;
+  // the volume's own, or the container's when volumes go with it. The engine
+  // says which, and checks it again before running.
+  const mustType = preview?.confirmName ?? null;
   const [typed, setTyped] = useState("");
   const confirmed = mustType === null || typed.trim() === mustType;
   const confirmLabel =
@@ -69,7 +70,7 @@ export function DockerActionDialog({
     let live = true;
     api
       .dockerPreview(action)
-      .then((p) => live && setPreview(p))
+      .then((p) => live && setShown({ for: action, preview: p }))
       .catch((e: unknown) => live && setError(errorMessage(e)));
     return () => {
       live = false;
@@ -77,13 +78,16 @@ export function DockerActionDialog({
   }, [action]);
 
   const run = async () => {
+    if (!preview) return;
     setRunning(true);
     setError(null);
     try {
-      setResult(await api.dockerExecute(action));
+      setResult(await api.dockerExecute(preview.id, typed));
       onDone();
     } catch (e) {
       setError(errorMessage(e));
+      // A preview runs once; show a fresh one to review again.
+      setAction((a) => ({ ...a }));
     } finally {
       setRunning(false);
     }
@@ -245,6 +249,31 @@ export function DockerActionDialog({
             </>
           ) : null}
 
+          {result?.record && result.record.items.length > 1 ? (
+            <ul className="divide-y divide-border rounded-lg border border-border">
+              {result.record.items.map((item, i) => (
+                <li key={`${item.operation}-${i}`} className="flex items-center gap-2 px-3 py-1.5">
+                  {item.status === "succeeded" ? (
+                    <CheckCircle2 className="size-3.5 shrink-0 text-good" aria-hidden />
+                  ) : item.status === "failed" ? (
+                    <XCircle className="size-3.5 shrink-0 text-critical" aria-hidden />
+                  ) : (
+                    <Ban className="size-3.5 shrink-0 text-subtle-foreground" aria-hidden />
+                  )}
+                  <span className="min-w-0 flex-1 truncate font-mono text-2xs">
+                    {item.operation}
+                  </span>
+                  <span className="shrink-0 text-2xs text-muted-foreground">
+                    {item.status === "succeeded"
+                      ? "Done"
+                      : item.status === "failed"
+                        ? "Failed"
+                        : "Not run"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {result ? (
             <pre className="selectable max-h-40 overflow-auto rounded-md border border-border bg-panel-raised p-3 font-mono text-2xs whitespace-pre-wrap">
               {result.error ?? (result.output || "(no output)")}
