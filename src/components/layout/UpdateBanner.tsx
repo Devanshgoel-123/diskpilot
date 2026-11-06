@@ -1,23 +1,34 @@
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { ArrowDownCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
 
 import { WhatsNewDialog } from "@/components/shared/WhatsNewDialog";
 import { Button } from "@/components/ui/button";
 import { inAppNotes } from "@/lib/releaseNotes";
+import { useApp } from "@/lib/store";
 import { useUpdates } from "@/lib/updates";
+
+const LATEST_URL = "https://github.com/Devanshgoel-123/diskpilot/releases/latest";
 
 /** Shown in the sidebar when a newer DiskPilot is available. */
 export function UpdateBanner() {
-  const { update, installing, progress, error, install } = useUpdates();
+  const { update, installing, progress, installError, unverified, install } = useUpdates();
+  const blocked = useApp((s) => s.env?.updateBlocked ?? null);
   const [notesOpen, setNotesOpen] = useState(false);
   if (!update) return null;
 
+  // Installing in place cannot work: say why and offer the download instead.
+  const cannotInstall = blocked ?? (unverified ? installError : null);
   const pct =
     progress?.total && progress.total > 0
       ? Math.min(100, Math.round((progress.done / progress.total) * 100))
       : null;
-  const updateButton = (
-    <Button size="sm" onClick={() => void install()} disabled={installing}>
+  const primary = cannotInstall ? (
+    <Button size="sm" className="w-full" onClick={() => void openUrl(LATEST_URL)}>
+      Download from GitHub
+    </Button>
+  ) : (
+    <Button size="sm" className="w-full" onClick={() => void install()} disabled={installing}>
       {installing ? <Loader2 className="animate-spin" /> : null}
       {installing ? "Updating…" : "Update and restart"}
     </Button>
@@ -51,22 +62,22 @@ export function UpdateBanner() {
       ) : (
         // Stacked, so both fit the narrow sidebar.
         <div className="mt-1.5 flex flex-col gap-1">
-          <Button size="sm" className="w-full" onClick={() => void install()}>
-            Update and restart
-          </Button>
+          {primary}
           <Button size="sm" variant="ghost" className="w-full" onClick={() => setNotesOpen(true)}>
             What's new
           </Button>
         </div>
       )}
-      {error ? <p className="mt-1 text-2xs text-critical">{error}</p> : null}
+      {(cannotInstall ?? installError) ? (
+        <p className="mt-1 text-2xs text-critical">{cannotInstall ?? installError}</p>
+      ) : null}
       <WhatsNewDialog
         open={notesOpen}
         title={`What's new in DiskPilot ${update.version}`}
         subtitle="Updating keeps your scan history, settings and saved results."
         notes={update.body ? inAppNotes(update.body) : null}
         onClose={() => setNotesOpen(false)}
-        footer={updateButton}
+        footer={installing ? null : primary}
       />
     </div>
   );

@@ -84,7 +84,19 @@ pub fn get_environment(state: State<'_, AppState>) -> AppEnvironment {
         arch: std::env::consts::ARCH.to_string(),
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         read_only: false,
+        update_blocked: std::env::current_exe()
+            .ok()
+            .and_then(|exe| update_blocked(&exe)),
     }
+}
+
+/// An update replaces the app where it is. From the disk image (read-only),
+/// or from a copy macOS opened in a random read-only location because it was
+/// never moved out of Downloads (App Translocation), that cannot work.
+fn update_blocked(exe: &Path) -> Option<String> {
+    let s = exe.to_string_lossy();
+    let message = "To update, quit DiskPilot, drag it into Applications, and open it from there.";
+    (s.contains("/AppTranslocation/") || s.starts_with("/Volumes/")).then(|| message.into())
 }
 
 #[tauri::command]
@@ -1150,5 +1162,21 @@ mod tests {
         assert!(previewable_file(&s(photos.clone())).is_err());
         assert!(previewable_file(&s(photos.join("../elsewhere/secret.txt"))).is_err());
         assert!(previewable_file(&s(photos.join("missing.jpg"))).is_err());
+    }
+
+    #[test]
+    fn updates_need_a_writable_app_location() {
+        use super::update_blocked;
+        use std::path::Path;
+        let app = "/Applications/DiskPilot.app/Contents/MacOS/diskpilot";
+        assert!(update_blocked(Path::new(app)).is_none());
+        assert!(update_blocked(Path::new(
+            "/Volumes/DiskPilot/DiskPilot.app/Contents/MacOS/diskpilot"
+        ))
+        .is_some());
+        assert!(update_blocked(Path::new(
+            "/private/var/folders/x/T/AppTranslocation/1A2B/d/DiskPilot.app/Contents/MacOS/diskpilot"
+        ))
+        .is_some());
     }
 }

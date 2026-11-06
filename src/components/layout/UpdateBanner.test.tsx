@@ -3,8 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@tauri-apps/plugin-updater", () => ({ check: vi.fn() }));
 vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: vi.fn() }));
+const openUrl = vi.fn();
+vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: (u: string) => openUrl(u) }));
 
 import { UpdatesSettings } from "@/features/settings/UpdatesSettings";
+import { useApp } from "@/lib/store";
 import { useUpdates } from "@/lib/updates";
 
 import { UpdateBanner } from "./UpdateBanner";
@@ -61,11 +64,46 @@ describe("UpdateBanner", () => {
     expect(screen.getByRole("progressbar")).not.toHaveAttribute("aria-valuenow");
   });
 
-  it("shows why an install failed", () => {
-    useUpdates.setState({ update: offer(), error: "signature mismatch" });
+  it("lets a failed download be retried", () => {
+    useUpdates.setState({ update: offer(), installError: "Could not download the update." });
     render(<UpdateBanner />);
-    expect(screen.getByText("signature mismatch")).toBeInTheDocument();
+    expect(screen.getByText("Could not download the update.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Update and restart" })).toBeEnabled();
+  });
+
+  it("offers the download instead after an update fails verification", () => {
+    useUpdates.setState({
+      update: offer(),
+      unverified: true,
+      installError: "This update could not be verified.",
+    });
+    render(<UpdateBanner />);
+    expect(screen.queryByRole("button", { name: "Update and restart" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Download from GitHub" }));
+    expect(openUrl).toHaveBeenCalledWith(
+      "https://github.com/Devanshgoel-123/diskpilot/releases/latest",
+    );
+    expect(install).not.toHaveBeenCalled();
+  });
+
+  it("says to move the app first when it runs from the disk image", () => {
+    const env = useApp.getState().env;
+    useApp.setState({
+      env: {
+        homeDir: "/Users/a",
+        os: "macos",
+        arch: "aarch64",
+        appVersion: "0.6.0",
+        readOnly: false,
+        updateBlocked:
+          "To update, quit DiskPilot, drag it into Applications, and open it from there.",
+      },
+    });
+    useUpdates.setState({ update: offer() });
+    render(<UpdateBanner />);
+    expect(screen.getByText(/drag it into Applications/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Update and restart" })).toBeNull();
+    useApp.setState({ env });
   });
 
   it("shows the notes without download steps in What's new", () => {

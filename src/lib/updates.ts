@@ -24,7 +24,12 @@ interface UpdatesState {
   /** Set after a manual check finds nothing newer. */
   upToDate: boolean;
   lastCheckedMs: number | null;
+  /** Why the last check the person asked for failed. */
   error: string | null;
+  /** Why installing failed, in plain words. */
+  installError: string | null;
+  /** The update failed verification: retrying cannot help, download it instead. */
+  unverified: boolean;
   /** Bytes downloaded and total while installing. */
   progress: { done: number; total: number | null } | null;
   installing: boolean;
@@ -40,6 +45,8 @@ export const useUpdates = create<UpdatesState>((set, get) => ({
   upToDate: false,
   lastCheckedMs: null,
   error: null,
+  installError: null,
+  unverified: false,
   progress: null,
   installing: false,
 
@@ -60,7 +67,14 @@ export const useUpdates = create<UpdatesState>((set, get) => ({
     set({ checking: true, error: null, upToDate: false });
     try {
       const update = await check();
-      set({ update, upToDate: manual && !update, lastCheckedMs: Date.now() });
+      const same = update && get().update?.version === update.version;
+      set({
+        update,
+        upToDate: manual && !update,
+        lastCheckedMs: Date.now(),
+        // A different version gets a fresh chance to install.
+        ...(same ? {} : { installError: null, unverified: false }),
+      });
     } catch (e) {
       // Automatic checks fail quietly (offline, GitHub down); manual ones say why.
       if (manual) set({ error: errorMessage(e) });
@@ -71,8 +85,8 @@ export const useUpdates = create<UpdatesState>((set, get) => ({
 
   install: async () => {
     const { update } = get();
-    if (!update || get().installing) return;
-    set({ installing: true, error: null, progress: { done: 0, total: null } });
+    if (!update || get().installing || get().unverified) return;
+    set({ installing: true, installError: null, progress: { done: 0, total: null } });
     try {
       await update.downloadAndInstall((event) => {
         if (event.event === "Started") {
@@ -86,10 +100,36 @@ export const useUpdates = create<UpdatesState>((set, get) => ({
       });
       await relaunch();
     } catch (e) {
-      set({ error: errorMessage(e), installing: false, progress: null });
+      const { message, unverified } = installFailure(errorMessage(e));
+      set({ installError: message, unverified, installing: false, progress: null });
     }
   },
 }));
+
+/** What went wrong installing an update, for people rather than logs. */
+export function installFailure(raw: string): { message: string; unverified: boolean } {
+  if (/signature|minisign|SignedVersion/i.test(raw)) {
+    return {
+      message:
+        "This update could not be verified, so it was not installed and nothing changed. Download the latest version from GitHub instead.",
+      unverified: true,
+    };
+  }
+  if (/read-only file system|os error 30|TempDirNotOnSameMountPoint/i.test(raw)) {
+    return {
+      message:
+        "DiskPilot cannot update itself where it is. Quit it, drag it into Applications, and open it from there.",
+      unverified: false,
+    };
+  }
+  if (/error sending request|dns|timed out|connection|network|offline/i.test(raw)) {
+    return {
+      message: "Could not download the update. Check your connection and try again.",
+      unverified: false,
+    };
+  }
+  return { message: `The update could not be installed: ${raw}`, unverified: false };
+}
 
 let started = false;
 

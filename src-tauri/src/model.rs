@@ -90,6 +90,9 @@ pub struct AppEnvironment {
     pub app_version: String,
     /// Phase 1 ships no destructive operations at all.
     pub read_only: bool,
+    /// Why an update cannot be installed in place, such as running straight
+    /// from the disk image; `None` when it can.
+    pub update_blocked: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

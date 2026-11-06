@@ -41,6 +41,8 @@ export interface AppEnvironment {
   arch: string;
   appVersion: string;
   readOnly: boolean;
+  /** Why an update cannot install where the app is (e.g. run from the disk image). */
+  updateBlocked: string | null;
 }
 
 export interface ScanProgress {

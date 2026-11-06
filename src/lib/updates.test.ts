@@ -131,11 +131,40 @@ describe("installing an update", () => {
     await useUpdates.getState().install();
     const s = useUpdates.getState();
     expect(relaunch).not.toHaveBeenCalled();
-    expect(s.error).toBe("signature mismatch");
+    expect(s.installError).toMatch(/could not be verified/);
+    expect(s.unverified).toBe(true);
+    // An install failure is not a failed check.
+    expect(s.error).toBeNull();
     expect(s.installing).toBe(false);
     expect(s.progress).toBeNull();
-    // The update is still offered, so the person can try again.
     expect(s.update).not.toBeNull();
+    // Retrying an unverified update cannot help, so it is not attempted.
+    await useUpdates.getState().install();
+    expect(s.update?.downloadAndInstall).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a network failure be retried", async () => {
+    const { useUpdates } = await load();
+    const update = fakeUpdate([], new Error("error sending request for url"));
+    check.mockResolvedValue(update);
+    await useUpdates.getState().checkNow();
+    await useUpdates.getState().install();
+    expect(useUpdates.getState().installError).toMatch(/Check your connection/);
+    expect(useUpdates.getState().unverified).toBe(false);
+    await useUpdates.getState().install();
+    expect(update.downloadAndInstall).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives a newer version a fresh chance after one failed verification", async () => {
+    const { useUpdates } = await load();
+    check.mockResolvedValueOnce(fakeUpdate([], new Error("signature mismatch")));
+    await useUpdates.getState().checkNow();
+    await useUpdates.getState().install();
+    expect(useUpdates.getState().unverified).toBe(true);
+    check.mockResolvedValueOnce({ ...fakeUpdate([]), version: "0.6.2" });
+    await useUpdates.getState().checkNow();
+    expect(useUpdates.getState().unverified).toBe(false);
+    expect(useUpdates.getState().installError).toBeNull();
   });
 
   it("installs only once when pressed twice", async () => {
@@ -213,5 +242,21 @@ describe("automatic checks", () => {
     startUpdateChecks();
     await vi.advanceTimersByTimeAsync(2 * 24 * 60 * 60 * 1000);
     expect(check).not.toHaveBeenCalled();
+  });
+});
+
+describe("installFailure", () => {
+  it.each([
+    ["The signature verification failed", /could not be verified/, true],
+    ["MissingSignedVersion", /could not be verified/, true],
+    ["Read-only file system (os error 30)", /drag it into Applications/, false],
+    ["TempDirNotOnSameMountPoint", /drag it into Applications/, false],
+    ["dns error: failed to lookup address", /Check your connection/, false],
+    ["something odd", /could not be installed: something odd/, false],
+  ])("explains %s", async (raw, message, unverified) => {
+    const { installFailure } = await load();
+    const r = installFailure(raw);
+    expect(r.message).toMatch(message);
+    expect(r.unverified).toBe(unverified);
   });
 });
