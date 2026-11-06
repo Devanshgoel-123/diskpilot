@@ -366,6 +366,27 @@ mod tests {
     }
 
     #[test]
+    fn go_caches_are_recognized_and_gopath_sources_stay_user_data() {
+        let p = FakeProbe::new(&["/Users/test/go/src/github.com/me/app/.git"]);
+        let module = dir("/Users/test/go/pkg/mod/golang.org/x/text@v0.1.0", &p);
+        assert_eq!(module.rule_id, "go.mod-cache");
+        assert_eq!(module.category, Category::Cache);
+        assert_eq!(
+            module.matched_path.as_deref(),
+            Some("/Users/test/go/pkg/mod")
+        );
+        assert_eq!(
+            dir("/Users/test/Library/Caches/go-build", &p).rule_id,
+            "go.build-cache"
+        );
+        assert_eq!(dir("/Users/test/go/bin", &p).rule_id, "go.home");
+        assert_eq!(
+            dir("/Users/test/go/src/github.com/me/app", &p).rule_id,
+            "project.code"
+        );
+    }
+
+    #[test]
     fn leaf_rules_stop_nested_matching() {
         // A `dist` folder inside node_modules (next to a package's package.json)
         // belongs to node_modules, not to "project build output".

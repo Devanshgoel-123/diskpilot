@@ -449,6 +449,52 @@ mod tests {
     }
 
     #[test]
+    fn go_module_cache_is_left_to_go_and_the_build_cache_is_offered() {
+        use crate::cleanup::planner::build_plan;
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        let at = |rel: &str| {
+            std::fs::create_dir_all(home.join(rel)).unwrap();
+            home.join(rel).display().to_string()
+        };
+        let (caches, build_cache, modcache) = (
+            at("Library/Caches"),
+            at("Library/Caches/go-build"),
+            at("go/pkg/mod"),
+        );
+        let (build_cache, modcache) = (build_cache.as_str(), modcache.as_str());
+        let s = summary(
+            vec![
+                loc(&caches, 5_000_000_000, "library.caches"),
+                loc(build_cache, 900_000_000, "go.build-cache"),
+                loc(modcache, 3_000_000_000, "go.mod-cache"),
+            ],
+            vec![],
+        );
+        let mut index = DirIndex::new();
+        index.insert(PathBuf::from(build_cache), stats(900_000_000));
+        let recs = recommend(&s, &index, &Classifier::new(&home), 0);
+        let find = |p: &str| recs.iter().find(|r| r.path == p).unwrap();
+
+        let modules = find(modcache);
+        assert_eq!(modules.tier, Tier::ReviewFirst);
+        assert!(modules.methods.is_empty());
+        assert_eq!(modules.alternative.as_deref(), Some("go clean -modcache"));
+        let build = find(build_cache);
+        assert_eq!(build.tier, Tier::LikelySafe);
+        assert_eq!(build.alternative.as_deref(), Some("go clean -cache"));
+        assert_eq!(recs.iter().filter(|r| r.path == build_cache).count(), 1);
+
+        let ids = [modcache.to_string(), build_cache.to_string()];
+        for method in [CleanupMethod::Trash, CleanupMethod::Delete] {
+            let plan = build_plan("p".into(), &recs, &ids, method, &home, &home, 0);
+            let planned: Vec<&str> = plan.items.iter().map(|i| i.path.as_str()).collect();
+            assert_eq!(planned, vec![build_cache]);
+            assert_eq!(plan.rejected[0].path, modcache);
+        }
+    }
+
+    #[test]
     fn nested_actionable_items_are_not_double_counted() {
         let s = summary(
             vec![

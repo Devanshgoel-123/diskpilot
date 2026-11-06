@@ -9,6 +9,7 @@
 pub mod agent_data;
 pub mod agents;
 pub mod editors;
+pub mod go;
 pub mod models;
 pub mod node;
 pub mod toolchains;
@@ -139,11 +140,21 @@ pub fn read_small(path: &Path, max: u64) -> Option<String> {
 /// succeeds within `timeout`. A hung tool is killed instead of blocking the
 /// analysis, and output is capped.
 pub fn run_tool(program: &str, args: &[&str], timeout: std::time::Duration) -> Option<String> {
+    let mut command = std::process::Command::new(program);
+    command.args(args);
+    run_command(command, timeout)
+}
+
+/// [`run_tool`] for a command that also needs its environment or working
+/// folder set.
+pub fn run_command(
+    mut command: std::process::Command,
+    timeout: std::time::Duration,
+) -> Option<String> {
     use std::io::Read;
-    use std::process::{Command, Stdio};
+    use std::process::Stdio;
     const MAX_OUTPUT: u64 = 32 * 1024 * 1024;
-    let mut child = Command::new(program)
-        .args(args)
+    let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -296,6 +307,7 @@ pub fn analyze(ctx: &Ctx) -> (DevToolsReport, Vec<Recommendation>) {
         xcode::analyze(ctx),
         toolchains::rust(ctx),
         toolchains::python(ctx),
+        go::analyze(ctx),
         models::analyze(ctx),
         versions::analyze(ctx),
     ] {

@@ -46,7 +46,9 @@ fn full_pipeline_removes_only_planned_regenerable_data() {
         .expect("node_modules rec");
     assert_eq!(nm.tier, Tier::ReviewFirst);
     assert!(
-        !recs.iter().any(|r| r.path.contains("Documents")),
+        !recs
+            .iter()
+            .any(|r| Path::new(&r.path).starts_with(home.join("Documents"))),
         "documents are never recommended"
     );
 
