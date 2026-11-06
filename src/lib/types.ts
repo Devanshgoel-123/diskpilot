@@ -50,6 +50,9 @@ export interface ScanProgress {
   bytesScanned: number;
   currentPath: string;
   elapsedMs: number;
+  /** App containers set aside to measure last; 0 when there are none. */
+  containersTotal: number;
+  containersDone: number;
 }
 
 export type ScanStatus = "completed" | "cancelled" | "failed";

@@ -112,6 +112,11 @@ export function onScanProgress(cb: (p: ScanProgress) => void): Promise<UnlistenF
   return listen<ScanProgress>("scan://progress", (e) => cb(e.payload));
 }
 
+/** Results without app containers, which are still being measured. */
+export function onScanPartial(cb: (scanId: string) => void): Promise<UnlistenFn> {
+  return listen<string>("scan://partial", (e) => cb(e.payload));
+}
+
 export function onScanFinished(cb: (p: ScanFinished) => void): Promise<UnlistenFn> {
   return listen<ScanFinished>("scan://finished", (e) => cb(e.payload));
 }

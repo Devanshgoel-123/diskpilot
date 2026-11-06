@@ -2,13 +2,33 @@
 import path from "node:path";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { defineConfig } from "vite";
+import fs from "node:fs";
+import { defineConfig, type Plugin } from "vite";
 
 const host = process.env.TAURI_DEV_HOST;
 
+// The local preview harness reads __preview*.json from public/. Those files
+// hold real scan results from the developer's own disk, and everything in
+// dist/ is embedded in the app, so they must never reach a build.
+function dropPreviewData(): Plugin {
+  let outDir = "dist";
+  return {
+    name: "drop-preview-data",
+    apply: "build",
+    configResolved(config) {
+      outDir = path.resolve(config.root, config.build.outDir);
+    },
+    closeBundle() {
+      for (const name of fs.readdirSync(outDir)) {
+        if (name.startsWith("__preview")) fs.rmSync(path.join(outDir, name));
+      }
+    },
+  };
+}
+
 // https://v2.tauri.app/start/frontend/vite/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), dropPreviewData()],
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },
   },

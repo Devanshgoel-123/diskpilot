@@ -8,7 +8,7 @@ use std::sync::Mutex;
 use diskpilot_lib::classifier::Classifier;
 use diskpilot_lib::explorer;
 use diskpilot_lib::model::{Category, EntryKind};
-use diskpilot_lib::scanner::{scan, ScanError, ScanOptions, ScanOutcome};
+use diskpilot_lib::scanner::{scan, scan_with_partial, ScanError, ScanOptions, ScanOutcome};
 
 struct Fixture {
     _dir: tempfile::TempDir,
@@ -255,4 +255,114 @@ fn measure_matches_the_scanner_and_ignores_symlinks() {
         measured >= scanned && measured < scanned + 50_000,
         "{scanned} vs {measured}"
     );
+}
+
+/// Comparable view of a summary: everything except ids and timings.
+fn comparable(o: &ScanOutcome) -> serde_json::Value {
+    let mut v = serde_json::to_value(&o.summary).unwrap();
+    for key in ["id", "startedAtMs", "finishedAtMs", "durationMs"] {
+        v.as_object_mut().unwrap().remove(key);
+    }
+    v
+}
+
+fn with_app_containers(f: &Fixture) {
+    write(
+        &f.home
+            .join("Library/Containers/com.example.chat/Data/Library/Caches/media.bin"),
+        250_000,
+    );
+    write(
+        &f.home
+            .join("Library/Containers/com.example.chat/Data/Documents/db.sqlite"),
+        90_000,
+    );
+    write(
+        &f.home
+            .join("Library/Containers/com.example.maps/Data/tiles/t.bin"),
+        60_000,
+    );
+    fs::create_dir_all(f.home.join("Library/Containers/com.example.empty/Data/a/b")).unwrap();
+}
+
+#[test]
+fn app_containers_measured_last_give_identical_final_results() {
+    let f = fixture();
+    with_app_containers(&f);
+    let plain = run(&f);
+
+    let deferred_opts = opts(&f).deferring_app_containers();
+    let partials = Mutex::new(Vec::new());
+    let last_progress = Mutex::new(None);
+    let fin = scan_with_partial(
+        &deferred_opts,
+        &AtomicBool::new(false),
+        &|p| *last_progress.lock().unwrap() = Some(p),
+        &|o| partials.lock().unwrap().push(o),
+    )
+    .unwrap();
+
+    // The final results are exactly what a normal scan produces.
+    for (k, v) in &plain.index {
+        assert_eq!(fin.index.get(k), Some(v), "{}", k.display());
+    }
+    assert_eq!(fin.index.len(), plain.index.len());
+    let (a, b) = (comparable(&fin), comparable(&plain));
+    for key in b.as_object().unwrap().keys() {
+        assert_eq!(a[key], b[key], "{key}");
+    }
+
+    // One partial result, published before the containers were measured.
+    let partials = partials.into_inner().unwrap();
+    assert_eq!(partials.len(), 1);
+    let partial = &partials[0];
+    let containers = f.home.join("Library/Containers");
+    assert!(!partial
+        .index
+        .contains_key(&containers.join("com.example.chat")));
+    assert!(partial.summary.total_bytes < fin.summary.total_bytes);
+    assert!(
+        partial.summary.total_bytes + 400_000 <= fin.summary.total_bytes,
+        "container files are missing from the partial total"
+    );
+    // Folders outside the containers are already final in the partial result.
+    for dir in ["code", "code/web", "Downloads", "Library/Caches"] {
+        let p = f.home.join(dir);
+        assert_eq!(partial.index[&p], fin.index[&p], "{dir}");
+    }
+
+    let progress = last_progress.into_inner().unwrap().unwrap();
+    assert_eq!(progress.containers_total, 3);
+    assert_eq!(progress.containers_done, 3);
+}
+
+#[test]
+fn no_partial_result_without_app_containers() {
+    let f = fixture();
+    let calls = Mutex::new(0);
+    let o = scan_with_partial(
+        &opts(&f).deferring_app_containers(),
+        &AtomicBool::new(false),
+        &|_| {},
+        &|_| *calls.lock().unwrap() += 1,
+    )
+    .unwrap();
+    assert_eq!(*calls.lock().unwrap(), 0);
+    assert_eq!(comparable(&o), comparable(&run(&f)));
+}
+
+#[test]
+fn a_scan_rooted_in_app_containers_measures_everything_at_once() {
+    let f = fixture();
+    with_app_containers(&f);
+    let containers = f.home.join("Library/Containers");
+    let mut o = ScanOptions::new("test", &containers, &f.home).deferring_app_containers();
+    o.inherit_ancestor_context = false;
+    let calls = Mutex::new(0);
+    let out = scan_with_partial(&o, &AtomicBool::new(false), &|_| {}, &|_| {
+        *calls.lock().unwrap() += 1
+    })
+    .unwrap();
+    assert_eq!(*calls.lock().unwrap(), 0);
+    assert_eq!(out.summary.file_count, 3);
 }

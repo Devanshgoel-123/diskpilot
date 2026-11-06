@@ -44,7 +44,7 @@ During a scan the classification context is passed down the recursion, so each f
 ## Data flow
 
 1. `start_scan` validates the root, spawns a thread and returns an id.
-2. The scanner emits `scan://progress` events, then builds a `ScanSummary` (category totals, top 500 files, detected locations, heavy folders, error samples) and a `DirIndex` (path → size) kept in memory.
+2. The scanner emits `scan://progress` events. Folders inside other apps' containers (`~/Library/Containers/*`) are measured last, because macOS checks every folder opened there one at a time. Everything else is published first as `scan://partial`, then the containers are merged into their ancestors. The scanner then builds a `ScanSummary` (category totals, top 500 files, detected locations, heavy folders, error samples) and a `DirIndex` (path → size) kept in memory.
 3. `scan://finished` is emitted and the run is recorded in SQLite (`<app data>/diskpilot.sqlite3`).
 4. The UI fetches the summary. The Explorer calls `list_directory`, which lists the folder live and takes folder sizes from the index.
 

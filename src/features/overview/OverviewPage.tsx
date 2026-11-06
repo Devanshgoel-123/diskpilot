@@ -38,8 +38,18 @@ function RowsSkeleton({ rows }: { rows: number }) {
 }
 
 export function OverviewPage() {
-  const { disk, summary, env, scanning, progress, scanRoot, startScan, navigate, recommendations } =
-    useApp();
+  const {
+    disk,
+    summary,
+    env,
+    scanning,
+    partial,
+    progress,
+    scanRoot,
+    startScan,
+    navigate,
+    recommendations,
+  } = useApp();
   const home = env?.homeDir;
 
   const consumers = useMemo(
@@ -71,6 +81,17 @@ export function OverviewPage() {
               <Skeleton className="h-3 w-2/3" />
             </div>
           )}
+
+          {summary && scanning && partial ? (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
+              <FolderSearch className="size-3.5 shrink-0" aria-hidden />
+              Other apps' private folders are still being measured
+              {progress && progress.containersTotal > 0
+                ? ` (${formatCount(progress.containersDone)} of ${formatCount(progress.containersTotal)})`
+                : ""}
+              . Totals will grow when they finish; everything else here is final.
+            </p>
+          ) : null}
 
           {!summary && !scanning ? (
             <div className="border-t border-border pt-4">

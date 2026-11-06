@@ -12,7 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { formatRelative, tildify } from "@/lib/format";
+import { formatCount, formatRelative, tildify } from "@/lib/format";
 import { useApp, type PageId } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -69,8 +69,29 @@ function Section({ title, items }: { title?: string; items: NavItem[] }) {
 
 /** Scan status at the foot of the sidebar: what was scanned and when. */
 function ScanStatus() {
-  const { scanning, progress, summary, env } = useApp();
+  const { scanning, partial, progress, summary, env } = useApp();
   const home = env?.homeDir;
+  if (scanning && partial && progress && progress.containersTotal > 0) {
+    const pct = Math.round((progress.containersDone / progress.containersTotal) * 100);
+    return (
+      <div className="px-2 py-1.5" aria-live="polite">
+        <p className="text-xs font-medium">Measuring app containers…</p>
+        <div
+          className="mt-1.5 h-[3px] overflow-hidden rounded-full bg-track"
+          role="progressbar"
+          aria-valuenow={pct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="App containers measured"
+        >
+          <div className="h-full rounded-full bg-accent" style={{ width: `${pct}%` }} />
+        </div>
+        <p className="tabular mt-1 text-2xs text-subtle-foreground">
+          {formatCount(progress.containersDone)} of {formatCount(progress.containersTotal)}
+        </p>
+      </div>
+    );
+  }
   if (scanning) {
     return (
       <div className="px-2 py-1.5" aria-live="polite">
