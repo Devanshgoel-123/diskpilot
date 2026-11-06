@@ -699,7 +699,10 @@
         <div class="wrap">
           <ul class="rules">
             <li>System folders and key home folders are refused outright.</li>
-            <li>Docker volumes are never removed, and every Docker command is shown first.</li>
+            <li>
+              Docker volumes are deleted only when you pick them and type a name to confirm, and
+              every Docker command is shown first.
+            </li>
             <li>A reviewed plan is single-use and expires after ten minutes.</li>
             <li>Empty Trash removes only the exact items you reviewed.</li>
           </ul>
