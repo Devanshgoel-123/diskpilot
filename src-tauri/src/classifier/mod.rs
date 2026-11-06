@@ -240,11 +240,13 @@ fn file_name_in(path: &Path, names: &[&str]) -> bool {
         .is_some_and(|n| names.contains(&n))
 }
 
+/// Compares path components; a `*` part matches any single component
+/// (for example a browser profile folder).
 fn components_equal(rel: &Path, parts: &[&str]) -> bool {
     let mut comps = rel.components();
     for part in parts {
         match comps.next() {
-            Some(Component::Normal(c)) if c == OsStr::new(part) => {}
+            Some(Component::Normal(c)) if *part == "*" || c == OsStr::new(part) => {}
             _ => return false,
         }
     }
@@ -307,6 +309,93 @@ mod tests {
             assert!(ids.insert(rule.id), "duplicate rule id {}", rule.id);
         }
         assert!(!unmatched().explanation.is_empty());
+    }
+
+    #[test]
+    fn wildcard_parts_match_one_folder_of_any_name() {
+        let p = FakeProbe::empty();
+        let chrome = "/Users/test/Library/Application Support/Google/Chrome";
+        for profile in ["Default", "Profile 9"] {
+            assert_eq!(
+                dir(
+                    &format!("{chrome}/{profile}/Service Worker/CacheStorage"),
+                    &p
+                )
+                .rule_id,
+                "browser.chromium-caches"
+            );
+        }
+        // `*` stands for exactly one folder, never zero or two.
+        assert_ne!(
+            dir(&format!("{chrome}/Service Worker/CacheStorage"), &p).rule_id,
+            "browser.chromium-caches"
+        );
+        assert_ne!(
+            dir(&format!("{chrome}/a/b/Code Cache"), &p).rule_id,
+            "browser.chromium-caches"
+        );
+        // Browser profile data outside the cache folders stays app data.
+        assert_ne!(
+            dir(&format!("{chrome}/Default"), &p).category,
+            Category::Cache
+        );
+    }
+
+    #[test]
+    fn app_specific_cache_rules_win_over_the_generic_app_rule() {
+        let p = FakeProbe::empty();
+        let support = "/Users/test/Library/Application Support";
+        assert_eq!(
+            dir(&format!("{support}/Code/Code Cache"), &p).rule_id,
+            "vscode.caches"
+        );
+        assert_eq!(
+            dir(&format!("{support}/Slack/Code Cache"), &p).rule_id,
+            "apps.chromium-caches"
+        );
+        assert_eq!(
+            dir(&format!("{support}/discord/Cache/Cache_Data"), &p).rule_id,
+            "apps.chromium-caches"
+        );
+        assert_eq!(
+            dir("/Users/test/.someapp/browser/Default/Cache/Cache_Data", &p).rule_id,
+            "chromium.http-cache"
+        );
+    }
+
+    #[test]
+    fn chat_media_and_new_tool_locations_are_recognised() {
+        let p = FakeProbe::empty();
+        let groups = "/Users/test/Library/Group Containers";
+        let whatsapp = dir(
+            &format!("{groups}/group.net.whatsapp.WhatsApp.shared/Message/Media"),
+            &p,
+        );
+        assert_eq!(whatsapp.rule_id, "chat.whatsapp-media");
+        assert_eq!(whatsapp.category, Category::UserData);
+        assert_eq!(
+            dir(
+                &format!(
+                    "{groups}/6N38VWS5BX.ru.keepcoder.Telegram/appstore/account-123/postbox/media"
+                ),
+                &p
+            )
+            .rule_id,
+            "chat.telegram-media"
+        );
+        assert_eq!(
+            dir("/Users/test/Library/Caches/ms-playwright", &p).rule_id,
+            "playwright.browsers"
+        );
+        assert_eq!(dir("/Users/test/go/pkg/mod", &p).rule_id, "go.mod-cache");
+        assert_eq!(
+            dir("/Users/test/.asdf/installs", &p).rule_id,
+            "asdf.installs"
+        );
+        assert_eq!(
+            dir("/Users/test/.local/share/mise/installs", &p).rule_id,
+            "asdf.installs"
+        );
     }
 
     #[test]

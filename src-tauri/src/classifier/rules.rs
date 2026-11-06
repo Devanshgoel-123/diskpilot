@@ -620,6 +620,93 @@ pub static DIR_RULES: &[DirRule] = &[
         "VS Code extensions",
         "Installed VS Code extensions."
     ),
+    // ---- Browsers, chat and other apps -----------------------------------------
+    leaf!(
+        "browser.chromium-caches",
+        HomeRelativeAny(&[
+            &["Library", "Application Support", "Google", "Chrome", "*", "Service Worker", "CacheStorage"],
+            &["Library", "Application Support", "Google", "Chrome", "*", "Code Cache"],
+            &["Library", "Application Support", "Google", "Chrome", "*", "GPUCache"],
+            &["Library", "Application Support", "BraveSoftware", "Brave-Browser", "*", "Service Worker", "CacheStorage"],
+            &["Library", "Application Support", "BraveSoftware", "Brave-Browser", "*", "Code Cache"],
+            &["Library", "Application Support", "BraveSoftware", "Brave-Browser", "*", "GPUCache"],
+            &["Library", "Application Support", "Microsoft Edge", "*", "Service Worker", "CacheStorage"],
+            &["Library", "Application Support", "Microsoft Edge", "*", "Code Cache"],
+            &["Library", "Application Support", "Microsoft Edge", "*", "GPUCache"],
+            &["Library", "Application Support", "Arc", "User Data", "*", "Service Worker", "CacheStorage"],
+            &["Library", "Application Support", "Arc", "User Data", "*", "Code Cache"],
+            &["Library", "Application Support", "Arc", "User Data", "*", "GPUCache"],
+            &["Library", "Application Support", "Chromium", "*", "Service Worker", "CacheStorage"],
+            &["Library", "Application Support", "Chromium", "*", "Code Cache"],
+            &["Library", "Application Support", "Chromium", "*", "GPUCache"],
+            &["Library", "Application Support", "Vivaldi", "*", "Service Worker", "CacheStorage"],
+            &["Library", "Application Support", "Vivaldi", "*", "Code Cache"],
+            &["Library", "Application Support", "Vivaldi", "*", "GPUCache"],
+            &["Library", "Application Support", "Google", "GoogleUpdater", "crx_cache"],
+        ]),
+        Cache,
+        High,
+        "Browser caches",
+        "Caches that Chrome, Brave, Edge, Arc, Chromium and Vivaldi keep per profile: offline copies of websites (Service Worker), compiled scripts and graphics. Browsers rebuild them as you browse. Logins, history, bookmarks and site settings are stored elsewhere."
+    ),
+    leaf!(
+        "apps.chromium-caches",
+        HomeRelativeAny(&[
+            &["Library", "Application Support", "*", "Cache", "Cache_Data"],
+            &["Library", "Application Support", "*", "Code Cache"],
+            &["Library", "Application Support", "*", "GPUCache"],
+            &["Library", "Application Support", "*", "DawnGraphiteCache"],
+            &["Library", "Application Support", "*", "DawnWebGPUCache"],
+            &["Library", "Application Support", "*", "Service Worker", "CacheStorage"],
+        ]),
+        Cache,
+        Medium,
+        "App web caches",
+        "Caches that apps built on web technology (Slack, Discord, Notion, Figma and many others) keep for downloaded pages, compiled scripts and graphics. The app rebuilds them when needed."
+    ),
+    leaf!(
+        "chat.whatsapp-media",
+        HomeRelative(&["Library", "Group Containers", "group.net.whatsapp.WhatsApp.shared", "Message", "Media"]),
+        UserData,
+        High,
+        "WhatsApp media",
+        "Photos, videos, voice notes and documents received or sent in WhatsApp on this Mac, one folder per chat. Some may exist nowhere else, and WhatsApp may not be able to download older media again."
+    ),
+    leaf!(
+        "chat.telegram-media",
+        HomeRelativeAny(&[
+            &["Library", "Group Containers", "6N38VWS5BX.ru.keepcoder.Telegram", "appstore", "*", "postbox", "media"],
+            &["Library", "Group Containers", "6N38VWS5BX.ru.keepcoder.Telegram", "stable", "*", "postbox", "media"],
+        ]),
+        Cache,
+        High,
+        "Telegram media cache",
+        "Photos, videos and files Telegram downloaded for chats on this Mac. Telegram keeps them in its cloud and downloads them again when you open them."
+    ),
+    leaf!(
+        "playwright.browsers",
+        HomeRelative(&["Library", "Caches", "ms-playwright"]),
+        DeveloperTools,
+        High,
+        "Playwright browsers",
+        "Browser builds downloaded by Playwright for automated testing, one folder per browser version. `npx playwright install` downloads them again."
+    ),
+    leaf!(
+        "asdf.installs",
+        HomeRelativeAny(&[&[".asdf", "installs"], &[".local", "share", "mise", "installs"]]),
+        DeveloperTools,
+        High,
+        "Tool versions (asdf, mise)",
+        "Language and tool versions installed by asdf or mise, one folder per tool. Projects that pin a version need it installed."
+    ),
+    leaf!(
+        "chromium.http-cache",
+        Name(&["Cache_Data"]),
+        Cache,
+        Medium,
+        "Web cache",
+        "The download cache of a browser or of an app built on Chromium. It is rebuilt as pages are loaded again."
+    ),
     // ---- User library ------------------------------------------------------
     leaf!(
         "trash",
