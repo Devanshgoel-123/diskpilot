@@ -225,6 +225,18 @@ pub fn execute(
                 continue;
             }
         };
+        // A file that became a folder since the review is not what the
+        // person chose.
+        if item.was_file && !path.symlink_metadata().is_ok_and(|m| m.is_file()) {
+            results.push(CleanupItemResult {
+                target: item.path.clone(),
+                operation,
+                bytes: 0,
+                status: ItemStatus::Skipped,
+                error: Some("It changed since you reviewed it. Scan again.".into()),
+            });
+            continue;
+        }
         // An extra copy of a duplicate goes only while the copy that stays
         // is still there with the same bytes.
         if let Some(keep) = &item.keep_copy {
@@ -351,6 +363,7 @@ mod tests {
                     tier: Tier::LikelySafe,
                     operation: method.describe().into(),
                     keep_copy: None,
+                    was_file: false,
                 })
                 .collect(),
             rejected: vec![],
@@ -580,6 +593,21 @@ mod tests {
             let error = record.items[0].error.clone().unwrap_or_default();
             assert!(error.contains(reason), "{what}: {error}");
         }
+    }
+
+    #[test]
+    fn a_file_that_became_a_folder_since_the_review_is_skipped() {
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        let video = home.join("Movies/trip.mp4");
+        fs::create_dir_all(&video).unwrap(); // was a file when planned
+        fs::write(video.join("inside.txt"), "x").unwrap();
+        let mut p = plan(CleanupMethod::Trash, &[&video]);
+        p.items[0].was_file = true;
+        let ops = FakeTrash::default();
+        let record = execute(&p, &home, &home, &ops);
+        assert!(ops.0.lock().unwrap().is_empty());
+        assert_eq!(record.items[0].status, ItemStatus::Skipped);
     }
 
     #[test]

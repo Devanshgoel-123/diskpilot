@@ -403,6 +403,11 @@ pub struct PlanItem {
     /// right before this item is moved, so the last copy is never removed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keep_copy: Option<String>,
+    /// The path was a regular file when the plan was made. Checked again
+    /// right before it is removed, so a file replaced by a folder since the
+    /// review is not removed in its place.
+    #[serde(default)]
+    pub was_file: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

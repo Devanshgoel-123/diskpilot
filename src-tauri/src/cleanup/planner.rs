@@ -73,6 +73,9 @@ pub fn build_plan(
             tier: rec.tier,
             operation: method.describe().to_string(),
             keep_copy: None,
+            was_file: std::path::Path::new(&rec.path)
+                .symlink_metadata()
+                .is_ok_and(|m| m.is_file()),
         });
     }
 
