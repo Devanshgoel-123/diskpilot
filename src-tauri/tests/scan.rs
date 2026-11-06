@@ -366,3 +366,40 @@ fn a_scan_rooted_in_app_containers_measures_everything_at_once() {
     assert_eq!(*calls.lock().unwrap(), 0);
     assert_eq!(out.summary.file_count, 3);
 }
+
+#[test]
+fn personal_files_are_grouped_by_type() {
+    use diskpilot_lib::filekinds::FileKind;
+    let f = fixture();
+    let mb = 1024 * 1024;
+    write(&f.home.join("Movies/trip.MP4"), 3 * mb);
+    write(&f.home.join("Desktop/clip.mov"), 2 * mb);
+    write(&f.home.join("Movies/tiny.mp4"), 1_000);
+    // Files that belong to an app or a tool are not listed.
+    write(&f.home.join("Movies/Edit.fcpbundle/Media/a.mp4"), 5 * mb);
+    write(&f.home.join("Library/Caches/app/v.mp4"), 5 * mb);
+    write(&f.home.join(".hidden/v.mp4"), 5 * mb);
+    write(&f.home.join("code/web/node_modules/x/v.mp4"), 5 * mb);
+    let o = run(&f);
+
+    let videos = o
+        .summary
+        .file_kinds
+        .iter()
+        .find(|g| g.kind == FileKind::Videos)
+        .expect("videos found");
+    assert_eq!(videos.file_count, 3);
+    let names: Vec<&str> = videos.files.iter().map(|e| e.name.as_str()).collect();
+    // Largest first; the 1 KB file counts in the total but is not listed.
+    assert_eq!(names, ["trip.MP4", "clip.mov"]);
+    assert!(videos.bytes >= 5 * mb as u64);
+    let installers = o
+        .summary
+        .file_kinds
+        .iter()
+        .find(|g| g.kind == FileKind::Installers)
+        .expect("installers found");
+    assert_eq!(installers.file_count, 1);
+    // The fixture installer is under 1 MB, so it is counted but not listed.
+    assert!(installers.files.is_empty());
+}

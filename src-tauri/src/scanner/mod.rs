@@ -26,6 +26,7 @@ use rayon::prelude::*;
 use crate::classifier::rules::RuleKind;
 use crate::classifier::{Classifier, Context, FsProbe, Probe, Resolved};
 use crate::error::describe_io_error;
+use crate::filekinds::{self, FileKind, FileKindGroup, LISTED_PER_KIND, MIN_LISTED_BYTES};
 use crate::model::{
     Category, CategoryTotal, DetectedLocation, DirectorySize, FileEntry, ScanIssue, ScanProgress,
     ScanSummary,
@@ -165,6 +166,12 @@ struct Shared<'a> {
     index: Mutex<DirIndex>,
     top_files: Mutex<BinaryHeap<Reverse<FileCandidate>>>,
     top_threshold: AtomicU64,
+    /// Canonical home folder, for telling personal files apart.
+    home: Option<PathBuf>,
+    kind_bytes: [AtomicU64; FileKind::COUNT],
+    kind_files: [AtomicU64; FileKind::COUNT],
+    kind_top: [Mutex<BinaryHeap<Reverse<FileCandidate>>>; FileKind::COUNT],
+    kind_threshold: [AtomicU64; FileKind::COUNT],
     seen_inodes: Mutex<HashSet<(u64, u64)>>,
     locations: Mutex<Vec<LocationCandidate>>,
     current: Mutex<PathBuf>,
@@ -232,6 +239,25 @@ impl Shared<'_> {
         if heap.len() == limit {
             if let Some(Reverse(min)) = heap.peek() {
                 self.top_threshold.store(min.bytes, Ordering::Relaxed);
+            }
+        }
+    }
+
+    fn consider_kind_file(&self, kind: FileKind, candidate: FileCandidate) {
+        let i = kind.index();
+        if candidate.bytes < MIN_LISTED_BYTES
+            || candidate.bytes < self.kind_threshold[i].load(Ordering::Relaxed)
+        {
+            return;
+        }
+        let mut heap = self.kind_top[i].lock().unwrap_or_else(|e| e.into_inner());
+        heap.push(Reverse(candidate));
+        if heap.len() > LISTED_PER_KIND {
+            heap.pop();
+        }
+        if heap.len() == LISTED_PER_KIND {
+            if let Some(Reverse(min)) = heap.peek() {
+                self.kind_threshold[i].store(min.bytes, Ordering::Relaxed);
             }
         }
     }
@@ -311,6 +337,12 @@ impl Shared<'_> {
         let mut local_bytes = [0u64; Category::COUNT];
         let mut local_files = [0u64; Category::COUNT];
         local_bytes[dir_category.index()] += own_bytes;
+        let personal = self
+            .home
+            .as_deref()
+            .is_some_and(|home| filekinds::personal_dir(path, home));
+        let mut kind_bytes = [0u64; FileKind::COUNT];
+        let mut kind_files = [0u64; FileKind::COUNT];
 
         let mut agg = Agg {
             bytes: own_bytes,
@@ -365,12 +397,38 @@ impl Shared<'_> {
             local_files[cat.index()] += 1;
 
             if ft.is_file() {
+                let modified = meta.modified().ok().and_then(to_ms);
+                let kind = if personal {
+                    child.file_name().and_then(FileKind::of)
+                } else {
+                    None
+                };
+                if let Some(kind) = kind {
+                    kind_bytes[kind.index()] += bytes;
+                    kind_files[kind.index()] += 1;
+                    self.consider_kind_file(
+                        kind,
+                        FileCandidate {
+                            bytes,
+                            logical: meta.len(),
+                            modified,
+                            path: child.clone(),
+                        },
+                    );
+                }
                 self.consider_file(FileCandidate {
                     bytes,
                     logical: meta.len(),
-                    modified: meta.modified().ok().and_then(to_ms),
+                    modified,
                     path: child,
                 });
+            }
+        }
+        for kind in FileKind::ALL {
+            let i = kind.index();
+            if kind_files[i] > 0 {
+                self.kind_bytes[i].fetch_add(kind_bytes[i], Ordering::Relaxed);
+                self.kind_files[i].fetch_add(kind_files[i], Ordering::Relaxed);
             }
         }
 
@@ -554,6 +612,11 @@ pub fn scan_with_partial(
         index: Mutex::new(HashMap::new()),
         top_files: Mutex::new(BinaryHeap::new()),
         top_threshold: AtomicU64::new(0),
+        home: opts.home.canonicalize().ok(),
+        kind_bytes: std::array::from_fn(|_| AtomicU64::new(0)),
+        kind_files: std::array::from_fn(|_| AtomicU64::new(0)),
+        kind_top: std::array::from_fn(|_| Mutex::new(BinaryHeap::new())),
+        kind_threshold: std::array::from_fn(|_| AtomicU64::new(0)),
         seen_inodes: Mutex::new(HashSet::new()),
         locations: Mutex::new(Vec::new()),
         current: Mutex::new(root.clone()),
@@ -655,7 +718,7 @@ fn build_outcome(
         .collect();
     categories.sort_by_key(|c| Reverse(c.bytes));
 
-    let mut files: Vec<FileCandidate> = shared
+    let files: Vec<FileCandidate> = shared
         .top_files
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -667,23 +730,54 @@ fn build_outcome(
             modified: c.modified,
         })
         .collect();
-    // Path breaks ties so equal sizes always list in the same order.
-    files.sort_by(|a, b| b.bytes.cmp(&a.bytes).then_with(|| a.path.cmp(&b.path)));
-    let largest_files = files
+    let entries = |mut files: Vec<FileCandidate>| -> Vec<FileEntry> {
+        // Path breaks ties so equal sizes always list in the same order.
+        files.sort_by(|a, b| b.bytes.cmp(&a.bytes).then_with(|| a.path.cmp(&b.path)));
+        files
+            .into_iter()
+            .map(|c| FileEntry {
+                name: c
+                    .path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+                classification: classifier.classify_path(&c.path, false, &FsProbe),
+                path: c.path.display().to_string(),
+                bytes: c.bytes,
+                logical_bytes: c.logical,
+                modified_ms: c.modified,
+            })
+            .collect()
+    };
+    let largest_files = entries(files);
+    let mut file_kinds: Vec<FileKindGroup> = FileKind::ALL
         .into_iter()
-        .map(|c| FileEntry {
-            name: c
-                .path
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default(),
-            classification: classifier.classify_path(&c.path, false, &FsProbe),
-            path: c.path.display().to_string(),
-            bytes: c.bytes,
-            logical_bytes: c.logical,
-            modified_ms: c.modified,
+        .filter_map(|kind| {
+            let i = kind.index();
+            let file_count = shared.kind_files[i].load(Ordering::Relaxed);
+            (file_count > 0).then(|| {
+                // Copied, not taken: a partial summary is built mid-scan.
+                let top: Vec<FileCandidate> = shared.kind_top[i]
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .iter()
+                    .map(|Reverse(c)| FileCandidate {
+                        bytes: c.bytes,
+                        path: c.path.clone(),
+                        logical: c.logical,
+                        modified: c.modified,
+                    })
+                    .collect();
+                FileKindGroup {
+                    kind,
+                    bytes: shared.kind_bytes[i].load(Ordering::Relaxed),
+                    file_count,
+                    files: entries(top),
+                }
+            })
         })
         .collect();
+    file_kinds.sort_by_key(|g| Reverse(g.bytes));
 
     let index = shared
         .index
@@ -751,6 +845,7 @@ fn build_outcome(
         largest_files,
         detected_locations,
         heavy_directories,
+        file_kinds,
     };
     ScanOutcome { summary, index }
 }

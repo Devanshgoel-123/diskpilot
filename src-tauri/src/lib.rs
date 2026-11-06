@@ -16,6 +16,7 @@ pub mod docker;
 pub mod duplicates;
 pub mod error;
 pub mod explorer;
+pub mod filekinds;
 pub mod history;
 pub mod model;
 pub mod preview;
@@ -105,6 +106,7 @@ pub fn run() {
             commands::cancel_find_duplicates,
             commands::get_duplicates,
             commands::plan_duplicate_cleanup,
+            commands::plan_file_kind_cleanup,
             commands::analyze_dev_tools,
             commands::get_dev_tools_report,
             commands::assistant_status,
