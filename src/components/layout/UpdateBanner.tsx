@@ -49,11 +49,14 @@ export function UpdateBanner() {
           </p>
         </div>
       ) : (
-        <div className="mt-1.5 flex gap-1.5">
-          <Button size="sm" variant="secondary" onClick={() => setNotesOpen(true)}>
+        // Stacked, so both fit the narrow sidebar.
+        <div className="mt-1.5 flex flex-col gap-1">
+          <Button size="sm" className="w-full" onClick={() => void install()}>
+            Update and restart
+          </Button>
+          <Button size="sm" variant="ghost" className="w-full" onClick={() => setNotesOpen(true)}>
             What's new
           </Button>
-          {updateButton}
         </div>
       )}
       {error ? <p className="mt-1 text-2xs text-critical">{error}</p> : null}
