@@ -155,11 +155,9 @@ fn toolchain_items(ctx: &Ctx, modcache: &Path) -> Vec<ToolItem> {
         .collect()
 }
 
-fn report(ctx: &Ctx, env: &GoEnv) -> (ToolReport, Vec<Recommendation>) {
-    let mut sections = Vec::new();
+fn cache_items(ctx: &Ctx, env: &GoEnv) -> (Vec<ToolItem>, Vec<Recommendation>) {
     let mut recs = Vec::new();
-
-    let caches: Vec<ToolItem> = [
+    let items = [
         (
             "go.mod-cache",
             "Module cache",
@@ -181,41 +179,57 @@ fn report(ctx: &Ctx, env: &GoEnv) -> (ToolReport, Vec<Recommendation>) {
         Some(item)
     })
     .collect();
-    if !caches.is_empty() {
-        sections.push(ToolSection {
-            title: "Caches".into(),
-            description: "Go downloads or rebuilds everything here when it is needed again.".into(),
-            items: caches,
-        });
-    }
+    (items, recs)
+}
 
+fn program_items(ctx: &Ctx, gopath: &Path) -> Vec<ToolItem> {
+    let bin = gopath.join("bin");
+    if !exists(&bin) {
+        return Vec::new();
+    }
+    vec![ToolItem {
+        label: "GOPATH/bin".into(),
+        bytes: ctx.size(&bin),
+        path: Some(bin.display().to_string()),
+        detail: String::new(),
+        state: ItemState::Info,
+        last_used_ms: modified_ms(&bin),
+        recommendation_id: None,
+    }]
+}
+
+fn section(title: &str, description: &str, items: Vec<ToolItem>) -> Option<ToolSection> {
+    (!items.is_empty()).then(|| ToolSection {
+        title: title.into(),
+        description: description.into(),
+        items,
+    })
+}
+
+fn report(ctx: &Ctx, env: &GoEnv) -> (ToolReport, Vec<Recommendation>) {
+    let (caches, recs) = cache_items(ctx, env);
     let toolchains = toolchain_items(ctx, &env.modcache);
     let toolchain_count = toolchains.len();
-    if !toolchains.is_empty() {
-        sections.push(ToolSection {
-            title: "Downloaded toolchains".into(),
-            description: "Go versions fetched automatically into the module cache. They are read-only; `go clean -modcache` removes them with the cache.".into(),
-            items: toolchains,
-        });
-    }
-
-    let bin = env.gopath.join("bin");
-    if exists(&bin) {
-        sections.push(ToolSection {
-            title: "Installed programs".into(),
-            description: "Programs installed with `go install`. DiskPilot does not remove them."
-                .into(),
-            items: vec![ToolItem {
-                label: "GOPATH/bin".into(),
-                bytes: ctx.size(&bin),
-                path: Some(bin.display().to_string()),
-                detail: String::new(),
-                state: ItemState::Info,
-                last_used_ms: modified_ms(&bin),
-                recommendation_id: None,
-            }],
-        });
-    }
+    let sections: Vec<ToolSection> = [
+        section(
+            "Caches",
+            "Go downloads or rebuilds everything here when it is needed again.",
+            caches,
+        ),
+        section(
+            "Downloaded toolchains",
+            "Go versions fetched automatically into the module cache. They are read-only; `go clean -modcache` removes them with the cache.",
+            toolchains,
+        ),
+        section(
+            "Installed programs",
+            "Programs installed with `go install`. DiskPilot does not remove them.",
+            program_items(ctx, &env.gopath),
+        ),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
 
     let detected = !sections.is_empty() || env.version.is_some();
     let roots: Vec<(PathBuf, u64)> = sections
