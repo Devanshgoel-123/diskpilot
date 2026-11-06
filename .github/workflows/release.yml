@@ -98,6 +98,15 @@ jobs:
           echo "NOTARIZE=1" >> "$GITHUB_ENV"
       - name: Build universal app
         run: pnpm tauri build --target universal-apple-darwin
+      # Tauri notarizes the app inside; the disk image people download is
+      # notarized and stapled too, so opening it never shows a warning.
+      - name: Notarize the disk image
+        if: env.NOTARIZE == '1'
+        run: |
+          dmg=$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/DiskPilot_*_universal.dmg)
+          xcrun notarytool submit "$dmg" --key "$APPLE_API_KEY_PATH" \
+            --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" --wait --timeout 30m
+          xcrun stapler staple "$dmg"
       - name: Verify signature and architectures
         run: |
           app=src-tauri/target/universal-apple-darwin/release/bundle/macos/DiskPilot.app
@@ -106,6 +115,9 @@ jobs:
           if [ "${NOTARIZE:-}" = "1" ]; then
             xcrun stapler validate "$app"
             spctl --assess --type execute --verbose=2 "$app"
+            dmg=$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/DiskPilot_*_universal.dmg)
+            xcrun stapler validate "$dmg"
+            spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
           fi
       - name: Prepare assets
         run: |
