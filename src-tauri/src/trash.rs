@@ -223,6 +223,21 @@ impl Walk {
     }
 }
 
+/// Let the owner change a folder they own but made read-only, as Finder does
+/// when it empties the Trash. Tools such as Go and DotSlash write their caches
+/// read-only, and the user already chose to delete these items. Only the
+/// owner's own permission bits change; locked (immutable) items and items
+/// owned by someone else stay as they are and are reported.
+fn unlock_dir(path: &Path, meta: &Metadata) {
+    // SAFETY: geteuid has no preconditions and cannot fail.
+    let me = unsafe { libc::geteuid() };
+    let mode = meta.mode();
+    if meta.uid() == me && mode & 0o700 != 0o700 {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode((mode | 0o700) & 0o7777));
+    }
+}
+
 /// Remove `path` and everything under it. Returns true when nothing is left.
 fn remove_tree(
     path: &Path,
@@ -250,6 +265,7 @@ fn remove_tree(
             ));
             return false;
         }
+        unlock_dir(path, &meta);
         let mut all = true;
         match fs::read_dir(path) {
             Ok(rd) => {
@@ -659,14 +675,35 @@ mod tests {
         assert!(trash.join("Old Project").exists());
     }
 
+    fn set_locked(path: &Path, locked: bool) {
+        let c = std::ffi::CString::new(path.as_os_str().as_encoded_bytes()).unwrap();
+        // SAFETY: a valid NUL-terminated path; chflags only reads it.
+        let rc = unsafe { libc::chflags(c.as_ptr(), if locked { libc::UF_IMMUTABLE } else { 0 }) };
+        assert_eq!(rc, 0);
+    }
+
+    #[test]
+    fn removes_folders_the_owner_made_read_only() {
+        // Go and DotSlash caches are full of read-only folders.
+        let (_d, trash) = fixture();
+        let src = trash.join("Old Project/src");
+        fs::set_permissions(&src, fs::Permissions::from_mode(0o555)).unwrap();
+        fs::set_permissions(trash.join("Old Project"), fs::Permissions::from_mode(0o500)).unwrap();
+        let preview = inventory(&trash, "p".into(), 0).unwrap();
+        let r = run(&preview, &trash, &AtomicBool::new(false));
+        assert_eq!(r.record.status, ActionStatus::Succeeded);
+        assert!(!trash.join("Old Project").exists());
+    }
+
     #[test]
     fn reports_files_it_cannot_remove_and_continues() {
         let (_d, trash) = fixture();
-        let locked = trash.join("Old Project/src");
-        fs::set_permissions(&locked, fs::Permissions::from_mode(0o500)).unwrap();
+        let locked = trash.join("Old Project/src/a.rs");
+        // A file the user locked in Finder (immutable) is left alone.
+        set_locked(&locked, true);
         let preview = inventory(&trash, "p".into(), 0).unwrap();
         let r = run(&preview, &trash, &AtomicBool::new(false));
-        fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+        set_locked(&locked, false);
 
         assert_eq!(r.record.status, ActionStatus::Partial);
         assert!(r.permission_denied);
@@ -677,9 +714,9 @@ mod tests {
             .as_deref()
             .unwrap()
             .contains("could not be removed"));
-        // b.txt was removed; a.rs stayed behind in the protected folder.
+        // b.txt was removed; the locked a.rs stayed behind.
         assert!(!trash.join("Old Project/b.txt").exists());
-        assert!(locked.join("a.rs").exists());
+        assert!(locked.exists());
         assert!(project.bytes > 0 && project.bytes < 25_000);
         assert_eq!(
             r.record.bytes_freed,
