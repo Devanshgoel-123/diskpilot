@@ -19,6 +19,8 @@ import { EmptyTrashDialog } from "@/features/trash/EmptyTrashDialog";
 import { useTrash } from "@/features/trash/trashStore";
 import { inDesktopApp, onTrayNavigate } from "@/lib/api";
 import { useApp, type PageId } from "@/lib/store";
+import { WhatsNewAfterUpdate } from "@/components/layout/WhatsNewAfterUpdate";
+import { startUpdateChecks } from "@/lib/updates";
 
 const PAGES: Record<PageId, () => React.JSX.Element> = {
   assistant: AssistantPage,
@@ -58,6 +60,11 @@ export function App() {
     void init();
   }, [init]);
 
+  // Look for a newer DiskPilot shortly after launch, then daily.
+  useEffect(() => {
+    if (inDesktopApp()) startUpdateChecks();
+  }, []);
+
   // Shortcuts from the menu bar item.
   useEffect(() => {
     if (!inDesktopApp()) return;
@@ -95,6 +102,7 @@ export function App() {
         </main>
       </div>
       <EmptyTrashDialog />
+      <WhatsNewAfterUpdate />
     </TooltipProvider>
   );
 }

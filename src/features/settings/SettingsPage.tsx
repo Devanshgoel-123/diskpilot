@@ -12,6 +12,7 @@ import type { ThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 import { AssistantSettings } from "./AssistantSettings";
+import { UpdatesSettings } from "./UpdatesSettings";
 import { Section, Setting } from "./parts";
 
 const REPO_URL = "https://github.com/Devanshgoel-123/diskpilot";
@@ -177,6 +178,8 @@ export function SettingsPage() {
               control={null}
             />
           </Section>
+
+          <UpdatesSettings />
 
           <Section title="About">
             <Setting

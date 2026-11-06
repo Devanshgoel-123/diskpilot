@@ -33,6 +33,18 @@ These are set on GitHub, not in the code:
 
 The landing page links to `releases/latest/download/DiskPilot.dmg`, so it picks up the new release without changes.
 
+## Updates
+
+DiskPilot updates itself from 0.6 on. The app reads `latest.json` from the latest published release, downloads `DiskPilot.app.tar.gz`, verifies it against the public key in `tauri.conf.json` and installs it. Drafts are invisible to the app, so nobody is offered an update before the release is published.
+
+Create the key pair once, on your own Mac, and keep the private key safe: losing it means existing installs can no longer update.
+
+```sh
+pnpm tauri signer generate -w ~/.tauri/diskpilot-updater.key
+```
+
+Put the contents of `~/.tauri/diskpilot-updater.key.pub` in `plugins.updater.pubkey` in `src-tauri/tauri.conf.json`, and add two repository secrets: `TAURI_SIGNING_PRIVATE_KEY` (the contents of the private key file) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Without the secret, releases are built without an update archive; with it, the workflow refuses to build while the public key is still the placeholder.
+
 ## Signing and notarization
 
 Without an Apple Developer ID the app is signed ad hoc, and macOS asks people to confirm in **System Settings > Privacy & Security** the first time they open it. To remove that step, join the Apple Developer Program, then add these repository secrets. The Release workflow uses them automatically when they are present.

@@ -123,7 +123,7 @@ Scanner -> Classifier -> Recommendations -> Planner -> Safety gate -> Executor
 
 ## Privacy
 
-- Scanning, classification, recommendations, cleanup and Docker management run entirely on your Mac. There is no account, no telemetry and no cloud service.
+- Scanning, classification, recommendations, cleanup and Docker management run entirely on your Mac. There is no account, no telemetry and no cloud service. The only automatic network request is a daily check of DiskPilot's GitHub releases for a newer version, which sends nothing about you or your Mac and can be turned off in Settings.
 - DiskPilot works without Full Disk Access. macOS asks for permission the first time protected folders such as Desktop, Documents and Downloads are read, and folders such as Mail, Messages, iCloud Drive and the Photos library are skipped and listed as not measured.
 - If you grant Full Disk Access in System Settings, DiskPilot can also measure those folders. It reads sizes only, keeps the results on your Mac, and never shares what is inside them with the assistant: the assistant sees each of them as a single total.
 - The optional assistant is the only feature that uses the network. When you ask a question, the question and the storage data needed to answer it (folder and file names, paths with your home folder shown as `~`, sizes and categories; private folders such as Mail, Messages and Photos only as totals) are sent directly from your Mac to the API of the provider you chose (`api.anthropic.com`, `api.openai.com` or `openrouter.ai`). File contents are never read or sent. The API key never leaves the Rust process except in the request to that provider's own host; redirects are never followed.
@@ -146,7 +146,7 @@ brew install --cask diskpilot
 
 Update with `brew upgrade --cask diskpilot`.
 
-New versions are published as GitHub releases. DiskPilot does not update itself yet; download the new version and replace the app in Applications. Your scan history and settings are kept.
+New versions are published as GitHub releases. From 0.6, DiskPilot checks for them once a day and shows **DiskPilot X is available** in the sidebar, with the release notes and an **Update and restart** button; you can also check in **Settings > Updates**. Each update is signed, and the app verifies the signature before installing it. Your scan history and settings are kept. Versions before 0.6 do not update themselves: download the new version once and replace the app in Applications.
 
 ### Build from source
 
