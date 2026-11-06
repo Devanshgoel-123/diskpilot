@@ -17,8 +17,9 @@ Features are developed in a private repository, `Devanshgoel-123/diskpilot-dev`,
 2. Bump the version in `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, and refresh `src-tauri/Cargo.lock` (`cargo check` in `src-tauri`).
 3. Write the release notes in `docs/releases/vX.Y.Z.md`. Describe what changed for the person using the app, not the code.
 4. Commit as `release: X.Y.Z` and tag `vX.Y.Z`. Push to `private` first, then publish: `git push origin main vX.Y.Z`. This is the step that makes the release's code public.
-5. The Release workflow builds the universal app, checks its signature and architectures, records a signed build provenance attestation, and publishes `DiskPilot.dmg` with its SHA-256 checksum and the notes.
-6. Download the published DMG, check the checksum and run `gh attestation verify DiskPilot.dmg -R Devanshgoel-123/diskpilot`, then open it on a Mac to confirm it launches.
+5. The Release workflow builds the universal app, checks its signature and architectures, records a signed build provenance attestation, and creates a **draft** release with `DiskPilot.dmg`, its SHA-256 checksum and the notes. Only maintainers can see a draft.
+6. Download the draft's DMG (`gh release download vX.Y.Z -R Devanshgoel-123/diskpilot`), check the checksum and run `gh attestation verify DiskPilot.dmg -R Devanshgoel-123/diskpilot`, then open it on a Mac to confirm it launches without a warning.
+7. Publish the draft (`gh release edit vX.Y.Z --draft=false -R Devanshgoel-123/diskpilot`), then re-run the workflow's "Update the Homebrew tap" job so the cask points at the new version.
 
 A published DMG is never replaced: the workflow fails if the release already has one. To rebuild a release, delete it on GitHub first, on purpose.
 

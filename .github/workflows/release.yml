@@ -180,8 +180,10 @@ jobs:
             gh release upload "$TAG" DiskPilot.dmg DiskPilot.dmg.sha256
             gh release edit "$TAG" --notes-file notes.md
           else
+            # A draft: only the maintainer sees it until the downloaded DMG
+            # has been checked and the release is published by hand.
             gh release create "$TAG" DiskPilot.dmg DiskPilot.dmg.sha256 \
-              --verify-tag --title "DiskPilot ${TAG#v}" --notes-file notes.md
+              --verify-tag --draft --title "DiskPilot ${TAG#v}" --notes-file notes.md
           fi
 
   homebrew:
@@ -199,8 +201,19 @@ jobs:
         with:
           name: release
           path: out
-      - name: Bump the cask
+      # Releases start as drafts, which the public API cannot see. Until the
+      # release is published this job skips; re-run it after publishing.
+      - name: Check the release is published
+        id: published
         if: env.TAP_TOKEN != ''
+        run: |
+          if curl -fsS -o /dev/null "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG"; then
+            echo "yes=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::$TAG is still a draft; re-run this job after publishing it."
+          fi
+      - name: Bump the cask
+        if: env.TAP_TOKEN != '' && steps.published.outputs.yes == '1'
         run: |
           version="${TAG#v}"
           sha="$(cut -d' ' -f1 out/DiskPilot.dmg.sha256)"
