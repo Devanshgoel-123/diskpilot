@@ -7,6 +7,11 @@ fn main() {
     let mut args = std::env::args().skip(1);
     let root = args.next().map(Into::into).unwrap_or_else(|| home.clone());
     let runs: usize = args.next().and_then(|s| s.parse().ok()).unwrap_or(3);
+    // PORTABLE=1 lists folders with read_dir + lstat instead of getattrlistbulk.
+    diskpilot_lib::scanner::FORCE_PORTABLE.store(
+        std::env::var_os("PORTABLE").is_some(),
+        std::sync::atomic::Ordering::Relaxed,
+    );
     for i in 0..runs {
         let mut opts = ScanOptions::new("bench", &root, &home);
         if std::env::var_os("NO_DEFER").is_none() {
