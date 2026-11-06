@@ -15,6 +15,7 @@ import {
 import { formatCount, formatRelative, tildify } from "@/lib/format";
 import { useApp, type PageId } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { UpdateBanner } from "@/components/layout/UpdateBanner";
 
 interface NavItem {
   id: PageId;
@@ -156,6 +157,7 @@ export function Sidebar() {
         <Section title="Clean up" items={cleanUp} />
       </div>
       <div className="space-y-1 border-t border-border px-2.5 pt-2 pb-2.5">
+        <UpdateBanner />
         <ScanStatus />
         <NavButton item={{ id: "settings", label: "Settings", icon: Settings }} />
       </div>
