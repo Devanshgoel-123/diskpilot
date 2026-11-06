@@ -112,6 +112,12 @@ const TOOL_DEFS: { id: string; name: string; description: string; prefixes: stri
     prefixes: ["rust.", "cargo.", "rustup."],
   },
   {
+    id: "go",
+    name: "Go",
+    description: "Module cache, build cache and GOPATH.",
+    prefixes: ["go."],
+  },
+  {
     id: "python",
     name: "Python",
     description: "Virtual environments and bytecode caches.",

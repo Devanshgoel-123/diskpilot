@@ -325,6 +325,31 @@ pub static DIR_RULES: &[DirRule] = &[
         "Maven repository",
         "Downloaded Java dependencies. Maven re-downloads them on the next build."
     ),
+    leaf!(
+        "go.mod-cache",
+        HomeRelative(&["go", "pkg", "mod"]),
+        Cache,
+        High,
+        "Go module cache",
+        "Source code of Go modules downloaded for builds, and Go toolchains downloaded when a project's go.mod asks for another Go version. Go makes these files read-only so builds cannot change them. `go clean -modcache` removes them; Go downloads modules again on the next build."
+    ),
+    leaf!(
+        "go.build-cache",
+        HomeRelative(&["Library", "Caches", "go-build"]),
+        Cache,
+        High,
+        "Go build cache",
+        "Compiled packages and cached test results kept by the go command (GOCACHE). Go rebuilds them on the next build; `go clean -cache` removes them."
+    ),
+    container!(
+        "go.home",
+        HomeRelative(&["go"]),
+        DeveloperTools,
+        Medium,
+        false,
+        "Go workspace (GOPATH)",
+        "Go's default GOPATH: programs installed with `go install` in bin, the module cache in pkg/mod and, for older GOPATH-mode projects, source code in src."
+    ),
     container!(
         "cargo.home",
         HomeRelative(&[".cargo"]),
