@@ -205,12 +205,44 @@ fn cache_items(ctx: &Ctx, env: &GoEnv) -> (Vec<ToolItem>, Vec<Recommendation>) {
     .into_iter()
     .filter_map(|(rule, label, var, path)| {
         let path = path.filter(|p| exists(p))?;
-        let (item, rec) = cache_item(ctx, rule, label, var, path)?;
+        let (mut item, mut rec) = cache_item(ctx, rule, label, var, path)?;
+        // GOCACHE can point anywhere (`go env -w GOCACHE=~/.cache`), and Go
+        // then writes into that folder alongside whatever else is there.
+        // Offer it only when it is Go's own cache folder.
+        if rule == "go.build-cache" && !is_go_build_cache(path) {
+            rec = None;
+            item.recommendation_id = None;
+            item.detail = "Not offered for removal: this folder holds more than Go's build cache. Clear it with `go clean -cache`.".into();
+        }
         recs.extend(rec);
         Some(item)
     })
     .collect();
     (items, recs)
+}
+
+/// Whether `dir` holds Go's build cache and nothing else. Go fills it with
+/// 256 folders named 00 to ff, a README, `trim.txt` and `testexpire.txt`.
+/// Go writes its README into whatever folder GOCACHE names, so the README
+/// alone proves nothing: any other entry means the folder is shared.
+fn is_go_build_cache(dir: &Path) -> bool {
+    const README: &str = "This directory holds cached build artifacts from the Go build system.";
+    let readme = std::fs::read(dir.join("README")).unwrap_or_default();
+    if !readme.starts_with(README.as_bytes()) {
+        return false;
+    }
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    entries.flatten().all(|e| {
+        let name = e.file_name();
+        let name = name.to_string_lossy();
+        let is_dir = e.file_type().is_ok_and(|t| t.is_dir());
+        match name.as_ref() {
+            "README" | "trim.txt" | "testexpire.txt" | ".DS_Store" => !is_dir,
+            n => is_dir && n.len() == 2 && n.bytes().all(|b| b.is_ascii_hexdigit()),
+        }
+    })
 }
 
 fn program_items(ctx: &Ctx, gopath: &Path) -> Vec<ToolItem> {
@@ -394,7 +426,7 @@ echo '{{"GOVERSION": "{version}", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "G
             .join("golang.org/toolchain@v0.0.1-go1.26.0.darwin-arm64");
         write(&toolchain.join("bin/go"), 10);
         write(&env.modcache.join("golang.org/x/text@v0.1.0/doc.go"), 10);
-        write(&env.cache.clone().unwrap().join("00/a-d"), 10);
+        go_build_cache(env.cache.as_ref().unwrap());
         write(&env.gopath.join("bin/gopls"), 10);
         let mut index = DirIndex::new();
         sized(&mut index, &env.modcache, 3_000_000_000);
@@ -467,6 +499,52 @@ echo '{{"GOVERSION": "{version}", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "G
             modules[0].alternative.as_deref(),
             Some("go clean -modcache")
         );
+    }
+
+    /// What Go writes into GOCACHE: its README, trim.txt and hex folders.
+    fn go_build_cache(dir: &Path) {
+        write(&dir.join("00/a-d"), 10);
+        std::fs::write(
+            dir.join("README"),
+            "This directory holds cached build artifacts from the Go build system.\nRun \"go clean -cache\" if the directory is getting too large.\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("trim.txt"), "1762450000").unwrap();
+    }
+
+    #[test]
+    fn a_gocache_shared_with_other_tools_is_listed_but_never_recommended() {
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        // `go env -w GOCACHE=~/.cache`: Go writes its files next to pip's.
+        let shared = home.join(".cache");
+        let env = GoEnv {
+            version: Some("go1.27.3".into()),
+            cache: Some(shared.clone()),
+            ..GoEnv::defaults(&home)
+        };
+        go_build_cache(&shared);
+        write(&shared.join("pip/http/x"), 10);
+        let mut index = DirIndex::new();
+        sized(&mut index, &shared, 900_000_000);
+        let mut c = ctx(&home);
+        c.index = Some(&index);
+
+        let (shared_report, recs) = report(&c, &env);
+        let cache = shared_report
+            .sections
+            .iter()
+            .flat_map(|s| s.items.iter())
+            .find(|i| i.label == "Build cache")
+            .unwrap();
+        assert_eq!(cache.recommendation_id, None);
+        assert!(cache.detail.starts_with("Not offered for removal"));
+        assert!(recs.iter().all(|r| r.path != shared.display().to_string()));
+
+        // The same folder holding only Go's files is offered.
+        std::fs::remove_dir_all(shared.join("pip")).unwrap();
+        let (_, recs) = report(&c, &env);
+        assert!(recs.iter().any(|r| r.path == shared.display().to_string()));
     }
 
     #[test]
