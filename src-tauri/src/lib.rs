@@ -18,6 +18,7 @@ pub mod error;
 pub mod explorer;
 pub mod history;
 pub mod model;
+pub mod preview;
 pub mod privacy;
 pub mod recommend;
 pub mod safety;
@@ -83,6 +84,7 @@ pub fn run() {
             commands::list_directory,
             commands::get_item_details,
             commands::reveal_in_finder,
+            commands::file_thumbnail,
             commands::get_scan_history,
             commands::get_app_badges,
             commands::get_app_storage,

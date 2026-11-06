@@ -371,6 +371,31 @@ pub fn reveal_in_finder(state: State<'_, AppState>, path: String) -> AppResult<(
     }
 }
 
+/// A Quick Look thumbnail (PNG bytes) of a file inside the scanned folder, so
+/// people can see a photo, video or document before deciding to remove it.
+/// Read-only; folders and symbolic links are refused.
+#[tauri::command]
+pub async fn file_thumbnail(
+    state: State<'_, AppState>,
+    path: String,
+    size: f64,
+) -> AppResult<tauri::ipc::Response> {
+    let outcome = last_scan(&state)?;
+    blocking(move || {
+        let path = path_in_scan(&path, &outcome)?;
+        let meta = path
+            .symlink_metadata()
+            .map_err(|_| SafetyError::Missing(path.display().to_string()))?;
+        if !meta.is_file() {
+            return Err(AppError::Other("Only files can be previewed".into()));
+        }
+        crate::preview::thumbnail_png(&path, size)
+            .map(tauri::ipc::Response::new)
+            .ok_or_else(|| AppError::Other("macOS could not make a preview of this file".into()))
+    })
+    .await
+}
+
 #[tauri::command]
 pub fn get_scan_history(
     state: State<'_, AppState>,
