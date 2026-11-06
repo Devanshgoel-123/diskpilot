@@ -838,15 +838,6 @@
             </p>
           </div>
 
-          <aside class="warn">
-            <svg aria-hidden="true"><use href="#i-shield" /></svg>
-            <p>
-              <b>DiskPilot isn't notarized by Apple yet.</b> The first time you open it, macOS says
-              Apple cannot check it for malicious software. Step 3 below is how you allow it, once.
-              After that it opens like any other app.
-            </p>
-          </aside>
-
           <ol class="steps">
             <li>
               <h3>Download</h3>
@@ -865,11 +856,10 @@
               <p>Open the disk image and drag DiskPilot into the Applications folder.</p>
             </li>
             <li>
-              <h3>Allow it once</h3>
+              <h3>Open it</h3>
               <p>
-                Open DiskPilot and choose OK when macOS warns you. Then open System Settings,
-                Privacy &amp; Security, scroll down and click Open Anyway next to DiskPilot. On
-                macOS 14 and earlier you can instead Control-click the app and choose Open.
+                DiskPilot is signed and notarized by Apple, so it opens like any other app, with
+                no security warning to get past.
               </p>
             </li>
             <li>
@@ -967,15 +957,14 @@ gh attestation verify DiskPilot.dmg -R Devanshgoel-123/diskpilot</code></pre>
             </details>
             <details>
               <summary>
-                Why does macOS warn me when I first open it?<svg aria-hidden="true">
+                Is DiskPilot checked by Apple?<svg aria-hidden="true">
                   <use href="#i-plus" />
                 </svg>
               </summary>
               <p>
-                Apple shows that warning for apps that aren't notarized through a paid Apple
-                developer account. DiskPilot is open source, so you can read every line, check how
-                each release was built, or build it yourself. Signed and notarized releases are
-                planned.
+                Yes. From version 0.5.0, every release is signed with a Developer ID and notarized
+                by Apple, so macOS opens it without a warning. DiskPilot is also open source, so you
+                can read every line, check how each release was built, or build it yourself.
               </p>
             </details>
             <details>

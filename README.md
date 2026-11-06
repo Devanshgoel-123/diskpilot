@@ -4,7 +4,7 @@
 
 DiskPilot is a native desktop application built with Tauri and Rust. It scans your storage locally, classifies every folder with an explanation, identifies developer data that can be regenerated, and performs cleanup only through a previewed, confirmed and audited workflow. It is built for developers whose Macs accumulate Docker images, `node_modules`, Xcode build data, AI coding tool data and package manager caches, and who want to know what is safe to remove before anything is removed.
 
-> **Project status:** early development (version 0.4). Release builds are published on GitHub but are not yet notarized by Apple; see [Installation](#installation).
+> **Project status:** early development (version 0.5). Release builds are published on GitHub, signed with a Developer ID and notarized by Apple; see [Installation](#installation).
 
 <!-- Screenshots will be added here. Contributors: please do not submit screenshots containing personal file names. -->
 
@@ -134,7 +134,7 @@ Scanner -> Classifier -> Recommendations -> Planner -> Safety gate -> Executor
 
 1. Download [DiskPilot.dmg](https://github.com/Devanshgoel-123/diskpilot/releases/latest/download/DiskPilot.dmg) from the [latest release](https://github.com/Devanshgoel-123/diskpilot/releases/latest). It is a universal build for Apple silicon and Intel Macs running macOS 11 or later.
 2. Open the disk image and drag DiskPilot into Applications.
-3. Open DiskPilot. Releases are not yet notarized by Apple, so the first time macOS says Apple cannot check it for malicious software. Choose **OK** (or **Done**), open **System Settings > Privacy & Security**, and select **Open Anyway** next to DiskPilot. On macOS 14 and earlier you can instead Control-click the app and choose **Open**.
+3. Open DiskPilot. Releases from 0.5.0 on are signed with a Developer ID and notarized by Apple, so macOS opens them without a warning. Versions before 0.5.0 were not: for those, choose **OK** when macOS warns you, then select **Open Anyway** in **System Settings > Privacy & Security**.
 
 ### Homebrew
 
@@ -144,7 +144,7 @@ brew trust devanshgoel-123/tap
 brew install --cask diskpilot
 ```
 
-Update with `brew upgrade --cask diskpilot`. The first open shows the same macOS warning as the download above, and is allowed the same way.
+Update with `brew upgrade --cask diskpilot`.
 
 New versions are published as GitHub releases. DiskPilot does not update itself yet; download the new version and replace the app in Applications. Your scan history and settings are kept.
 
@@ -233,7 +233,7 @@ The interface communicates with the Rust engine only through typed commands. Slo
 | 5     | Optional assistant with read-only access to storage data                                                                                                     | Complete |
 | 6     | Saved scans, version and leftover detection, Empty Trash, duplicates, local AI models, transcript credential check, menu bar item, Full Disk Access guidance | Complete |
 
-Planned next: notarized release builds, a read-only MCP server so coding agents such as Claude Code and Cursor can ask DiskPilot where space went, incremental rescans, and additional analyzers (Homebrew, JetBrains IDEs, Android Studio).
+Planned next: a read-only MCP server so coding agents such as Claude Code and Cursor can ask DiskPilot where space went, incremental rescans, and additional analyzers (Homebrew, JetBrains IDEs, Android Studio).
 
 Not planned: automatic or scheduled cleanup (every removal is approved by you), managing Docker containers beyond reclaiming space, and general-purpose "junk cleaning".
 
