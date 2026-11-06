@@ -39,3 +39,11 @@ describe("parseMarkdown", () => {
     expect(blocks[4]).toEqual({ kind: "codeblock", text: "npm cache clean --force" });
   });
 });
+
+describe("links", () => {
+  it("show as their text, never as links", () => {
+    expect(parseInline("by [@chinmayajha](https://github.com/chinmayajha), thanks")).toEqual([
+      { kind: "text", text: "by @chinmayajha, thanks" },
+    ]);
+  });
+});

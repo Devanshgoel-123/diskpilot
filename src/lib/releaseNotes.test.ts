@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { inAppNotes, releaseNotes } from "./releaseNotes";
+import { inAppNotes, isNewerVersion, releaseNotes } from "./releaseNotes";
 
 describe("release notes", () => {
   it("leaves out download instructions", () => {
@@ -52,5 +52,15 @@ describe("release notes", () => {
 
   it("has nothing for an unknown version", () => {
     expect(releaseNotes("9.9.9")).toBeNull();
+  });
+});
+
+describe("isNewerVersion", () => {
+  it("compares versions as numbers", () => {
+    expect(isNewerVersion("0.6.1", "0.6.0")).toBe(true);
+    expect(isNewerVersion("0.10.0", "0.9.9")).toBe(true);
+    expect(isNewerVersion("0.6.0", "0.6.1")).toBe(false);
+    expect(isNewerVersion("0.6.0", "0.6.0")).toBe(false);
+    expect(isNewerVersion("1.0.0", "0.99.0")).toBe(true);
   });
 });

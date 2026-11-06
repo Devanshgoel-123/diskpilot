@@ -2,14 +2,15 @@ import { useEffect, useState } from "react";
 
 import { WhatsNewDialog } from "@/components/shared/WhatsNewDialog";
 import { Button } from "@/components/ui/button";
-import { releaseNotes } from "@/lib/releaseNotes";
+import { isNewerVersion, releaseNotes } from "@/lib/releaseNotes";
 import { useApp } from "@/lib/store";
 
 const SEEN_KEY = "diskpilot.lastSeenVersion";
 
 /**
  * After an update, shows that version's release notes once. A first install
- * shows nothing: everything is new then.
+ * shows nothing (everything is new then), and neither does going back to an
+ * older version.
  */
 export function WhatsNewAfterUpdate() {
   const version = useApp((s) => s.env?.appVersion);
@@ -24,7 +25,7 @@ export function WhatsNewAfterUpdate() {
     } catch {
       return;
     }
-    if (seen && seen !== version && releaseNotes(version)) {
+    if (seen && isNewerVersion(version, seen) && releaseNotes(version)) {
       const t = setTimeout(() => setShown(version), 600);
       return () => clearTimeout(t);
     }

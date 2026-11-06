@@ -12,7 +12,9 @@ export type Block =
   | { kind: "list"; ordered: boolean; items: Inline[][] }
   | { kind: "codeblock"; text: string };
 
-export function parseInline(text: string): Inline[] {
+export function parseInline(raw: string): Inline[] {
+  // Links show as their text; this renderer never makes clickable links.
+  const text = raw.replace(/\[([^\]]+)\]\([^)\s]+\)/g, "$1");
   const out: Inline[] = [];
   const re = /(\*\*[^*]+\*\*|`[^`]+`)/g;
   let last = 0;
