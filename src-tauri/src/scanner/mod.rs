@@ -337,10 +337,22 @@ impl Shared<'_> {
         let mut local_bytes = [0u64; Category::COUNT];
         let mut local_files = [0u64; Category::COUNT];
         local_bytes[dir_category.index()] += own_bytes;
-        let personal = self
-            .home
-            .as_deref()
-            .is_some_and(|home| filekinds::personal_dir(path, home));
+        // Build output, caches and tool data in a project are made by tools,
+        // not put there by the person.
+        let tool_made = matches!(
+            dir_category,
+            Category::Cache
+                | Category::BuildArtifacts
+                | Category::DeveloperTools
+                | Category::DockerStorage
+                | Category::ApplicationData
+                | Category::SystemFiles
+        );
+        let personal = !tool_made
+            && self
+                .home
+                .as_deref()
+                .is_some_and(|home| filekinds::personal_dir(path, home));
         let mut kind_bytes = [0u64; FileKind::COUNT];
         let mut kind_files = [0u64; FileKind::COUNT];
 

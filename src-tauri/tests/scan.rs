@@ -380,6 +380,8 @@ fn personal_files_are_grouped_by_type() {
     write(&f.home.join("Library/Caches/app/v.mp4"), 5 * mb);
     write(&f.home.join(".hidden/v.mp4"), 5 * mb);
     write(&f.home.join("code/web/node_modules/x/v.mp4"), 5 * mb);
+    write(&f.home.join("code/web/.next/static/v.mp4"), 5 * mb);
+    write(&f.home.join("code/web/dist/v.mp4"), 5 * mb);
     let o = run(&f);
 
     let videos = o
