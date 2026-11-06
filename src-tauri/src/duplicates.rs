@@ -60,8 +60,14 @@ const BUNDLE_EXTENSIONS: &[&str] = &[
     "lrlibrary",
     "lrdata",
     "aplibrary",
+    "photolibrary",
+    "cocatalog",
+    "cosessiondb",
     "cardboard",
     "screenflow",
+    "utm",
+    "pvm",
+    "vmwarevm",
 ];
 /// Dependency and package-manager folders: their files are managed by a tool,
 /// and removing one copy breaks the package it belongs to.
@@ -77,13 +83,19 @@ const SKIPPED_DIRS: &[&str] = &[
     "vendor",
     "__pycache__",
 ];
-/// Package stores outside hidden folders, relative to the home folder.
+/// Package stores, and media that an app manages in its own library,
+/// relative to the home folder. Removing a file from a Music, TV or Photo
+/// Booth library leaves a broken entry in that app.
 pub(crate) const SKIPPED_HOME_DIRS: &[&str] = &[
     "Library",
     "go/pkg",
     "Applications",
     "miniconda3",
     "anaconda3",
+    "Music/Music",
+    "Music/iTunes",
+    "Movies/TV",
+    "Pictures/Photo Booth Library",
 ];
 
 #[derive(Debug, Clone, Serialize)]

@@ -140,8 +140,19 @@ pub fn removal_recommendations(
             continue;
         };
         let path = Path::new(p);
+        // Same size and, within a little rounding, the same modification time:
+        // a file replaced by another of the same size is not the one chosen.
+        let same_time = |m: &std::fs::Metadata| match entry.modified_ms {
+            Some(listed) => m
+                .modified()
+                .ok()
+                .and_then(crate::scanner::to_ms)
+                .is_some_and(|now| (now - listed).abs() <= 2_000),
+            None => true,
+        };
         match path.symlink_metadata() {
-            Ok(m) if m.file_type().is_file() && m.len() == entry.logical_bytes => {}
+            Ok(m) if m.file_type().is_file() && m.len() == entry.logical_bytes && same_time(&m) => {
+            }
             Ok(_) => {
                 rejected.push(reject("It changed since the scan. Scan again."));
                 continue;
@@ -259,6 +270,35 @@ mod tests {
     }
 
     #[test]
+    fn a_same_size_file_written_since_the_scan_is_refused() {
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        let a = home.join("a.mp4");
+        std::fs::write(&a, vec![1u8; 10]).unwrap();
+        let mut listed = entry(&a, 10);
+        let now = crate::scanner::to_ms(std::time::SystemTime::now()).unwrap();
+        let groups = |e: FileEntry| {
+            vec![FileKindGroup {
+                kind: FileKind::Videos,
+                bytes: 10,
+                file_count: 1,
+                files: vec![e],
+            }]
+        };
+        let classify = |_: &Path| crate::test_support::recommendation().classification;
+        let sel = vec![a.display().to_string()];
+
+        listed.modified_ms = Some(now);
+        let (recs, _) = removal_recommendations(&groups(listed.clone()), &sel, &classify);
+        assert_eq!(recs.len(), 1, "unchanged file");
+
+        listed.modified_ms = Some(now - 3_600_000); // listed an hour ago
+        let (recs, rejected) = removal_recommendations(&groups(listed), &sel, &classify);
+        assert!(recs.is_empty());
+        assert_eq!(rejected[0].reason, "It changed since the scan. Scan again.");
+    }
+
+    #[test]
     fn nothing_selected_plans_nothing() {
         let classify = |_: &Path| crate::test_support::recommendation().classification;
         let (recs, rejected) = removal_recommendations(&[], &[], &classify);
@@ -292,6 +332,8 @@ mod tests {
             "/Users/a",
             "/Users/a/Downloads",
             "/Users/a/Movies/Trips 2025",
+            "/Users/a/Music/Recordings",
+            "/Users/a/Movies/TV Shows I made",
         ];
         for d in yes {
             assert!(personal_dir(Path::new(d), home), "{d}");
@@ -305,6 +347,14 @@ mod tests {
             "/Users/a/code/app/node_modules/x",
             "/Users/a/Applications/Tool.app/Contents",
             "/Users/a/go/pkg/mod",
+            "/Users/a/Music/Music/Media.localized/Music/Artist",
+            "/Users/a/Music/iTunes/iTunes Media/Music",
+            "/Users/a/Movies/TV/Media.localized/Movies",
+            "/Users/a/Pictures/Photo Booth Library/Pictures",
+            "/Users/a/Pictures/Old.photolibrary/Masters",
+            "/Users/a/VMs/Windows.utm/Data",
+            "/Users/a/Parallels/Win.pvm",
+            "/Users/a/Pictures/Catalog.cocatalog/Originals",
         ];
         for d in no {
             assert!(!personal_dir(Path::new(d), home), "{d}");
