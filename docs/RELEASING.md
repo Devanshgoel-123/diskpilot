@@ -45,4 +45,4 @@ Without an Apple Developer ID the app is signed ad hoc, and macOS asks people to
 | `APPLE_API_KEY`              | The key ID of that API key                                                                                        |
 | `APPLE_API_KEY_P8`           | The contents of the downloaded `AuthKey_<id>.p8` file                                                             |
 
-With the API key secrets present the build is notarized and stapled, and the workflow verifies that Gatekeeper accepts it. Never commit any of these values.
+With these secrets present the build is signed, notarized and stapled, and the workflow verifies that Gatekeeper accepts it. Set all six or none: if only some are set, or one is empty, the release fails instead of quietly shipping an ad hoc build. Never commit any of these values.
