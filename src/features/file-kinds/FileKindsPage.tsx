@@ -56,8 +56,16 @@ function topFolder(path: string, home: string | undefined): string {
   return i > 0 ? rest.slice(0, i) : "";
 }
 
-/** Personal files grouped by type, to review, preview and move to the Trash. */
+/**
+ * Personal files grouped by type, to review, preview and move to the Trash.
+ * Keyed by scan, so a new scan starts with nothing selected.
+ */
 export function FileKindsPage() {
+  const scan = useApp((s) => s.summary?.startedAtMs ?? 0);
+  return <FileKindsView key={scan} />;
+}
+
+function FileKindsView() {
   const { summary, env, scanning, startScan } = useApp();
   const home = env?.homeDir;
   const groups = useMemo(() => summary?.fileKinds ?? [], [summary]);
@@ -94,11 +102,26 @@ export function FileKindsPage() {
     );
   }, [files, query, age, folder, home, now]);
 
-  const chosen = useMemo(() => [...selected].filter((p) => !gone.has(p)), [selected, gone]);
   const sizes = useMemo(
     () => new Map(groups.flatMap((g) => g.files.map((f) => [f.path, f.bytes] as const))),
     [groups],
   );
+  // Only files the current scan still lists and that were not removed.
+  const chosen = useMemo(
+    () => [...selected].filter((p) => sizes.has(p) && !gone.has(p)),
+    [selected, sizes, gone],
+  );
+  // Totals per type, less what was moved to the Trash from this page.
+  const removed = useMemo(() => {
+    const out = new Map<FileKind, { bytes: number; count: number }>();
+    for (const g of groups) {
+      const r = g.files.filter((f) => gone.has(f.path));
+      out.set(g.kind, { bytes: r.reduce((a, f) => a + f.bytes, 0), count: r.length });
+    }
+    return out;
+  }, [groups, gone]);
+  const shownPaths = useMemo(() => new Set(visible.map((f) => f.path)), [visible]);
+  const hiddenChosen = chosen.filter((p) => !shownPaths.has(p)).length;
   const chosenBytes = chosen.reduce((a, p) => a + (sizes.get(p) ?? 0), 0);
   const allVisibleChosen = visible.length > 0 && visible.every((f) => selected.has(f.path));
 
@@ -194,10 +217,12 @@ export function FileKindsPage() {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-medium">{meta.label}</span>
                   <span className="tabular block text-2xs text-muted-foreground">
-                    {formatCount(g.fileCount)} files
+                    {formatCount(g.fileCount - (removed.get(g.kind)?.count ?? 0))} files
                   </span>
                 </span>
-                <span className="tabular text-xs">{formatBytes(g.bytes)}</span>
+                <span className="tabular text-xs">
+                  {formatBytes(g.bytes - (removed.get(g.kind)?.bytes ?? 0))}
+                </span>
               </button>
             );
           })}
@@ -323,7 +348,11 @@ export function FileKindsPage() {
           <div className="flex shrink-0 items-center gap-3 border-t border-border bg-panel px-4 py-2.5">
             <p className="text-xs text-muted-foreground">
               {chosen.length
-                ? `${formatCount(chosen.length)} selected · about ${formatBytes(chosenBytes)} freed once the Trash is emptied`
+                ? `${formatCount(chosen.length)} selected${
+                    hiddenChosen
+                      ? ` (${formatCount(hiddenChosen)} not shown with this type and filters)`
+                      : ""
+                  } · about ${formatBytes(chosenBytes)} freed once the Trash is emptied`
                 : "Select files you no longer need. Press Space on a row to preview it."}
             </p>
             <Button
