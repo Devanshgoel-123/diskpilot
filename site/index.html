@@ -224,6 +224,102 @@
         </div>
       </section>
 
+      <!-- 1b. New in 0.6 -->
+      <section class="section new" id="new" aria-labelledby="new-title">
+        <div class="wrap">
+          <div class="head head-split">
+            <h2 id="new-title">New in DiskPilot 0.6</h2>
+            <p>
+              Your own files sorted by type, a running count of the space you have cleared, Docker
+              cleanup that includes volumes, and an app that keeps itself up to date.
+            </p>
+          </div>
+          <div class="new-grid">
+            <article class="new-item reveal">
+              <div class="window">
+                <img
+                  data-shot="new-bytype"
+                  src="/shots/new-bytype-dark.jpg"
+                  width="1280"
+                  height="800"
+                  loading="lazy"
+                  alt="The By type tab in Storage: Videos selected, 18.4 GB in 214 files, with three large videos ticked for review."
+                />
+              </div>
+              <h3>Your files, by type</h3>
+              <p>
+                Videos, images, archives, installers and documents, each in one list with filters
+                for folder and age. Press Space to preview a file, like Quick Look. These are your
+                files, so DiskPilot never calls them safe to delete: you pick.
+              </p>
+            </article>
+            <article class="new-item reveal">
+              <div class="window">
+                <img
+                  data-shot="new-cleared"
+                  src="/shots/new-cleared-dark.jpg"
+                  width="1280"
+                  height="800"
+                  loading="lazy"
+                  alt="History showing 47.7 GB cleared in 9 cleanups and a 6-week streak."
+                />
+              </div>
+              <h3>See what you have cleared</h3>
+              <p>
+                History adds up the space DiskPilot has freed and counts your weekly streak.
+                Emptying the Trash is not counted twice, and the numbers never leave your Mac.
+              </p>
+            </article>
+            <article class="new-item reveal">
+              <div class="window">
+                <img
+                  data-shot="new-docker"
+                  src="/shots/new-docker-dark.jpg"
+                  width="1280"
+                  height="800"
+                  loading="lazy"
+                  alt="Removing a Docker container: the dialog lists docker stop, docker rm and docker volume rm, with the container's volumes as checkboxes."
+                />
+              </div>
+              <h3>Containers and their volumes</h3>
+              <p>
+                Stop a container with one click, or remove it together with the volumes only it
+                uses. You tick each volume, type the container's name, and see every command before
+                it runs.
+              </p>
+            </article>
+            <article class="new-item reveal">
+              <div class="window">
+                <img
+                  data-shot="new-updates"
+                  src="/shots/new-updates-dark.jpg"
+                  width="1280"
+                  height="800"
+                  loading="lazy"
+                  alt="The sidebar notice: DiskPilot 0.6.1 is available, with Update and restart and What's new buttons."
+                />
+              </div>
+              <h3>Updates itself</h3>
+              <p>
+                DiskPilot checks for a new version once a day and asks before installing it. Every
+                update is signed, and checked against that signature before anything is installed.
+              </p>
+            </article>
+          </div>
+          <p class="note">
+            Screens from the real app with sample data. Full notes in the
+            <a
+              href="https://github.com/Devanshgoel-123/diskpilot/releases/latest"
+              data-track="github"
+              data-where="new"
+              target="_blank"
+              rel="noopener"
+              >release on GitHub</a
+            >.
+          </p>
+        </div>
+      </section>
+
       <!-- 2. The problem -->
       <section class="section problem" id="problem" aria-labelledby="problem-title">
         <div class="wrap problem-grid">
@@ -880,8 +976,8 @@
             <div>
               <h3>Or install with Homebrew</h3>
               <p>
-                Homebrew asks you to trust a new tap once. Update later with
-                <code>brew upgrade --cask diskpilot</code>.
+                Homebrew asks you to trust a new tap once. DiskPilot updates itself after that, or
+                use <code>brew upgrade --cask diskpilot</code>.
               </p>
             </div>
             <pre><code>brew tap devanshgoel-123/tap
@@ -959,6 +1055,18 @@ gh attestation verify DiskPilot.dmg -R Devanshgoel-123/diskpilot</code></pre>
                 newer version exists, sending nothing about you; you can turn that off in Settings.
                 The optional assistant uses the network only when you ask it something, and it never
                 sends file contents.
+              </p>
+            </details>
+            <details>
+              <summary>
+                How do updates work?<svg aria-hidden="true"><use href="#i-plus" /></svg>
+              </summary>
+              <p>
+                From version 0.6, DiskPilot checks GitHub for a new version once a day and shows a
+                notice when one is ready. Nothing installs until you click Update and restart. Each
+                update is signed, and DiskPilot checks the signature before installing it. Turn the
+                daily check off, or check now, in Settings. Coming from 0.5.1 or earlier, download
+                the new version once by hand.
               </p>
             </details>
             <details>

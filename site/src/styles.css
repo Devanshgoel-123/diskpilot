@@ -578,6 +578,44 @@ h1 {
   filter: blur(40px);
 }
 
+/* ---------- New in 0.6 ---------- */
+
+.new-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(40px, 5vw, 64px) clamp(24px, 3vw, 40px);
+}
+
+.new-item .window img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.new-item h3 {
+  margin-top: 22px;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.new-item p {
+  margin-top: 8px;
+  max-width: 52ch;
+  color: var(--ink-2);
+  line-height: 1.55;
+}
+
+.new .note {
+  margin-top: clamp(32px, 4vw, 48px);
+}
+
+@media (max-width: 760px) {
+  .new-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ---------- Disk bars ---------- */
 
 .disk {
