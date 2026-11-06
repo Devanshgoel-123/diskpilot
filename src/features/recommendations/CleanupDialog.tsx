@@ -93,6 +93,8 @@ export function CleanupDialog({
       const result = await api.executeCleanupPlan(plan.id);
       setRecord(result);
       onFinished(result);
+      // Space cleared and streaks count every cleanup, from any page.
+      void useApp.getState().refreshHistory();
     } catch (e) {
       setError(errorMessage(e));
     } finally {
