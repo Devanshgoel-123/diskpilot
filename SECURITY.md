@@ -26,7 +26,7 @@ Include what you found, how to reproduce it, and the impact. We aim to acknowled
 - **One gate for destructive operations.** Every deletion passes `safety::authorize_destructive` when it is planned and again immediately before it runs: absolute paths only, no `.`/`..`, confined to the scanned folder and the home folder, protected system and home locations rejected, and no symbolic link in the target or its parents.
 - **Plans, not paths.** The UI sends recommendation ids; the paths come from the engine. Plans are single-use and expire after 10 minutes.
 - **Trash first.** Permanent deletion is only offered for regenerable data, and uses `std::fs::remove_dir_all`, which does not follow symbolic links.
-- **Docker.** Only predefined actions with validated ids. No `--force`, no volume removal, preconditions re-checked against fresh Docker state before running.
+- **Docker.** Only predefined actions with validated ids. No `--force`; a volume is removed only one at a time, at the user's request, when no container uses it and its name has been typed to confirm; preconditions re-checked against fresh Docker state before running.
 - **No shell strings.** External programs are run with `std::process::Command` and individual arguments, never via a shell.
 - **Minimal Tauri capabilities.** The frontend has no generic filesystem or shell plugin; it can only call DiskPilot's typed commands, open a folder picker, and open URLs.
 - **No model-executed commands.** The assistant can explain and highlight recommendations; every action still goes through the preview and confirmation flow.

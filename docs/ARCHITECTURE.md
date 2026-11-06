@@ -26,7 +26,7 @@ Scanner ──▶ Classifier ──▶ Recommendation engine ──▶ Cleanup p
 
 ## Docker
 
-`docker/cli.rs` finds the CLI in known locations (GUI apps do not inherit the shell PATH) and runs it with an argument vector, a minimal PATH and a timeout. `docker/parse.rs` handles Docker's human sizes and local timestamps. `docker/mod.rs` builds the overview from `docker system df -v` and links images, containers and volumes (Compose image labels pin the exact image id). `docker/actions.rs` defines the only operations DiskPilot can run, all of them about reclaiming space: `rm` (stopped containers, no `-f`, no `-v`), `image rm` (no `-f`), and `builder prune --all --force` for unused build cache. Each has a preview, and execution re-fetches Docker state and re-checks preconditions first.
+`docker/cli.rs` finds the CLI in known locations (GUI apps do not inherit the shell PATH) and runs it with an argument vector, a minimal PATH and a timeout. `docker/parse.rs` handles Docker's human sizes and local timestamps. `docker/mod.rs` builds the overview from `docker system df -v` and links images, containers and volumes (Compose image labels pin the exact image id). `docker/actions.rs` defines the only operations DiskPilot can run, all of them about reclaiming space: `stop` (running containers), `rm` (stopped containers, no `-f`, no `-v`), `image rm` (no `-f`), `volume rm` (one volume no container uses, no `-f`, confirmed by typing its name), and `builder prune --all --force` for unused build cache. Each has a preview, and execution re-fetches Docker state and re-checks preconditions first.
 
 ## Classification model
 

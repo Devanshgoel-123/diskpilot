@@ -73,8 +73,8 @@ Selected recommendations are turned into a cleanup plan that lists every path to
 - Disk usage for images, containers, volumes and build cache, with the space Docker reports as reclaimable.
 - Containers with their state, image and Compose project, and what each one keeps on disk.
 - Images with the containers that depend on them, and the space unique to each image versus layers shared with others.
-- Removal of stopped containers, unused images and unused build cache, each previewed with the exact `docker` command before it runs.
-- Volumes are listed and can be inspected, but DiskPilot never removes them.
+- Stopping running containers, and removal of stopped containers, unused images and unused build cache, each previewed with the exact `docker` command before it runs.
+- Volumes are listed and can be inspected. A volume no container uses (running or stopped) can be deleted on request, one at a time, after typing its name; DiskPilot never suggests or automates removing a volume.
 - Diagnostics that explain where Docker's space is going, including the size of Docker Desktop's virtual disk image.
 - Clear handling of Docker being absent or not running.
 
@@ -118,7 +118,7 @@ Scanner -> Classifier -> Recommendations -> Planner -> Safety gate -> Executor
 - Every path is validated when the plan is built and again immediately before execution: it must be absolute, inside your home folder and the scanned folder, outside protected system and home locations, and free of symbolic links in the path itself or any parent.
 - Plans are single use and expire after ten minutes.
 - Cleanup operations are predefined. There is no shell command construction and no unrestricted recursive deletion; permanent deletion uses a routine that does not follow symbolic links.
-- Docker actions are limited to a closed set of operations with validated identifiers. DiskPilot never uses `--force`, never removes volumes, and never runs a prune without listing what it affects.
+- Docker actions are limited to a closed set of operations with validated identifiers. DiskPilot never uses `--force`, removes a volume only when you ask for that one unused volume and type its name, and never runs a prune without listing what it affects.
 - The interface has no general filesystem or shell access; it can only call DiskPilot's typed commands.
 
 ## Privacy
