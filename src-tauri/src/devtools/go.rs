@@ -270,6 +270,7 @@ fn report(ctx: &Ctx, env: &GoEnv) -> (ToolReport, Vec<Recommendation>) {
         .collect();
     let summary = match (detected, roots.len(), toolchain_count) {
         (false, ..) => "No Go tooling found.".into(),
+        (true, 0, _) => "No caches or installed programs yet.".into(),
         (true, n, 0) => format!("{n} location(s) analyzed."),
         (true, n, t) => format!("{n} location(s) analyzed, including {t} downloaded toolchain(s)."),
     };
@@ -490,5 +491,18 @@ echo '{{"GOVERSION": "{version}", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "G
         assert!(!report.detected);
         assert!(report.sections.is_empty());
         assert!(recs.is_empty());
+    }
+
+    #[test]
+    fn go_without_caches_says_so() {
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        let env = GoEnv {
+            version: Some("go1.27.3".into()),
+            ..GoEnv::defaults(&home)
+        };
+        let (report, _) = report(&ctx(&home), &env);
+        assert!(report.detected);
+        assert_eq!(report.summary, "No caches or installed programs yet.");
     }
 }
