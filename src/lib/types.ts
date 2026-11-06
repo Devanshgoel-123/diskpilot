@@ -116,6 +116,18 @@ export interface ScanSummary {
   largestFiles: FileEntry[];
   detectedLocations: DetectedLocation[];
   heavyDirectories: DirectorySize[];
+  /** Personal files by type, largest types first. Empty before 0.6 scans. */
+  fileKinds?: FileKindGroup[];
+}
+
+export type FileKind = "videos" | "images" | "audio" | "archives" | "installers" | "documents";
+
+export interface FileKindGroup {
+  kind: FileKind;
+  bytes: number;
+  fileCount: number;
+  /** Largest first, each at least 1 MB. */
+  files: FileEntry[];
 }
 
 export type EntryKind = "directory" | "file" | "symlink" | "other";

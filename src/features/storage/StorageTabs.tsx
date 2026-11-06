@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 const VIEWS: { id: StorageView; label: string }[] = [
   { id: "browse", label: "Folders" },
   { id: "largest", label: "Largest items" },
+  { id: "types", label: "By type" },
 ];
 
 /** Switches the Storage page between browsing folders and the largest items. */
