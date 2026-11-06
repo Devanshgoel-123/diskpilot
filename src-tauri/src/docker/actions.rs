@@ -648,7 +648,7 @@ pub fn execute(
             continue;
         }
         let args: Vec<&str> = step.command.iter().skip(1).map(String::as_str).collect();
-        match cli.run(&args, Duration::from_secs(180)) {
+        match cli.run(&args, step_timeout(&step.command)) {
             Ok(out) => {
                 let out = out.trim();
                 if !out.is_empty() {
@@ -675,7 +675,7 @@ pub fn execute(
                 });
             }
             Err(e) => {
-                let message = e.to_string();
+                let message = failure_message(&step.command, &step.target, &e);
                 items.push(CleanupItemResult {
                     target: step.target.clone(),
                     operation: line,
@@ -716,6 +716,27 @@ pub fn execute(
         error,
         record,
     })
+}
+
+/// How long one step may take. `docker stop` waits for each container's own
+/// shutdown period, which some set to minutes, so it gets far longer.
+fn step_timeout(command: &[String]) -> Duration {
+    if command.get(1).is_some_and(|c| c == "stop") {
+        Duration::from_secs(15 * 60)
+    } else {
+        Duration::from_secs(180)
+    }
+}
+
+/// A step's failure in plain words. A stop that runs out of time has not
+/// failed: Docker keeps stopping the container on its own.
+fn failure_message(command: &[String], target: &str, e: &DockerError) -> String {
+    match e {
+        DockerError::Timeout(_) if command.get(1).is_some_and(|c| c == "stop") => format!(
+            "Docker is still stopping {target}; it is taking longer than usual to shut down. Nothing else was run. Check Docker in a few minutes, then try again."
+        ),
+        _ => e.to_string(),
+    }
 }
 
 fn is_rm(command: &[String]) -> bool {
@@ -1052,6 +1073,19 @@ mod tests {
         .unwrap();
         assert!(vol.blocked.is_none());
         assert_eq!(vol.confirm_name.as_deref(), Some("orphan_data"));
+    }
+
+    #[test]
+    fn a_slow_stop_gets_time_and_a_plain_message() {
+        let cmd = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let stop = cmd(&["docker", "stop", WEB]);
+        let rm = cmd(&["docker", "rm", WEB]);
+        assert_eq!(step_timeout(&stop), Duration::from_secs(900));
+        assert_eq!(step_timeout(&rm), Duration::from_secs(180));
+        let slow = failure_message(&stop, "web-1", &DockerError::Timeout(900));
+        assert!(slow.starts_with("Docker is still stopping web-1"));
+        let other = failure_message(&rm, "web-1", &DockerError::Timeout(180));
+        assert!(!other.contains("still stopping"));
     }
 
     #[test]
