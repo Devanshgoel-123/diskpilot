@@ -91,7 +91,9 @@ export function AssistantPage() {
   const {
     assistantEnabled,
     assistantStatus,
+    assistantProvider,
     assistantModel,
+    providerModels,
     chat,
     asking,
     ask,
@@ -111,11 +113,18 @@ export function AssistantPage() {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [chat.length, asking]);
 
-  const ready = assistantEnabled && assistantStatus?.configured;
-  const modelLabel = useMemo(
-    () => MODEL_LABELS[assistantModel] ?? assistantModel,
-    [assistantModel],
-  );
+  const provider = assistantStatus?.providers.find((p) => p.id === assistantProvider);
+  const configured = !!provider?.configured;
+  const ready = assistantEnabled && configured && !!assistantModel;
+  const providerLabel = provider?.label ?? "the provider";
+  const modelLabel = useMemo(() => {
+    const known = [...(provider?.models ?? []), ...(providerModels[assistantProvider] ?? [])];
+    return (
+      known.find((m) => m.id === assistantModel)?.label ??
+      MODEL_LABELS[assistantModel] ??
+      assistantModel
+    );
+  }, [provider, providerModels, assistantProvider, assistantModel]);
 
   const send = (text: string) => {
     if (!text.trim() || asking) return;
@@ -140,13 +149,20 @@ export function AssistantPage() {
         <EmptyState
           className="flex-1 justify-center"
           icon={Bot}
-          title={assistantEnabled ? "Add an API key to start" : "The assistant is off"}
+          title={
+            !assistantEnabled
+              ? "The assistant is off"
+              : configured
+                ? "Choose a model to start"
+                : "Add an API key to start"
+          }
           description={
             <>
-              The assistant is optional. It uses your own Anthropic API key, stored in the macOS
-              Keychain, and can only read DiskPilot's data: it cannot delete, move or run anything.
-              When you ask a question, the question and the storage data needed to answer it (names,
-              paths and sizes, never file contents) are sent to Anthropic.
+              The assistant is optional. It uses your own API key from Anthropic, OpenAI or
+              OpenRouter, stored in the macOS Keychain, and can only read DiskPilot's data: it
+              cannot delete, move or run anything. When you ask a question, the question and the
+              storage data needed to answer it (names, paths and sizes, never file contents) are
+              sent to the provider you choose.
             </>
           }
           action={
@@ -164,7 +180,7 @@ export function AssistantPage() {
     <>
       <PageHeader
         title="Assistant"
-        description={`${modelLabel} · read-only access to DiskPilot's data`}
+        description={`${providerLabel} · ${modelLabel} · read-only access to DiskPilot's data`}
         actions={
           chat.length ? (
             <Button variant="ghost" onClick={() => void resetChat()} disabled={asking}>
@@ -248,8 +264,8 @@ export function AssistantPage() {
             </Panel>
             <p className="mt-1.5 flex items-center gap-1.5 text-2xs text-subtle-foreground">
               <ShieldCheck className="size-3 text-good" aria-hidden />
-              Read-only. Questions and storage metadata are sent to Anthropic; file contents never
-              are.
+              Read-only. Questions and storage metadata are sent to{" "}
+              {provider?.host ?? providerLabel}; file contents never are.
             </p>
           </div>
         </div>

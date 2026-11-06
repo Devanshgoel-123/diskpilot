@@ -476,16 +476,37 @@ export interface DevToolsReport {
 
 // ---- Assistant (src-tauri/src/assistant) -----------------------------------
 
-export interface AssistantStatus {
+export type AssistantProvider = "anthropic" | "openai" | "openrouter";
+
+export interface ModelInfo {
+  id: string;
+  label: string;
+}
+
+export interface ProviderStatus {
+  id: AssistantProvider;
+  label: string;
   configured: boolean;
   keySource: "keychain" | "environment" | null;
-  models: string[];
+  /** The only host questions and the key are sent to. */
+  host: string;
+  keyPrefix: string;
+  /** Environment variable read when no key is stored. */
+  envVar: string;
+  consoleUrl: string;
+  /** A fixed model list, or empty when models are listed by the provider. */
+  models: ModelInfo[];
+}
+
+export interface AssistantStatus {
+  providers: ProviderStatus[];
 }
 
 export interface AssistantReply {
   text: string;
   highlighted: string[];
   toolsUsed: string[];
+  provider: AssistantProvider;
   model: string;
   stopReason: string;
 }

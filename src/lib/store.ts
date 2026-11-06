@@ -4,12 +4,14 @@ import { api, errorMessage, inDesktopApp, onScanFinished, onScanProgress } from 
 import { applyTheme, loadTheme, saveTheme, type ThemePreference } from "./theme";
 import type {
   AppEnvironment,
+  AssistantProvider,
   AssistantStatus,
   ChatEntry,
   CleanupRecord,
   DevToolsReport,
   Recommendation,
   DiskInfo,
+  ModelInfo,
   ScanProgress,
   ScanRecord,
   ScanStatus,
@@ -32,8 +34,30 @@ export type StorageView = "browse" | "largest";
 
 const ROOT_KEY = "diskpilot.scanRoot";
 const ASSISTANT_ENABLED_KEY = "diskpilot.assistant.enabled";
-const ASSISTANT_MODEL_KEY = "diskpilot.assistant.model";
+const ASSISTANT_PROVIDER_KEY = "diskpilot.assistant.provider";
+/** Anthropic keeps the key used before other providers existed. */
+const ASSISTANT_MODEL_KEYS: Record<AssistantProvider, string> = {
+  anthropic: "diskpilot.assistant.model",
+  openai: "diskpilot.assistant.model.openai",
+  openrouter: "diskpilot.assistant.model.openrouter",
+};
 export const DEFAULT_ASSISTANT_MODEL = "claude-opus-5-5";
+export const ASSISTANT_PROVIDERS: AssistantProvider[] = ["anthropic", "openai", "openrouter"];
+
+function readProvider(): AssistantProvider {
+  const p = readPref(ASSISTANT_PROVIDER_KEY);
+  return ASSISTANT_PROVIDERS.includes(p as AssistantProvider)
+    ? (p as AssistantProvider)
+    : "anthropic";
+}
+
+function readModels(): Record<AssistantProvider, string> {
+  return {
+    anthropic: readPref(ASSISTANT_MODEL_KEYS.anthropic) ?? DEFAULT_ASSISTANT_MODEL,
+    openai: readPref(ASSISTANT_MODEL_KEYS.openai) ?? "",
+    openrouter: readPref(ASSISTANT_MODEL_KEYS.openrouter) ?? "",
+  };
+}
 
 function readPref(key: string): string | null {
   try {
@@ -75,7 +99,13 @@ interface AppState {
 
   /** The assistant is off until the user enables it in Settings. */
   assistantEnabled: boolean;
+  assistantProvider: AssistantProvider;
+  /** The chosen model for each provider. */
+  assistantModels: Record<AssistantProvider, string>;
+  /** The chosen model for the current provider. */
   assistantModel: string;
+  /** Models each provider listed when its connection was last checked. */
+  providerModels: Partial<Record<AssistantProvider, ModelInfo[]>>;
   assistantStatus: AssistantStatus | null;
   chat: ChatEntry[];
   asking: boolean;
@@ -104,7 +134,10 @@ interface AppState {
   reviewInRecommendations: (ids: string[]) => void;
   consumePreselect: () => string[] | null;
   setAssistantEnabled: (on: boolean) => void;
+  setAssistantProvider: (provider: AssistantProvider) => void;
   setAssistantModel: (model: string) => void;
+  /** Check the provider's key and list its models. Throws on failure. */
+  loadProviderModels: (provider: AssistantProvider) => Promise<ModelInfo[]>;
   refreshAssistantStatus: () => Promise<void>;
   ask: (question: string) => Promise<void>;
   resetChat: () => Promise<void>;
@@ -120,6 +153,24 @@ interface AppState {
 
 let subscribed = false;
 
+/**
+ * Providers that list their own models load the list in the background once
+ * a key is available, so the model menu and labels are ready. Failures are
+ * shown when the person checks the connection in Settings.
+ */
+function listModelsIfNeeded(): void {
+  const {
+    assistantProvider: p,
+    assistantStatus,
+    providerModels,
+    loadProviderModels,
+  } = useApp.getState();
+  const status = assistantStatus?.providers.find((s) => s.id === p);
+  if (status?.configured && !status.models.length && !providerModels[p]) {
+    loadProviderModels(p).catch(() => undefined);
+  }
+}
+
 export const useApp = create<AppState>((set, get) => ({
   ready: false,
   desktop: false,
@@ -133,7 +184,10 @@ export const useApp = create<AppState>((set, get) => ({
   analyzingDevTools: false,
   preselect: null,
   assistantEnabled: readPref(ASSISTANT_ENABLED_KEY) === "true",
-  assistantModel: readPref(ASSISTANT_MODEL_KEY) ?? DEFAULT_ASSISTANT_MODEL,
+  assistantProvider: readProvider(),
+  assistantModels: readModels(),
+  assistantModel: readModels()[readProvider()],
+  providerModels: {},
   assistantStatus: null,
   chat: [],
   asking: false,
@@ -260,15 +314,48 @@ export const useApp = create<AppState>((set, get) => ({
     set({ assistantEnabled: on });
   },
 
+  setAssistantProvider: (provider) => {
+    writePref(ASSISTANT_PROVIDER_KEY, provider);
+    // The engine starts a new conversation when the provider changes.
+    set((s) => ({
+      assistantProvider: provider,
+      assistantModel: s.assistantModels[provider],
+      chat: [],
+    }));
+    listModelsIfNeeded();
+  },
+
   setAssistantModel: (model) => {
-    writePref(ASSISTANT_MODEL_KEY, model);
+    const provider = get().assistantProvider;
+    writePref(ASSISTANT_MODEL_KEYS[provider], model);
     // The engine starts a new conversation when the model changes.
-    set({ assistantModel: model, chat: [] });
+    set((s) => ({
+      assistantModels: { ...s.assistantModels, [provider]: model },
+      assistantModel: model,
+      chat: [],
+    }));
+  },
+
+  loadProviderModels: async (provider) => {
+    const models = await api.assistantModels(provider);
+    set((s) => ({ providerModels: { ...s.providerModels, [provider]: models } }));
+    // Pick the first listed model when none is chosen or the chosen one is gone.
+    const current = get().assistantModels[provider];
+    const first = models[0];
+    if (first && !models.some((m) => m.id === current)) {
+      writePref(ASSISTANT_MODEL_KEYS[provider], first.id);
+      set((s) => ({
+        assistantModels: { ...s.assistantModels, [provider]: first.id },
+        assistantModel: s.assistantProvider === provider ? first.id : s.assistantModel,
+      }));
+    }
+    return models;
   },
 
   refreshAssistantStatus: async () => {
     try {
       set({ assistantStatus: await api.assistantStatus() });
+      listModelsIfNeeded();
     } catch (e) {
       set({ error: errorMessage(e) });
     }
@@ -279,7 +366,8 @@ export const useApp = create<AppState>((set, get) => ({
     if (!q || get().asking) return;
     set((s) => ({ asking: true, chat: [...s.chat, { role: "user", text: q }] }));
     try {
-      const reply = await api.assistantAsk(q, get().assistantModel);
+      const { assistantProvider, assistantModel } = get();
+      const reply = await api.assistantAsk(q, assistantProvider, assistantModel);
       set((s) => ({ chat: [...s.chat, { role: "assistant", reply }] }));
     } catch (e) {
       set((s) => ({ chat: [...s.chat, { role: "error", text: errorMessage(e) }] }));

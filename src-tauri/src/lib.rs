@@ -108,6 +108,7 @@ pub fn run() {
             commands::assistant_status,
             commands::assistant_set_key,
             commands::assistant_clear_key,
+            commands::assistant_models,
             commands::assistant_ask,
             commands::assistant_reset,
             commands::docker_overview,
