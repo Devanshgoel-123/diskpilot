@@ -50,17 +50,15 @@ fn move_to_trash(path: &Path) -> io::Result<()> {
     }
 }
 
-/// Finder's "not authorized to send Apple events" (-1743), or no answer
-/// from Finder at all (-600, -1712 timeout).
+/// Finder's "not authorized to send Apple events" (-1743), or Finder not
+/// running (-600). AppleScript puts the code in brackets; matching that form
+/// keeps a file name such as "IMG-6001.jpg" in some other error from
+/// counting. A timeout (-1712) is not a refusal:
+/// Finder may still finish moving the item, so it is reported, not retried.
 fn finder_refused(message: &str) -> bool {
-    [
-        "-1743",
-        "-1712",
-        "-600",
-        "Not authorized to send Apple events",
-    ]
-    .iter()
-    .any(|m| message.contains(m))
+    message.contains("Not authorized to send Apple events")
+        || message.contains("(-1743)")
+        || message.contains("(-600)")
 }
 
 impl FileOps for RealFileOps {
@@ -77,7 +75,7 @@ impl FileOps for RealFileOps {
             ));
         }
         if meta.is_dir() {
-            if let Some(reason) = removal_blocker(path, meta.dev())? {
+            if let Some(reason) = removal_blocker(path, &meta)? {
                 return Err(io::Error::new(io::ErrorKind::InvalidInput, reason));
             }
             fs::remove_dir_all(path)
@@ -88,36 +86,111 @@ impl FileOps for RealFileOps {
 }
 
 /// Why `remove_dir_all` must not run on `dir`, checked before anything is
-/// removed. A folder on another device (a disk image or network share mounted
-/// inside) would have that volume's contents erased. A folder this user cannot
-/// write to, such as a module in Go's read-only module cache, would stop the
-/// removal partway and leave the tree half deleted. Links are never followed.
-fn removal_blocker(dir: &Path, dev: u64) -> io::Result<Option<&'static str>> {
-    let mut stack = vec![dir.to_path_buf()];
-    while let Some(d) = stack.pop() {
+/// removed, so a deletion either removes the whole tree or nothing. It
+/// refuses when:
+/// - a folder inside is on another device (a disk image or network share
+///   mounted inside would have that volume's contents erased);
+/// - this user cannot remove `dir` itself from its parent, or cannot remove
+///   entries from a folder inside, such as a module in Go's read-only module
+///   cache;
+/// - an item is locked in Finder, append-only or protected by the system;
+/// - an item carries an access control list, which can deny deletion in ways
+///   the permission bits do not show;
+/// - a sticky folder holds another user's items.
+///
+/// Links are never followed.
+fn removal_blocker(dir: &Path, meta: &fs::Metadata) -> io::Result<Option<&'static str>> {
+    const READ_ONLY: &str = "it contains read-only folders, so DiskPilot will not delete it";
+    let parent_ok = dir.parent().is_some_and(writable);
+    if !parent_ok {
+        return Ok(Some(
+            "the folder that holds it is read-only, so DiskPilot will not delete it",
+        ));
+    }
+    if let Some(reason) = item_blocker(dir, meta) {
+        return Ok(Some(reason));
+    }
+    let uid = unsafe { libc::geteuid() };
+    let mut stack = vec![(dir.to_path_buf(), meta.mode())];
+    while let Some((d, mode)) = stack.pop() {
         if !writable(&d) {
-            return Ok(Some(
-                "it contains read-only folders, so DiskPilot will not delete it",
-            ));
+            return Ok(Some(READ_ONLY));
         }
+        let sticky = mode & u32::from(libc::S_ISVTX) != 0;
         for entry in fs::read_dir(&d)? {
             let path = entry?.path();
-            let meta = path.symlink_metadata()?;
-            if meta.is_dir() {
-                if meta.dev() != dev {
+            let m = path.symlink_metadata()?;
+            if let Some(reason) = item_blocker(&path, &m) {
+                return Ok(Some(reason));
+            }
+            if sticky && m.uid() != uid {
+                return Ok(Some(
+                    "it contains items owned by another user, so DiskPilot will not delete it",
+                ));
+            }
+            if m.is_dir() {
+                if m.dev() != meta.dev() {
                     return Ok(Some(
                         "it contains another mounted volume, so DiskPilot will not delete it",
                     ));
                 }
-                stack.push(path);
+                stack.push((path, m.mode()));
             }
         }
     }
     Ok(None)
 }
 
+/// Why this one item cannot be removed: flags or an access control list.
+#[cfg(target_os = "macos")]
+fn item_blocker(path: &Path, meta: &fs::Metadata) -> Option<&'static str> {
+    use std::os::macos::fs::MetadataExt as _;
+    let locked = libc::UF_IMMUTABLE | libc::UF_APPEND | libc::SF_IMMUTABLE | libc::SF_APPEND;
+    let flags = meta.st_flags();
+    if flags & locked != 0 {
+        return Some("it contains locked items, so DiskPilot will not delete it");
+    }
+    // SF_RESTRICTED from <sys/stat.h>: protected by System Integrity Protection.
+    const SF_RESTRICTED: u32 = 0x0008_0000;
+    if flags & SF_RESTRICTED != 0 {
+        return Some("it contains items macOS protects, so DiskPilot will not delete it");
+    }
+    if has_acl(path) {
+        return Some("it contains items with access rules (ACLs), so DiskPilot will not delete it");
+    }
+    None
+}
+
+#[cfg(not(target_os = "macos"))]
+fn item_blocker(_path: &Path, _meta: &fs::Metadata) -> Option<&'static str> {
+    None
+}
+
+/// Whether `path` itself (not a link's target) has an extended ACL.
+#[cfg(target_os = "macos")]
+fn has_acl(path: &Path) -> bool {
+    extern "C" {
+        fn acl_get_link_np(path: *const libc::c_char, ty: libc::c_int) -> *mut libc::c_void;
+        fn acl_free(obj: *mut libc::c_void) -> libc::c_int;
+    }
+    const ACL_TYPE_EXTENDED: libc::c_int = 0x0000_0100;
+    let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+        return true;
+    };
+    // SAFETY: `c_path` is NUL-terminated and outlives the call; a non-null
+    // result is an ACL we own and free once.
+    unsafe {
+        let acl = acl_get_link_np(c_path.as_ptr(), ACL_TYPE_EXTENDED);
+        if acl.is_null() {
+            return false;
+        }
+        acl_free(acl);
+        true
+    }
+}
+
 /// Whether this user may remove entries from `dir`, by the kernel's own
-/// check, so ownership and ACLs count.
+/// check of ownership and permission bits. ACLs are checked separately.
 fn writable(dir: &Path) -> bool {
     let Ok(c_path) = std::ffi::CString::new(dir.as_os_str().as_bytes()) else {
         return false;
@@ -225,6 +298,20 @@ mod finder_tests {
     fn recognises_finder_refusing() {
         assert!(finder_refused("Error during a `trash` operation: Os { code: 1, description: \"The AppleScript exited with error. stderr: 29:96: execution error: Not authorized to send Apple events to Finder. (-1743)\\n\" }"));
         assert!(!finder_refused("No such file or directory (os error 2)"));
+        let wrap = |inner: &str| {
+            format!("Error during a `trash` operation: Os {{ code: 1, description: \"The AppleScript exited with error. stderr: {inner}\\n\" }}")
+        };
+        assert!(finder_refused(&wrap(
+            "execution error: Finder got an error: Application isn’t running. (-600)"
+        )));
+        // A file name that merely contains "-600", in an unrelated error.
+        assert!(!finder_refused(&wrap(
+            "execution error: Can’t get file \"Macintosh HD:Users:a:IMG-6001.jpg\". (-1728)"
+        )));
+        // Finder timed out: it may still move the item, so no second attempt.
+        assert!(!finder_refused(&wrap(
+            "execution error: Finder got an error: AppleEvent timed out. (-1712)"
+        )));
     }
 }
 
@@ -387,6 +474,112 @@ mod tests {
             .error
             .as_deref()
             .is_some_and(|e| e.contains("read-only")));
+    }
+
+    /// Each way a tree can stop `remove_dir_all` partway. For every one,
+    /// Delete must refuse and leave the whole tree in place.
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn deleting_refuses_trees_that_could_only_be_half_removed() {
+        use std::ffi::CString;
+        use std::os::unix::fs::PermissionsExt;
+        use std::process::Command;
+
+        fn chflags(p: &Path, flags: u32) {
+            let c = CString::new(p.as_os_str().as_bytes()).unwrap();
+            assert_eq!(
+                unsafe { libc::chflags(c.as_ptr(), flags) },
+                0,
+                "chflags {p:?}"
+            );
+        }
+        fn acl(p: &Path, rule: &str) {
+            assert!(Command::new("chmod")
+                .args(["+a", rule])
+                .arg(p)
+                .status()
+                .unwrap()
+                .success());
+        }
+        fn no_acl(p: &Path) {
+            let _ = Command::new("chmod").arg("-N").arg(p).status();
+        }
+
+        type Setup = fn(&Path) -> Box<dyn FnOnce()>;
+        let cases: [(&str, Setup, &str); 5] = [
+            (
+                "a locked file",
+                |t| {
+                    let f = t.join("sub/f.txt");
+                    chflags(&f, libc::UF_IMMUTABLE);
+                    Box::new(move || chflags(&f, 0))
+                },
+                "locked",
+            ),
+            (
+                "an append-only file",
+                |t| {
+                    let f = t.join("sub/f.txt");
+                    chflags(&f, libc::UF_APPEND);
+                    Box::new(move || chflags(&f, 0))
+                },
+                "locked",
+            ),
+            (
+                "a file whose ACL denies deletion",
+                |t| {
+                    let f = t.join("sub/f.txt");
+                    acl(&f, "everyone deny delete");
+                    Box::new(move || no_acl(&f))
+                },
+                "access rules",
+            ),
+            (
+                "a folder whose ACL denies deleting its items",
+                |t| {
+                    let d = t.join("sub");
+                    acl(&d, "everyone deny delete_child");
+                    Box::new(move || no_acl(&d))
+                },
+                "access rules",
+            ),
+            (
+                "a read-only parent folder",
+                |t| {
+                    let parent = t.parent().unwrap().to_path_buf();
+                    fs::set_permissions(&parent, fs::Permissions::from_mode(0o555)).unwrap();
+                    Box::new(move || {
+                        fs::set_permissions(&parent, fs::Permissions::from_mode(0o755)).unwrap()
+                    })
+                },
+                "read-only",
+            ),
+        ];
+
+        for (what, setup, reason) in cases {
+            let dir = crate::test_support::sandbox();
+            let home = dir.path().canonicalize().unwrap();
+            let target = home.join("holder/cache");
+            fs::create_dir_all(target.join("sub")).unwrap();
+            for f in ["a_sibling.txt", "z_sibling.txt", "sub/f.txt"] {
+                fs::write(target.join(f), "x").unwrap();
+            }
+            let undo = setup(&target);
+            let record = execute(
+                &plan(CleanupMethod::Delete, &[&target]),
+                &home,
+                &home,
+                &RealFileOps,
+            );
+            let intact = ["a_sibling.txt", "z_sibling.txt", "sub/f.txt"]
+                .iter()
+                .all(|f| target.join(f).exists());
+            undo();
+            assert!(intact, "{what}: a refused delete must leave every file");
+            assert_eq!(record.status, ActionStatus::Failed, "{what}");
+            let error = record.items[0].error.clone().unwrap_or_default();
+            assert!(error.contains(reason), "{what}: {error}");
+        }
     }
 
     #[test]
