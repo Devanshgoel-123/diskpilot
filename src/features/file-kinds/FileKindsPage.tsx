@@ -1,0 +1,362 @@
+import {
+  Archive,
+  Eye,
+  FileText,
+  Film,
+  Image as ImageIcon,
+  type LucideIcon,
+  Music,
+  Package,
+  Search,
+  Shapes,
+} from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+
+import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { FilePreview } from "@/components/shared/FilePreview";
+import { FileThumbnail } from "@/components/shared/FileThumbnail";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { CleanupDialog } from "@/features/recommendations/CleanupDialog";
+import { StorageTabs } from "@/features/storage/StorageTabs";
+import { api } from "@/lib/api";
+import { formatBytes, formatCount, formatRelative, tildify } from "@/lib/format";
+import { useApp } from "@/lib/store";
+import type { CleanupRecord, FileEntry, FileKind } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+const KINDS: Record<FileKind, { label: string; icon: LucideIcon }> = {
+  videos: { label: "Videos", icon: Film },
+  images: { label: "Images", icon: ImageIcon },
+  audio: { label: "Audio", icon: Music },
+  archives: { label: "Archives", icon: Archive },
+  installers: { label: "Installers and disk images", icon: Package },
+  documents: { label: "Documents", icon: FileText },
+};
+
+const DAY = 24 * 60 * 60 * 1000;
+const AGES = [
+  { id: "any", label: "Any age", olderThan: 0 },
+  { id: "6m", label: "Not changed in 6 months", olderThan: 182 * DAY },
+  { id: "1y", label: "Not changed in a year", olderThan: 365 * DAY },
+] as const;
+type AgeId = (typeof AGES)[number]["id"];
+
+function parentOf(path: string): string {
+  const i = path.lastIndexOf("/");
+  return i > 0 ? path.slice(0, i) : "/";
+}
+
+/** The first folder under home, e.g. "Downloads", or "" for files at home. */
+function topFolder(path: string, home: string | undefined): string {
+  if (!home || !path.startsWith(`${home}/`)) return "";
+  const rest = path.slice(home.length + 1);
+  const i = rest.indexOf("/");
+  return i > 0 ? rest.slice(0, i) : "";
+}
+
+/** Personal files grouped by type, to review, preview and move to the Trash. */
+export function FileKindsPage() {
+  const { summary, env, scanning, startScan } = useApp();
+  const home = env?.homeDir;
+  const groups = useMemo(() => summary?.fileKinds ?? [], [summary]);
+  const [picked, setPicked] = useState<FileKind | null>(null);
+  const kind = picked && groups.some((g) => g.kind === picked) ? picked : (groups[0]?.kind ?? null);
+  const [query, setQuery] = useState("");
+  const [age, setAge] = useState<AgeId>("any");
+  const [folder, setFolder] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [gone, setGone] = useState<Set<string>>(new Set());
+  const [preview, setPreview] = useState<number | null>(null);
+  const [dialog, setDialog] = useState(false);
+  // Captured when the page first renders, so the age filter is stable.
+  const [now] = useState(() => Date.now());
+
+  const group = groups.find((g) => g.kind === kind) ?? null;
+  const files: FileEntry[] = useMemo(
+    () => (group?.files ?? []).filter((f) => !gone.has(f.path)),
+    [group, gone],
+  );
+  const folders = useMemo(
+    () => [...new Set(files.map((f) => topFolder(f.path, home)).filter(Boolean))].sort(),
+    [files, home],
+  );
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const olderThan = AGES.find((a) => a.id === age)?.olderThan ?? 0;
+    return files.filter(
+      (f) =>
+        (!q || f.path.toLowerCase().includes(q)) &&
+        (!folder || topFolder(f.path, home) === folder) &&
+        (!olderThan || (f.modifiedMs !== null && now - f.modifiedMs > olderThan)),
+    );
+  }, [files, query, age, folder, home, now]);
+
+  const chosen = useMemo(() => [...selected].filter((p) => !gone.has(p)), [selected, gone]);
+  const sizes = useMemo(
+    () => new Map(groups.flatMap((g) => g.files.map((f) => [f.path, f.bytes] as const))),
+    [groups],
+  );
+  const chosenBytes = chosen.reduce((a, p) => a + (sizes.get(p) ?? 0), 0);
+  const allVisibleChosen = visible.length > 0 && visible.every((f) => selected.has(f.path));
+
+  const toggle = (path: string) =>
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  const toggleVisible = () =>
+    setSelected((s) => {
+      const next = new Set(s);
+      for (const f of visible) {
+        if (allVisibleChosen) next.delete(f.path);
+        else next.add(f.path);
+      }
+      return next;
+    });
+
+  const createPlan = useCallback(() => api.planFileKindCleanup(chosen), [chosen]);
+  const finished = (record: CleanupRecord) => {
+    const done = record.items.filter((i) => i.status === "succeeded").map((i) => i.target);
+    setGone((g) => new Set([...g, ...done]));
+    setSelected((s) => new Set([...s].filter((p) => !done.includes(p))));
+  };
+
+  const header = (
+    <PageHeader
+      title="Storage"
+      actions={<StorageTabs />}
+      description="Your own files by type, outside apps, ~/Library and hidden folders. DiskPilot never marks these safe to delete: you decide."
+    />
+  );
+
+  if (!summary) {
+    return (
+      <>
+        {header}
+        <EmptyState
+          className="flex-1 justify-center"
+          icon={Shapes}
+          title={scanning ? "Scanning…" : "No scan yet"}
+          description="Videos, images, installers and other files appear here, grouped by type, after a scan."
+          action={scanning ? null : <Button onClick={() => void startScan()}>Start scan</Button>}
+        />
+      </>
+    );
+  }
+
+  if (groups.length === 0) {
+    return (
+      <>
+        {header}
+        <EmptyState
+          className="flex-1 justify-center"
+          icon={Shapes}
+          title="Scan again to group files by type"
+          description="This scan was made by an older version of DiskPilot, or found no videos, images, audio, archives, installers or documents."
+          action={scanning ? null : <Button onClick={() => void startScan()}>Scan again</Button>}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      {header}
+      <div className="flex min-h-0 flex-1">
+        <nav
+          aria-label="File types"
+          className="flex w-60 shrink-0 flex-col gap-0.5 border-r border-border p-2"
+        >
+          {groups.map((g) => {
+            const meta = KINDS[g.kind];
+            const Icon = meta.icon;
+            return (
+              <button
+                key={g.kind}
+                type="button"
+                aria-current={g.kind === kind ? "true" : undefined}
+                onClick={() => {
+                  setPicked(g.kind);
+                  setFolder("");
+                  setPreview(null);
+                }}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left hover:bg-hover",
+                  g.kind === kind && "bg-accent-soft hover:bg-accent-soft",
+                )}
+              >
+                <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-medium">{meta.label}</span>
+                  <span className="tabular block text-2xs text-muted-foreground">
+                    {formatCount(g.fileCount)} files
+                  </span>
+                </span>
+                <span className="tabular text-xs">{formatBytes(g.bytes)}</span>
+              </button>
+            );
+          })}
+        </nav>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-2">
+            <div className="relative w-56">
+              <Search
+                className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-subtle-foreground"
+                aria-hidden
+              />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Filter by name or path"
+                className="pl-7"
+                aria-label="Filter by name or path"
+              />
+            </div>
+            <select
+              value={folder}
+              onChange={(e) => setFolder(e.target.value)}
+              aria-label="Folder"
+              className="h-7 rounded-md border border-border-strong bg-panel px-1.5 text-xs"
+            >
+              <option value="">All folders</option>
+              {folders.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
+            <select
+              value={age}
+              onChange={(e) => setAge(e.target.value as AgeId)}
+              aria-label="Age"
+              className="h-7 rounded-md border border-border-strong bg-panel px-1.5 text-xs"
+            >
+              {AGES.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+            <Button
+              variant="ghost"
+              className="ml-auto"
+              disabled={!visible.length}
+              onClick={toggleVisible}
+            >
+              {allVisibleChosen ? "Clear selection" : `Select ${formatCount(visible.length)} shown`}
+            </Button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-auto">
+            <ul aria-label={group ? KINDS[group.kind].label : undefined}>
+              {visible.map((f, i) => (
+                <li
+                  key={f.path}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === " " && e.target === e.currentTarget) {
+                      e.preventDefault();
+                      setPreview(i);
+                    }
+                  }}
+                  className="flex h-10 items-center gap-3 border-b border-border/60 px-4 outline-none hover:bg-hover/60 focus-visible:bg-hover"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.has(f.path)}
+                    onChange={() => toggle(f.path)}
+                    aria-label={`Select ${f.name}`}
+                    className="size-3.5 shrink-0 accent-[var(--accent)]"
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setPreview(i)}
+                    aria-label={`Preview ${f.name}`}
+                    className="shrink-0"
+                  >
+                    <FileThumbnail path={f.path} size={28} />
+                  </button>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px]" title={f.name}>
+                      {f.name}
+                    </span>
+                    <span
+                      className="block truncate font-mono text-2xs text-subtle-foreground"
+                      title={f.path}
+                    >
+                      {tildify(parentOf(f.path), home)}
+                    </span>
+                  </span>
+                  <span className="w-28 shrink-0 text-2xs text-subtle-foreground">
+                    {formatRelative(f.modifiedMs)}
+                  </span>
+                  <span className="tabular w-20 shrink-0 text-right text-xs">
+                    {formatBytes(f.bytes)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPreview(i)}
+                    title="Preview (Space)"
+                    aria-label={`Preview ${f.name}`}
+                    className="shrink-0 rounded p-1 text-muted-foreground hover:bg-hover hover:text-foreground"
+                  >
+                    <Eye className="size-3.5" aria-hidden />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {visible.length === 0 ? (
+              <p className="px-4 py-6 text-xs text-muted-foreground">No files match the filter.</p>
+            ) : group ? (
+              <p className="px-4 py-3 text-2xs text-subtle-foreground">
+                {group.files.length < group.fileCount
+                  ? `The ${formatCount(group.files.length)} largest of ${formatCount(group.fileCount)} files. Files under 1 MB count in the total but are not listed.`
+                  : `All ${formatCount(group.fileCount)} files of at least 1 MB.`}
+              </p>
+            ) : null}
+          </div>
+          <div className="flex shrink-0 items-center gap-3 border-t border-border bg-panel px-4 py-2.5">
+            <p className="text-xs text-muted-foreground">
+              {chosen.length
+                ? `${formatCount(chosen.length)} selected · about ${formatBytes(chosenBytes)} freed once the Trash is emptied`
+                : "Select files you no longer need. Press Space on a row to preview it."}
+            </p>
+            <Button
+              className="ml-auto"
+              disabled={chosen.length === 0}
+              onClick={() => setDialog(true)}
+            >
+              Review {chosen.length || ""} file{chosen.length === 1 ? "" : "s"}…
+            </Button>
+          </div>
+        </div>
+      </div>
+      <FilePreview
+        files={visible.map((f) => ({
+          path: f.path,
+          bytes: f.bytes,
+          modifiedMs: f.modifiedMs,
+          note: selected.has(f.path) ? "Selected to move to Trash" : undefined,
+        }))}
+        index={preview}
+        onIndexChange={setPreview}
+        onClose={() => setPreview(null)}
+      />
+      {dialog ? (
+        <CleanupDialog
+          open={dialog}
+          ids={chosen}
+          allowedMethods={["trash"]}
+          createPlan={createPlan}
+          onOpenChange={setDialog}
+          onFinished={finished}
+        />
+      ) : null}
+    </>
+  );
+}

@@ -215,6 +215,10 @@ pub struct ScanSummary {
     /// Folders holding most of their data in their own files (not in
     /// subfolders): where storage physically accumulates.
     pub heavy_directories: Vec<DirectorySize>,
+    /// Personal files by type (videos, images, ...), largest types first.
+    /// Empty in snapshots saved before 0.6.
+    #[serde(default)]
+    pub file_kinds: Vec<crate::filekinds::FileKindGroup>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

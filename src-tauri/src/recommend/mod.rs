@@ -351,6 +351,7 @@ mod tests {
             largest_files: files,
             detected_locations: locations,
             heavy_directories: vec![],
+            file_kinds: Vec::new(),
         }
     }
 

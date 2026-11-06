@@ -653,6 +653,46 @@ pub async fn plan_duplicate_cleanup(
     Ok(plan)
 }
 
+/// A previewable plan to move files chosen in Files by type to the Trash.
+/// Paths must be listed by the last scan and unchanged since. Nothing is
+/// changed here.
+#[tauri::command]
+pub async fn plan_file_kind_cleanup(
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+) -> AppResult<CleanupPlan> {
+    let outcome = last_scan(&state)?;
+    let root = cleanup_root(&state);
+    let home = state.home.clone();
+    let now = now_ms();
+    let plan = blocking(move || {
+        let classifier = Classifier::new(&home);
+        let classify = |p: &Path| classifier.classify_path(p, false, &crate::classifier::FsProbe);
+        let (recs, rejected) = crate::filekinds::removal_recommendations(
+            &outcome.summary.file_kinds,
+            &paths,
+            &classify,
+        );
+        let ids: Vec<String> = recs.iter().map(|r| r.id.clone()).collect();
+        let mut plan = planner::build_plan(
+            unique_id("file-kinds", now),
+            &recs,
+            &ids,
+            CleanupMethod::Trash,
+            &root,
+            &home,
+            now,
+        );
+        plan.rejected.extend(rejected);
+        Ok(plan)
+    })
+    .await?;
+    let mut plans = state.plans();
+    plans.retain(|_, p| now - p.created_at_ms < planner::PLAN_TTL_MS);
+    plans.insert(plan.id.clone(), plan.clone());
+    Ok(plan)
+}
+
 // ---- Credentials in AI transcripts -----------------------------------------
 
 /// Look for credentials pasted into AI agents' transcripts. Read-only and

@@ -87,6 +87,8 @@ export const api = {
   getDuplicates: () => invoke<DuplicateReport | null>("get_duplicates"),
   planDuplicateCleanup: (paths: string[]) =>
     invoke<CleanupPlan>("plan_duplicate_cleanup", { paths }),
+  planFileKindCleanup: (paths: string[]) =>
+    invoke<CleanupPlan>("plan_file_kind_cleanup", { paths }),
 
   analyzeDevTools: () => invoke<DevToolsReport>("analyze_dev_tools"),
   getDevToolsReport: () => invoke<DevToolsReport | null>("get_dev_tools_report"),

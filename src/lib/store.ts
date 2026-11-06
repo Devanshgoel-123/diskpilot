@@ -37,7 +37,7 @@ export type PageId =
   | "history"
   | "settings";
 
-export type StorageView = "browse" | "largest";
+export type StorageView = "browse" | "largest" | "types";
 
 const ROOT_KEY = "diskpilot.scanRoot";
 const ASSISTANT_ENABLED_KEY = "diskpilot.assistant.enabled";

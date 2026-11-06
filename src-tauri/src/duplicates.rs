@@ -59,6 +59,9 @@ const BUNDLE_EXTENSIONS: &[&str] = &[
     "rtfd",
     "lrlibrary",
     "lrdata",
+    "aplibrary",
+    "cardboard",
+    "screenflow",
 ];
 /// Dependency and package-manager folders: their files are managed by a tool,
 /// and removing one copy breaks the package it belongs to.
@@ -75,7 +78,7 @@ const SKIPPED_DIRS: &[&str] = &[
     "__pycache__",
 ];
 /// Package stores outside hidden folders, relative to the home folder.
-const SKIPPED_HOME_DIRS: &[&str] = &[
+pub(crate) const SKIPPED_HOME_DIRS: &[&str] = &[
     "Library",
     "go/pkg",
     "Applications",
@@ -150,10 +153,13 @@ struct Candidate {
 }
 
 fn skip_dir(name: &str, path: &Path, home: &Path) -> bool {
+    skipped_dir_name(name) || SKIPPED_HOME_DIRS.iter().any(|d| path == home.join(d))
+}
+
+/// A hidden folder, a dependency folder, or an app or document bundle: its
+/// files are managed by an app or a tool, not by the person.
+pub(crate) fn skipped_dir_name(name: &str) -> bool {
     if name.starts_with('.') || SKIPPED_DIRS.contains(&name) {
-        return true;
-    }
-    if SKIPPED_HOME_DIRS.iter().any(|d| path == home.join(d)) {
         return true;
     }
     match name.rsplit_once('.') {
