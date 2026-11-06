@@ -125,15 +125,17 @@ jobs:
           xcrun stapler staple "$dmg"
       - name: Verify signature and architectures
         run: |
+          # Gatekeeper checks reach Apple's servers; retry brief network drops.
+          retry() { for i in 1 2 3 4; do "$@" && return 0; echo "Retrying in 15 s ($i)"; sleep 15; done; "$@"; }
           app=src-tauri/target/universal-apple-darwin/release/bundle/macos/DiskPilot.app
           codesign --verify --deep --strict --verbose=2 "$app"
           lipo -archs "$app/Contents/MacOS/diskpilot" | grep -q "x86_64 arm64"
           if [ "${NOTARIZE:-}" = "1" ]; then
-            xcrun stapler validate "$app"
-            spctl --assess --type execute --verbose=2 "$app"
+            retry xcrun stapler validate "$app"
+            retry spctl --assess --type execute --verbose=2 "$app"
             dmg=$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/DiskPilot_*_universal.dmg)
-            xcrun stapler validate "$dmg"
-            spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
+            retry xcrun stapler validate "$dmg"
+            retry spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
           fi
           if [ "${UPDATER:-}" = "1" ]; then
             # The update must contain the same notarized, stapled app.
@@ -143,7 +145,7 @@ jobs:
             tar -xzf "$archive" -C "$RUNNER_TEMP/update-check"
             codesign --verify --deep --strict "$RUNNER_TEMP/update-check/DiskPilot.app"
             if [ "${NOTARIZE:-}" = "1" ]; then
-              xcrun stapler validate "$RUNNER_TEMP/update-check/DiskPilot.app"
+              retry xcrun stapler validate "$RUNNER_TEMP/update-check/DiskPilot.app"
             fi
           fi
       - name: Prepare assets
