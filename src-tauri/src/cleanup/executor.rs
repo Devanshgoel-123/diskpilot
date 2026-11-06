@@ -26,9 +26,46 @@ pub trait FileOps: Sync {
 
 pub struct RealFileOps;
 
+/// Move `path` to the Trash. Finder does it first, so "Put Back" works. If
+/// macOS has not let DiskPilot ask Finder (the user declined, or the app's
+/// signature changed), the system file manager moves it instead: no
+/// permission needed, the item still lands in the Trash, but Finder may not
+/// offer "Put Back" for it.
+fn move_to_trash(path: &Path) -> io::Result<()> {
+    match trash::delete(path) {
+        Ok(()) => Ok(()),
+        Err(e) if finder_refused(&e.to_string()) => {
+            #[cfg(target_os = "macos")]
+            {
+                use trash::macos::{DeleteMethod, TrashContextExtMacos};
+                let mut ctx = trash::TrashContext::default();
+                ctx.set_delete_method(DeleteMethod::NsFileManager);
+                ctx.delete(path)
+                    .map_err(|e| io::Error::other(e.to_string()))
+            }
+            #[cfg(not(target_os = "macos"))]
+            Err(io::Error::other(e.to_string()))
+        }
+        Err(e) => Err(io::Error::other(e.to_string())),
+    }
+}
+
+/// Finder's "not authorized to send Apple events" (-1743), or no answer
+/// from Finder at all (-600, -1712 timeout).
+fn finder_refused(message: &str) -> bool {
+    [
+        "-1743",
+        "-1712",
+        "-600",
+        "Not authorized to send Apple events",
+    ]
+    .iter()
+    .any(|m| message.contains(m))
+}
+
 impl FileOps for RealFileOps {
     fn trash(&self, path: &Path) -> io::Result<()> {
-        trash::delete(path).map_err(|e| io::Error::other(e.to_string()))
+        move_to_trash(path)
     }
 
     fn delete(&self, path: &Path) -> io::Result<()> {
@@ -177,6 +214,17 @@ pub fn execute(
         bytes_freed,
         bytes_trashed,
         items: results,
+    }
+}
+
+#[cfg(test)]
+mod finder_tests {
+    use super::finder_refused;
+
+    #[test]
+    fn recognises_finder_refusing() {
+        assert!(finder_refused("Error during a `trash` operation: Os { code: 1, description: \"The AppleScript exited with error. stderr: 29:96: execution error: Not authorized to send Apple events to Finder. (-1743)\\n\" }"));
+        assert!(!finder_refused("No such file or directory (os error 2)"));
     }
 }
 
