@@ -56,6 +56,9 @@ export const api = {
     invoke<DirectoryListing>("list_directory", { path: path ?? null }),
   getItemDetails: (path: string) => invoke<ItemDetails>("get_item_details", { path }),
   revealInFinder: (path: string) => invoke<null>("reveal_in_finder", { path }),
+  /** PNG bytes of a Quick Look thumbnail; files inside the last scan only. */
+  fileThumbnail: (path: string, size: number) =>
+    invoke<ArrayBuffer>("file_thumbnail", { path, size }),
   getAppStorage: () => invoke<AppStorageReport>("get_app_storage"),
   getAppBadges: (paths: string[]) => invoke<Record<string, AppBadge>>("get_app_badges", { paths }),
 

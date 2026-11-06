@@ -1,8 +1,10 @@
-import { ChevronDown, Copy, FolderOpen, Layers, Loader2, Search, Square } from "lucide-react";
+import { ChevronDown, Copy, Eye, FolderOpen, Layers, Loader2, Search, Square } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { FilePreview } from "@/components/shared/FilePreview";
+import { FileThumbnail } from "@/components/shared/FileThumbnail";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CleanupDialog } from "@/features/recommendations/CleanupDialog";
@@ -74,6 +76,7 @@ function GroupRow({
   onKeep,
   onToggle,
   onToggleGroup,
+  onPreview,
 }: {
   group: DuplicateGroup;
   kept: string;
@@ -83,6 +86,8 @@ function GroupRow({
   onKeep: (path: string) => void;
   onToggle: (path: string) => void;
   onToggleGroup: () => void;
+  /** Open the large preview at this copy. */
+  onPreview: (index: number) => void;
 }) {
   const home = useApp((s) => s.env?.homeDir);
   const extras = group.files.filter((f) => f.path !== kept);
@@ -102,7 +107,34 @@ function GroupRow({
         />
         <button
           type="button"
+          onClick={() =>
+            onPreview(
+              Math.max(
+                0,
+                group.files.findIndex((f) => f.path === kept),
+              ),
+            )
+          }
+          aria-label={`Preview ${group.name}`}
+          title="Preview (Space)"
+          className="shrink-0 rounded-[4px] focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
+        >
+          <FileThumbnail path={kept} size={32} />
+        </button>
+        <button
+          type="button"
           onClick={onToggleOpen}
+          onKeyDown={(e) => {
+            if (e.key === " ") {
+              e.preventDefault();
+              onPreview(
+                Math.max(
+                  0,
+                  group.files.findIndex((f) => f.path === kept),
+                ),
+              );
+            }
+          }}
           aria-expanded={open}
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
@@ -136,12 +168,19 @@ function GroupRow({
       </div>
       {open ? (
         <ul className="pr-4 pb-2 pl-[52px]">
-          {group.files.map((f) => {
+          {group.files.map((f, i) => {
             const isKept = f.path === kept;
             return (
               <li
                 key={f.path}
-                className="flex items-center gap-3 rounded-md px-2 py-1 hover:bg-hover"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === " " && e.target === e.currentTarget) {
+                    e.preventDefault();
+                    onPreview(i);
+                  }
+                }}
+                className="flex items-center gap-3 rounded-md px-2 py-1 hover:bg-hover focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
               >
                 <input
                   type="checkbox"
@@ -151,6 +190,15 @@ function GroupRow({
                   aria-label={`Move ${tildify(f.path, home)} to Trash`}
                   className="size-3.5 shrink-0 accent-[var(--accent)] disabled:opacity-30"
                 />
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => onPreview(i)}
+                  aria-label={`Preview ${tildify(f.path, home)}`}
+                  className="shrink-0"
+                >
+                  <FileThumbnail path={f.path} size={24} />
+                </button>
                 <span className="selectable min-w-0 flex-1 truncate font-mono text-2xs text-muted-foreground">
                   {tildify(parentOf(f.path), home)}/
                   <span className="text-foreground">
@@ -173,6 +221,15 @@ function GroupRow({
                     Keep this
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => onPreview(i)}
+                  aria-label="Preview"
+                  title="Preview (Space)"
+                  className="shrink-0 text-subtle-foreground hover:text-foreground"
+                >
+                  <Eye className="size-3.5" aria-hidden />
+                </button>
                 <button
                   type="button"
                   onClick={() => void api.revealInFinder(f.path)}
@@ -205,6 +262,7 @@ export function DuplicatesPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [dialog, setDialog] = useState(false);
+  const [preview, setPreview] = useState<{ group: DuplicateGroup; index: number } | null>(null);
 
   useEffect(() => {
     void api.getDuplicates().then((r) => r && setReport(r));
@@ -394,6 +452,7 @@ export function DuplicatesPage() {
                 onKeep={(p) => setKept(g, p)}
                 onToggle={toggle}
                 onToggleGroup={() => toggleGroup(g)}
+                onPreview={(index) => setPreview({ group: g, index })}
               />
             ))}
           </ul>
@@ -414,6 +473,22 @@ export function DuplicatesPage() {
           </div>
         </div>
       )}
+      <FilePreview
+        files={(preview?.group.files ?? []).map((f) => ({
+          path: f.path,
+          bytes: preview?.group.bytes,
+          modifiedMs: f.modifiedMs,
+          note:
+            f.path === (preview ? keptPath(preview.group, keep) : "")
+              ? "Keeping this copy"
+              : selected.has(f.path)
+                ? "Selected to move to Trash"
+                : undefined,
+        }))}
+        index={preview?.index ?? null}
+        onIndexChange={(index) => setPreview((p) => (p ? { ...p, index } : p))}
+        onClose={() => setPreview(null)}
+      />
       {dialog ? (
         <CleanupDialog
           open={dialog}
