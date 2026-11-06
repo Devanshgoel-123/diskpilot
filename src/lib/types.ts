@@ -414,7 +414,7 @@ export interface DockerOverview {
 
 export type DockerAction =
   | { type: "stopContainer"; id: string }
-  | { type: "removeContainer"; id: string }
+  | { type: "removeContainer"; id: string; stopFirst?: boolean; volumes?: string[] }
   | { type: "removeImage"; id: string }
   | { type: "removeVolume"; name: string }
   | { type: "pruneBuildCache" };
@@ -425,10 +425,28 @@ export interface AffectedItem {
   bytes: number | null;
 }
 
+export interface DockerStep {
+  /** The exact argument vector that will run, starting with "docker". */
+  command: string[];
+  target: string;
+  bytes: number | null;
+}
+
+/** A volume the container uses, offered for deletion alongside it. */
+export interface VolumeChoice {
+  name: string;
+  bytes: number | null;
+  composeProject: string | null;
+  selected: boolean;
+  /** Why it cannot be deleted with this container, if it cannot. */
+  keptBecause: string | null;
+}
+
 export interface DockerActionPreview {
   action: DockerAction;
   title: string;
-  command: string[];
+  steps: DockerStep[];
+  volumeChoices: VolumeChoice[];
   destructive: boolean;
   affected: AffectedItem[];
   effects: string[];

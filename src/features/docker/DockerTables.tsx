@@ -111,6 +111,14 @@ export function ContainersTable({
             <td className="px-2 text-xs text-muted-foreground">{formatRelative(c.createdAtMs)}</td>
             <td className="px-2 pr-4">
               <div className="flex justify-end">
+                {c.running ? (
+                  <IconAction
+                    label="Stop container"
+                    onClick={() => onAction({ type: "stopContainer", id: c.id })}
+                  >
+                    <Square />
+                  </IconAction>
+                ) : null}
                 <IconAction
                   label="Inspect"
                   onClick={() => onInspect({ kind: "container", id: c.id, title: c.name })}
@@ -126,12 +134,19 @@ export function ContainersTable({
                   ) : null}
                   <MenuItem
                     destructive
-                    disabled={c.running}
-                    hint={c.running ? "Stop it first." : null}
-                    onSelect={() => onAction({ type: "removeContainer", id: c.id })}
+                    hint={
+                      c.running
+                        ? "Stops it first."
+                        : c.mounts.length
+                          ? "You choose whether to delete its volumes."
+                          : null
+                    }
+                    onSelect={() =>
+                      onAction({ type: "removeContainer", id: c.id, stopFirst: c.running })
+                    }
                   >
                     <Trash2 />
-                    Remove container…
+                    {c.running ? "Stop and remove…" : "Remove container…"}
                   </MenuItem>
                 </RowMenu>
               </div>
