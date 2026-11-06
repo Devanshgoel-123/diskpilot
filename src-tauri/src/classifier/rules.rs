@@ -40,6 +40,14 @@ pub enum Matcher {
     /// A folder that directly contains one of these entries
     /// (e.g. a folder containing `.git`). Never matches the home folder itself.
     Contains(&'static [&'static str]),
+    /// Folder name, only directly inside a folder named `parent` and only when
+    /// it contains `contains` (e.g. Chromium's `Cache/Cache_Data/index`), so a
+    /// person's own folder of the same name is not matched.
+    NameUnder {
+        names: &'static [&'static str],
+        parent: &'static str,
+        contains: &'static str,
+    },
 }
 
 #[derive(Debug)]
@@ -622,24 +630,34 @@ pub static DIR_RULES: &[DirRule] = &[
     ),
     // ---- Browsers, chat and other apps -----------------------------------------
     leaf!(
-        "browser.chromium-caches",
+        "web.offline-site-data",
         HomeRelativeAny(&[
             &["Library", "Application Support", "Google", "Chrome", "*", "Service Worker", "CacheStorage"],
+            &["Library", "Application Support", "BraveSoftware", "Brave-Browser", "*", "Service Worker", "CacheStorage"],
+            &["Library", "Application Support", "Microsoft Edge", "*", "Service Worker", "CacheStorage"],
+            &["Library", "Application Support", "Arc", "User Data", "*", "Service Worker", "CacheStorage"],
+            &["Library", "Application Support", "Chromium", "*", "Service Worker", "CacheStorage"],
+            &["Library", "Application Support", "Vivaldi", "*", "Service Worker", "CacheStorage"],
+            &["Library", "Application Support", "*", "Service Worker", "CacheStorage"],
+        ]),
+        Cache,
+        Medium,
+        "Offline site data",
+        "What websites and web apps stored for offline use (Service Worker caches) in a browser profile or an app built on web technology. Most is refilled when you go online, but a web app may keep things here that you saved to use offline."
+    ),
+    leaf!(
+        "browser.chromium-caches",
+        HomeRelativeAny(&[
             &["Library", "Application Support", "Google", "Chrome", "*", "Code Cache"],
             &["Library", "Application Support", "Google", "Chrome", "*", "GPUCache"],
-            &["Library", "Application Support", "BraveSoftware", "Brave-Browser", "*", "Service Worker", "CacheStorage"],
             &["Library", "Application Support", "BraveSoftware", "Brave-Browser", "*", "Code Cache"],
             &["Library", "Application Support", "BraveSoftware", "Brave-Browser", "*", "GPUCache"],
-            &["Library", "Application Support", "Microsoft Edge", "*", "Service Worker", "CacheStorage"],
             &["Library", "Application Support", "Microsoft Edge", "*", "Code Cache"],
             &["Library", "Application Support", "Microsoft Edge", "*", "GPUCache"],
-            &["Library", "Application Support", "Arc", "User Data", "*", "Service Worker", "CacheStorage"],
             &["Library", "Application Support", "Arc", "User Data", "*", "Code Cache"],
             &["Library", "Application Support", "Arc", "User Data", "*", "GPUCache"],
-            &["Library", "Application Support", "Chromium", "*", "Service Worker", "CacheStorage"],
             &["Library", "Application Support", "Chromium", "*", "Code Cache"],
             &["Library", "Application Support", "Chromium", "*", "GPUCache"],
-            &["Library", "Application Support", "Vivaldi", "*", "Service Worker", "CacheStorage"],
             &["Library", "Application Support", "Vivaldi", "*", "Code Cache"],
             &["Library", "Application Support", "Vivaldi", "*", "GPUCache"],
             &["Library", "Application Support", "Google", "GoogleUpdater", "crx_cache"],
@@ -647,7 +665,7 @@ pub static DIR_RULES: &[DirRule] = &[
         Cache,
         High,
         "Browser caches",
-        "Caches that Chrome, Brave, Edge, Arc, Chromium and Vivaldi keep per profile: offline copies of websites (Service Worker), compiled scripts and graphics. Browsers rebuild them as you browse. Logins, history, bookmarks and site settings are stored elsewhere."
+        "Caches that Chrome, Brave, Edge, Arc, Chromium and Vivaldi keep per profile: compiled scripts and graphics. Browsers rebuild them as you browse. Logins, history, bookmarks and site settings are stored elsewhere."
     ),
     leaf!(
         "apps.chromium-caches",
@@ -657,12 +675,11 @@ pub static DIR_RULES: &[DirRule] = &[
             &["Library", "Application Support", "*", "GPUCache"],
             &["Library", "Application Support", "*", "DawnGraphiteCache"],
             &["Library", "Application Support", "*", "DawnWebGPUCache"],
-            &["Library", "Application Support", "*", "Service Worker", "CacheStorage"],
         ]),
         Cache,
         Medium,
         "App web caches",
-        "Caches that apps built on web technology (Slack, Discord, Notion, Figma and many others) keep for downloaded pages, compiled scripts and graphics. The app rebuilds them when needed."
+        "Caches that apps built on web technology (Slack, Discord, Notion, Figma and many others) keep for downloaded files, compiled scripts and graphics. The app rebuilds them when needed."
     ),
     leaf!(
         "chat.whatsapp-media",
@@ -681,7 +698,7 @@ pub static DIR_RULES: &[DirRule] = &[
         Cache,
         High,
         "Telegram media cache",
-        "Photos, videos and files Telegram downloaded for chats on this Mac. Telegram keeps them in its cloud and downloads them again when you open them."
+        "Photos, videos and files Telegram downloaded for chats on this Mac. Media from regular chats stays in Telegram's cloud and downloads again when you open it; media from secret chats exists only on your devices."
     ),
     leaf!(
         "playwright.browsers",
@@ -697,11 +714,15 @@ pub static DIR_RULES: &[DirRule] = &[
         DeveloperTools,
         High,
         "Tool versions (asdf, mise)",
-        "Language and tool versions installed by asdf or mise, one folder per tool. Projects that pin a version need it installed."
+        "Languages and tools installed by asdf or mise, one folder per tool holding every installed version of it. Projects that pin a version need it installed."
     ),
     leaf!(
         "chromium.http-cache",
-        Name(&["Cache_Data"]),
+        NameUnder {
+            names: &["Cache_Data"],
+            parent: "Cache",
+            contains: "index",
+        },
         Cache,
         Medium,
         "Web cache",

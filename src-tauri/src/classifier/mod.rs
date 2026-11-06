@@ -143,6 +143,18 @@ impl Classifier {
             Matcher::Contains(children) => {
                 path != self.home && children.iter().any(|c| probe.has_child(path, c))
             }
+            Matcher::NameUnder {
+                names,
+                parent,
+                contains,
+            } => {
+                file_name_in(path, names)
+                    && path
+                        .parent()
+                        .and_then(Path::file_name)
+                        .is_some_and(|n| n == *parent)
+                    && probe.has_child(path, contains)
+            }
         }
     }
 
@@ -317,17 +329,22 @@ mod tests {
         let chrome = "/Users/test/Library/Application Support/Google/Chrome";
         for profile in ["Default", "Profile 9"] {
             assert_eq!(
+                dir(&format!("{chrome}/{profile}/Code Cache"), &p).rule_id,
+                "browser.chromium-caches"
+            );
+            // Offline site data is its own, review-first rule.
+            assert_eq!(
                 dir(
                     &format!("{chrome}/{profile}/Service Worker/CacheStorage"),
                     &p
                 )
                 .rule_id,
-                "browser.chromium-caches"
+                "web.offline-site-data"
             );
         }
         // `*` stands for exactly one folder, never zero or two.
         assert_ne!(
-            dir(&format!("{chrome}/Service Worker/CacheStorage"), &p).rule_id,
+            dir(&format!("{chrome}/Code Cache"), &p).rule_id,
             "browser.chromium-caches"
         );
         assert_ne!(
@@ -357,8 +374,26 @@ mod tests {
             dir(&format!("{support}/discord/Cache/Cache_Data"), &p).rule_id,
             "apps.chromium-caches"
         );
+        let chromium = FakeProbe::new(&[
+            "/Users/test/.someapp/browser/Default/Cache/Cache_Data/index",
+            "/Users/test/Documents/research/Cache_Data/index",
+        ]);
         assert_eq!(
+            dir(
+                "/Users/test/.someapp/browser/Default/Cache/Cache_Data",
+                &chromium
+            )
+            .rule_id,
+            "chromium.http-cache"
+        );
+        // Without Chromium's index, or outside a Cache folder, it is someone's
+        // own folder that happens to share the name.
+        assert_ne!(
             dir("/Users/test/.someapp/browser/Default/Cache/Cache_Data", &p).rule_id,
+            "chromium.http-cache"
+        );
+        assert_ne!(
+            dir("/Users/test/Documents/research/Cache_Data", &chromium).rule_id,
             "chromium.http-cache"
         );
     }
