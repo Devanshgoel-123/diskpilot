@@ -1,19 +1,29 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Minimal permissions for the main window. Filesystem access happens only through DiskPilot's own typed, validated Rust commands; the frontend gets no generic fs or shell plugin.",
+  "description": "Minimal permissions for the main window. Filesystem access happens only through DiskPilot's own typed, validated Rust commands; the frontend gets no generic fs or shell plugin. Updates come only from DiskPilot's GitHub releases and are verified against its signing key.",
   "windows": ["main"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
     "dialog:allow-open",
+    "updater:default",
+    "process:allow-restart",
     {
       "identifier": "opener:allow-open-url",
       "allow": [
-        { "url": "https://github.com/Devanshgoel-123/diskpilot*" },
-        { "url": "https://console.anthropic.com/settings/keys" },
-        { "url": "https://platform.openai.com/api-keys" },
-        { "url": "https://openrouter.ai/settings/keys" }
+        {
+          "url": "https://github.com/Devanshgoel-123/diskpilot*"
+        },
+        {
+          "url": "https://console.anthropic.com/settings/keys"
+        },
+        {
+          "url": "https://platform.openai.com/api-keys"
+        },
+        {
+          "url": "https://openrouter.ai/settings/keys"
+        }
       ]
     }
   ]

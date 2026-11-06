@@ -96,8 +96,24 @@ jobs:
             } >> "$GITHUB_ENV"
           fi
           echo "NOTARIZE=1" >> "$GITHUB_ENV"
+      # With the updater key, Tauri also builds a signed update archive
+      # (DiskPilot.app.tar.gz) that the app verifies before installing.
       - name: Build universal app
-        run: pnpm tauri build --target universal-apple-darwin
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            if grep -q REPLACE_WITH_UPDATER_PUBLIC_KEY src-tauri/tauri.conf.json; then
+              echo "::error::Set the updater public key in tauri.conf.json before releasing."
+              exit 1
+            fi
+            echo "UPDATER=1" >> "$GITHUB_ENV"
+            pnpm tauri build --target universal-apple-darwin --config '{"bundle":{"createUpdaterArtifacts":true}}'
+          else
+            echo "No updater key: building without an update archive."
+            pnpm tauri build --target universal-apple-darwin
+          fi
       # Tauri notarizes the app inside; the disk image people download is
       # notarized and stapled too, so opening it never shows a warning.
       - name: Notarize the disk image
@@ -119,12 +135,44 @@ jobs:
             xcrun stapler validate "$dmg"
             spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
           fi
+          if [ "${UPDATER:-}" = "1" ]; then
+            # The update must contain the same notarized, stapled app.
+            archive=src-tauri/target/universal-apple-darwin/release/bundle/macos/DiskPilot.app.tar.gz
+            test -s "$archive.sig"
+            mkdir -p "$RUNNER_TEMP/update-check"
+            tar -xzf "$archive" -C "$RUNNER_TEMP/update-check"
+            codesign --verify --deep --strict "$RUNNER_TEMP/update-check/DiskPilot.app"
+            if [ "${NOTARIZE:-}" = "1" ]; then
+              xcrun stapler validate "$RUNNER_TEMP/update-check/DiskPilot.app"
+            fi
+          fi
       - name: Prepare assets
         run: |
           mkdir -p out
           cp src-tauri/target/universal-apple-darwin/release/bundle/dmg/DiskPilot_*_universal.dmg out/DiskPilot.dmg
+          if [ "${UPDATER:-}" = "1" ]; then
+            bundle=src-tauri/target/universal-apple-darwin/release/bundle/macos
+            cp "$bundle/DiskPilot.app.tar.gz" out/DiskPilot.app.tar.gz
+            # The manifest the app reads from releases/latest: version, notes,
+            # and the archive's signature for both Apple silicon and Intel.
+            python3 - "$TAG" "$GITHUB_REPOSITORY" "$bundle/DiskPilot.app.tar.gz.sig" "$RUNNER_TEMP/notes.md" > out/latest.json <<'PYEOF'
+          import datetime, json, sys
+          tag, repo, sig_path, notes_path = sys.argv[1:5]
+          url = f"https://github.com/{repo}/releases/download/{tag}/DiskPilot.app.tar.gz"
+          entry = {"signature": open(sig_path).read().strip(), "url": url}
+          print(json.dumps({
+              "version": tag.lstrip("v"),
+              "notes": open(notes_path).read(),
+              "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "platforms": {"darwin-aarch64": entry, "darwin-x86_64": entry},
+          }, indent=2))
+          PYEOF
+          fi
           cd out
           shasum -a 256 DiskPilot.dmg > DiskPilot.dmg.sha256
+          if [ -f DiskPilot.app.tar.gz ]; then
+            shasum -a 256 DiskPilot.app.tar.gz > DiskPilot.app.tar.gz.sha256
+          fi
           cp "$RUNNER_TEMP/notes.md" notes.md
           {
             echo
@@ -170,7 +218,7 @@ jobs:
           path: out
       - name: Check the checksum
         working-directory: out
-        run: sha256sum -c DiskPilot.dmg.sha256
+        run: sha256sum -c DiskPilot*.sha256
       # A signed record, kept by GitHub outside the release, of which workflow
       # run and commit built this DMG. Check it with:
       #   gh attestation verify DiskPilot.dmg -R Devanshgoel-123/diskpilot
@@ -184,17 +232,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         working-directory: out
         run: |
+          files="DiskPilot.dmg DiskPilot.dmg.sha256"
+          if [ -f latest.json ]; then
+            files="$files DiskPilot.app.tar.gz DiskPilot.app.tar.gz.sha256 latest.json"
+          fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             if gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qx DiskPilot.dmg; then
               echo "::error::$TAG already has DiskPilot.dmg. Published files are never replaced."
               exit 1
             fi
-            gh release upload "$TAG" DiskPilot.dmg DiskPilot.dmg.sha256
+            gh release upload "$TAG" $files
             gh release edit "$TAG" --notes-file notes.md
           else
             # A draft: only the maintainer sees it until the downloaded DMG
             # has been checked and the release is published by hand.
-            gh release create "$TAG" DiskPilot.dmg DiskPilot.dmg.sha256 \
+            gh release create "$TAG" $files \
               --verify-tag --draft --title "DiskPilot ${TAG#v}" --notes-file notes.md
           fi
 

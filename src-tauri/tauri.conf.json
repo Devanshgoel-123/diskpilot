@@ -42,5 +42,13 @@
       "minimumSystemVersion": "11.0",
       "signingIdentity": "-"
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "REPLACE_WITH_UPDATER_PUBLIC_KEY",
+      "endpoints": [
+        "https://github.com/Devanshgoel-123/diskpilot/releases/latest/download/latest.json"
+      ]
+    }
   }
 }
