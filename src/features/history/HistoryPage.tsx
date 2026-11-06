@@ -9,6 +9,7 @@ import { formatBytes, formatCount, formatDate, formatDuration, tildify } from "@
 import { useApp } from "@/lib/store";
 import type { ScanStatus } from "@/lib/types";
 
+import { ClearedStatsPanel } from "./ClearedStats";
 import { CleanupHistory } from "./CleanupHistory";
 
 const STATUS: Record<ScanStatus, string> = {
@@ -30,6 +31,7 @@ export function HistoryPage() {
       <PageHeader title="History" description="Scans and cleanup actions on this Mac." />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[1180px] space-y-4 px-6 py-5">
+          <ClearedStatsPanel />
           <Panel>
             <PanelHeader
               title="Cleanup actions"
