@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "@/lib/api";
 import { type CleanupStats, cleanupStats } from "@/lib/cleanupStats";
-import { formatBytes, formatCount, formatDate } from "@/lib/format";
+import { formatBytes, formatCount } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -79,7 +79,7 @@ export function ClearedStatsPanel() {
       label: "Space cleared",
       value: formatBytes(s.clearedBytes),
       note: s.firstAtMs
-        ? `${formatCount(s.cleanups)} ${s.cleanups === 1 ? "cleanup" : "cleanups"} since ${formatDate(s.firstAtMs)}`
+        ? `${formatCount(s.cleanups)} ${s.cleanups === 1 ? "cleanup" : "cleanups"} since ${new Date(s.firstAtMs).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}`
         : "No cleanups yet",
     },
     {

@@ -1,4 +1,4 @@
-import { MoreHorizontal, Search, Square, Trash2 } from "lucide-react";
+import { CircleStop, MoreHorizontal, Search, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -116,7 +116,7 @@ export function ContainersTable({
                     label="Stop container"
                     onClick={() => onAction({ type: "stopContainer", id: c.id })}
                   >
-                    <Square />
+                    <CircleStop />
                   </IconAction>
                 ) : null}
                 <IconAction
@@ -128,7 +128,7 @@ export function ContainersTable({
                 <RowMenu label={`Actions for ${c.name}`}>
                   {c.running ? (
                     <MenuItem onSelect={() => onAction({ type: "stopContainer", id: c.id })}>
-                      <Square />
+                      <CircleStop />
                       Stop container…
                     </MenuItem>
                   ) : null}
