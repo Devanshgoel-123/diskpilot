@@ -405,3 +405,29 @@ fn personal_files_are_grouped_by_type() {
     // The fixture installer is under 1 MB, so it is counted but not listed.
     assert!(installers.files.is_empty());
 }
+
+#[test]
+fn build_output_in_a_git_project_is_not_a_personal_file() {
+    use diskpilot_lib::filekinds::FileKind;
+    let f = fixture();
+    let mb = 1024 * 1024;
+    // A git project with no package.json beside its build folders.
+    write(&f.home.join("code/site/.git/HEAD"), 20);
+    write(&f.home.join("code/site/demo.mp4"), 2 * mb);
+    write(&f.home.join("code/site/build/a.mp4"), 3 * mb);
+    write(&f.home.join("code/site/dist/assets/b.mp4"), 3 * mb);
+    write(&f.home.join("code/site/out/c.mp4"), 3 * mb);
+    // The same folder names outside a project are the person's own.
+    write(&f.home.join("Documents/out/talk.mp4"), 4 * mb);
+    let o = run(&f);
+
+    let videos = o
+        .summary
+        .file_kinds
+        .iter()
+        .find(|g| g.kind == FileKind::Videos)
+        .expect("videos found");
+    let names: Vec<&str> = videos.files.iter().map(|e| e.name.as_str()).collect();
+    assert_eq!(names, ["talk.mp4", "demo.mp4"]);
+    assert_eq!(videos.file_count, 2);
+}

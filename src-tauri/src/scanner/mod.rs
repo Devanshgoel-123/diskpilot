@@ -353,6 +353,7 @@ impl Shared<'_> {
                 | Category::SystemFiles
         );
         let personal = !tool_made
+            && !in_project_build_output(path, ctx.as_ref())
             && self
                 .home
                 .as_deref()
@@ -549,6 +550,26 @@ impl Shared<'_> {
             cur = parent;
         }
     }
+}
+
+/// Folder names that hold build output in a code project.
+const BUILD_OUTPUT_NAMES: &[&str] = &["build", "dist", "out"];
+
+/// Whether `dir` is inside a build-output folder of a git project. Projects
+/// with a package.json already classify these as build output; this covers
+/// the rest (static sites, C and Go projects, plain scripts) for Files by
+/// type only, without suggesting them for cleanup.
+fn in_project_build_output(dir: &Path, ctx: Option<&Context>) -> bool {
+    let Some(ctx) = ctx.filter(|c| c.rule.id == "project.code") else {
+        return false;
+    };
+    dir.strip_prefix(&ctx.path).is_ok_and(|rel| {
+        rel.components().any(|c| {
+            c.as_os_str()
+                .to_str()
+                .is_some_and(|n| BUILD_OUTPUT_NAMES.contains(&n))
+        })
+    })
 }
 
 /// Validate and canonicalize a scan root. The root itself may be reached
