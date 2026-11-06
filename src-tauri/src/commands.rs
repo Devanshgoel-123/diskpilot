@@ -554,6 +554,18 @@ pub fn get_cleanup_history(
     }
 }
 
+/// Totals of every cleanup on this Mac, for the space-cleared stats. Local
+/// only: nothing is sent anywhere.
+#[tauri::command]
+pub fn get_cleanup_activity(
+    state: State<'_, AppState>,
+) -> AppResult<Vec<crate::history::CleanupActivity>> {
+    match &state.history {
+        Some(h) => Ok(h.cleanup_activity()?),
+        None => Ok(Vec::new()),
+    }
+}
+
 // ---- Duplicates ----------------------------------------------------------
 
 /// Search the scanned folder (or the home folder) for files with identical

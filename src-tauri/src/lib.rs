@@ -96,6 +96,7 @@ pub fn run() {
             commands::discard_cleanup_plan,
             commands::execute_cleanup_plan,
             commands::get_cleanup_history,
+            commands::get_cleanup_activity,
             commands::get_trash_summary,
             commands::preview_trash,
             commands::discard_trash_preview,

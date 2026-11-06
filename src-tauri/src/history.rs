@@ -50,6 +50,17 @@ CREATE TABLE IF NOT EXISTS cleanup_items (
 );
 ";
 
+/// One cleanup action's totals, for the lifetime stats.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupActivity {
+    pub kind: String,
+    pub finished_at_ms: i64,
+    pub status: ActionStatus,
+    pub bytes_freed: u64,
+    pub bytes_trashed: u64,
+}
+
 fn to_i64(v: u64) -> i64 {
     i64::try_from(v).unwrap_or(i64::MAX)
 }
@@ -159,6 +170,26 @@ impl History {
         tx.commit()
     }
 
+    /// Every cleanup action, oldest first, without its items: enough to total
+    /// the space cleared and count weekly streaks.
+    pub fn cleanup_activity(&self) -> rusqlite::Result<Vec<CleanupActivity>> {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let mut stmt = conn.prepare(
+            "SELECT kind, finished_at_ms, status, bytes_freed, bytes_trashed
+             FROM cleanup_actions ORDER BY finished_at_ms",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(CleanupActivity {
+                kind: row.get(0)?,
+                finished_at_ms: row.get(1)?,
+                status: ActionStatus::parse(&row.get::<_, String>(2)?),
+                bytes_freed: to_u64(row.get(3)?),
+                bytes_trashed: to_u64(row.get(4)?),
+            })
+        })?;
+        rows.collect()
+    }
+
     pub fn recent_cleanups(&self, limit: u32) -> rusqlite::Result<Vec<CleanupRecord>> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let mut stmt = conn.prepare(
@@ -232,6 +263,47 @@ mod tests {
         );
         assert_eq!(rows[0].status, ScanStatus::Completed);
         assert_eq!(h.recent(1).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn lists_cleanup_activity_oldest_first() {
+        let h = History::in_memory().unwrap();
+        for (id, kind, finished, freed, trashed) in
+            [("b", "trash", 300, 900, 0), ("a", "files", 200, 0, 500)]
+        {
+            h.record_cleanup(&CleanupRecord {
+                id: id.into(),
+                kind: kind.into(),
+                title: id.into(),
+                started_at_ms: finished - 5,
+                finished_at_ms: finished,
+                status: ActionStatus::Succeeded,
+                bytes_freed: freed,
+                bytes_trashed: trashed,
+                items: Vec::new(),
+            })
+            .unwrap();
+        }
+        let rows = h.cleanup_activity().unwrap();
+        assert_eq!(
+            rows,
+            [
+                CleanupActivity {
+                    kind: "files".into(),
+                    finished_at_ms: 200,
+                    status: ActionStatus::Succeeded,
+                    bytes_freed: 0,
+                    bytes_trashed: 500,
+                },
+                CleanupActivity {
+                    kind: "trash".into(),
+                    finished_at_ms: 300,
+                    status: ActionStatus::Succeeded,
+                    bytes_freed: 900,
+                    bytes_trashed: 0,
+                },
+            ]
+        );
     }
 
     #[test]
