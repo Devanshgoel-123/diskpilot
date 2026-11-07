@@ -99,6 +99,55 @@ fn update_blocked(exe: &Path) -> Option<String> {
     (s.contains("/AppTranslocation/") || s.starts_with("/Volumes/")).then(|| message.into())
 }
 
+// ---- Background schedule ----------------------------------------------------
+
+#[tauri::command]
+pub fn get_schedule(state: State<'_, AppState>) -> crate::schedule::Schedule {
+    state
+        .data_dir
+        .as_deref()
+        .map(crate::schedule::load)
+        .unwrap_or_default()
+}
+
+/// Save the background settings. When the last reminder was shown is kept
+/// from what is stored; the window cannot change it.
+#[tauri::command]
+pub fn set_schedule(
+    state: State<'_, AppState>,
+    schedule: crate::schedule::Schedule,
+) -> AppResult<crate::schedule::Schedule> {
+    let dir = state
+        .data_dir
+        .as_deref()
+        .ok_or_else(|| AppError::Other("DiskPilot cannot save settings on this Mac.".into()))?;
+    let saved = crate::schedule::Schedule {
+        last_reminder_ms: crate::schedule::load(dir).last_reminder_ms,
+        ..schedule
+    };
+    crate::schedule::save(dir, &saved).map_err(|e| AppError::io(dir, &e))?;
+    Ok(saved)
+}
+
+/// Show the reminder now, so people can see what it looks like and check
+/// that macOS lets DiskPilot send notifications.
+#[tauri::command]
+pub fn send_test_reminder(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
+    let (title, body) = crate::schedule::current_reminder(&state, now_ms()).unwrap_or_else(|| {
+        (
+            "DiskPilot reminders are on".into(),
+            "Once a week, DiskPilot will tell you when there is space worth clearing.".into(),
+        )
+    });
+    if crate::schedule::notify(&app, &title, &body) {
+        Ok(())
+    } else {
+        Err(AppError::Other(
+            "macOS did not show the notification. Allow notifications for DiskPilot in System Settings > Notifications.".into(),
+        ))
+    }
+}
+
 #[tauri::command]
 pub fn get_disk_info(state: State<'_, AppState>) -> AppResult<DiskInfo> {
     disk::disk_info(&state.home).map_err(|e| AppError::io(&state.home, &e))

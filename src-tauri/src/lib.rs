@@ -24,6 +24,7 @@ pub mod privacy;
 pub mod recommend;
 pub mod safety;
 pub mod scanner;
+pub mod schedule;
 pub mod secrets;
 pub mod snapshot;
 pub mod state;
@@ -44,6 +45,12 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_notification::init())
+        // "Open at login" starts DiskPilot in the menu bar, without a window.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![schedule::STARTED_AT_LOGIN]),
+        ))
         .setup(|app| {
             let home = dirs::home_dir().ok_or("Could not determine the home folder")?;
             let data_dir = app
@@ -63,6 +70,11 @@ pub fn run() {
                 .map(|outcome| commands::restored_slot(&home, outcome))
                 .unwrap_or_default();
             tray::install(app.handle(), home.clone())?;
+            if std::env::args().any(|a| a == schedule::STARTED_AT_LOGIN) {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.hide();
+                }
+            }
             app.manage(AppState {
                 home,
                 scan: std::sync::Mutex::new(slot),
@@ -74,11 +86,15 @@ pub fn run() {
                 duplicates: std::sync::Mutex::default(),
                 docker_reviews: std::sync::Mutex::default(),
             });
+            schedule::spawn(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_environment,
             commands::get_disk_info,
+            commands::get_schedule,
+            commands::set_schedule,
+            commands::send_test_reminder,
             commands::start_scan,
             commands::cancel_scan,
             commands::is_scan_running,
