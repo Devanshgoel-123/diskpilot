@@ -668,3 +668,10 @@ export interface SecretsReport {
   findings: TranscriptFinding[];
   cancelled: boolean;
 }
+
+/** Work DiskPilot does on its own while it runs. Off until turned on. */
+export interface Schedule {
+  rescan: "off" | "daily" | "weekly";
+  reminder: boolean;
+  lastReminderMs: number | null;
+}

@@ -22,6 +22,7 @@ import type {
   DockerAction,
   DockerActionPreview,
   DockerActionResult,
+  Schedule,
   DockerOverview,
   Recommendation,
   SavedScanInfo,
@@ -105,6 +106,10 @@ export const api = {
   assistantAsk: (question: string, provider: AssistantProvider, model: string) =>
     invoke<AssistantReply>("assistant_ask", { question, provider, model }),
   assistantReset: () => invoke<null>("assistant_reset"),
+
+  getSchedule: () => invoke<Schedule>("get_schedule"),
+  setSchedule: (schedule: Schedule) => invoke<Schedule>("set_schedule", { schedule }),
+  sendTestReminder: () => invoke<null>("send_test_reminder"),
 
   dockerOverview: () => invoke<DockerOverview>("docker_overview"),
   dockerPreview: (action: DockerAction) =>

@@ -12,6 +12,7 @@ import type { ThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 import { AssistantSettings } from "./AssistantSettings";
+import { BackgroundSettings } from "./BackgroundSettings";
 import { UpdatesSettings } from "./UpdatesSettings";
 import { Section, Setting } from "./parts";
 
@@ -178,6 +179,8 @@ export function SettingsPage() {
               control={null}
             />
           </Section>
+
+          <BackgroundSettings />
 
           <UpdatesSettings />
 

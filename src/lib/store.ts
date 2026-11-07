@@ -161,6 +161,9 @@ interface AppState {
   dismissError: () => void;
 }
 
+/** The last scan that finished; its late progress events are ignored. */
+let finishedScanId: string | null = null;
+
 let subscribed = false;
 
 /**
@@ -222,7 +225,11 @@ export const useApp = create<AppState>((set, get) => ({
 
     if (!subscribed) {
       subscribed = true;
-      await onScanProgress((progress) => set({ progress }));
+      // A scan DiskPilot started on its own (a scheduled rescan) shows as
+      // scanning too, so its progress and partial results appear.
+      await onScanProgress((progress) => {
+        if (progress.scanId !== finishedScanId) set({ progress, scanning: true });
+      });
       await onScanPartial(async () => {
         const [summary, recommendations] = await Promise.all([
           api.getScanSummary(),
@@ -233,6 +240,7 @@ export const useApp = create<AppState>((set, get) => ({
         set({ summary, recommendations, partial: true, explorerPath: null });
       });
       await onScanFinished(async (done) => {
+        finishedScanId = done.scanId;
         const hadPartial = get().partial;
         set({
           scanning: false,
