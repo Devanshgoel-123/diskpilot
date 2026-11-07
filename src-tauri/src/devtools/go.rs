@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
+use super::versions::parse_version;
 use super::{
     exists, modified_ms, name_of, outermost_total, subdirs, Ctx, ItemState, RecSpec, ToolItem,
     ToolReport, ToolSection,
@@ -18,11 +19,41 @@ use crate::model::Recommendation;
 use crate::recommend::policies::policy_for;
 
 /// The official installer, then Homebrew on Apple silicon and on Intel.
-const GO_BINARIES: &[&str] = &[
+const SYSTEM_GO: &[&str] = &[
     "/usr/local/go/bin/go",
     "/opt/homebrew/bin/go",
     "/usr/local/bin/go",
 ];
+
+/// Where mise and asdf install each Go version, below the home folder, and
+/// the binary inside one version's folder.
+const MANAGED_GO: &[(&str, &str)] = &[
+    (".local/share/mise/installs/go", "bin/go"),
+    (".asdf/installs/golang", "go/bin/go"),
+];
+
+fn go_binaries(home: &Path) -> Vec<PathBuf> {
+    SYSTEM_GO
+        .iter()
+        .map(PathBuf::from)
+        .chain(managed_go(home))
+        .collect()
+}
+
+/// Go versions installed by mise or asdf, newest first. Their shims are not
+/// used: an app does not get the shell setup the shims rely on.
+fn managed_go(home: &Path) -> Vec<PathBuf> {
+    let mut found: Vec<(Vec<u64>, PathBuf)> = MANAGED_GO
+        .iter()
+        .flat_map(|(dir, bin)| {
+            subdirs(&home.join(dir))
+                .into_iter()
+                .filter_map(move |v| Some((parse_version(&name_of(&v))?, v.join(bin))))
+        })
+        .collect();
+    found.sort_by(|a, b| b.0.cmp(&a.0));
+    found.into_iter().map(|(_, go)| go).collect()
+}
 
 #[derive(Debug, PartialEq)]
 struct GoEnv {
@@ -67,8 +98,8 @@ impl GoEnv {
 
     /// Ask the first installed `go`. `GOTOOLCHAIN=local` stops a go.mod in
     /// the working folder from making `go` download another toolchain first.
-    fn query(binaries: &[&str]) -> Option<Self> {
-        let go = binaries.iter().find(|b| Path::new(b).is_file())?;
+    fn query(binaries: &[PathBuf]) -> Option<Self> {
+        let go = binaries.iter().find(|b| b.is_file())?;
         let mut command = Command::new(go);
         command
             .args([
@@ -86,7 +117,7 @@ impl GoEnv {
 }
 
 pub fn analyze(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
-    let env = GoEnv::query(GO_BINARIES).unwrap_or_else(|| GoEnv::defaults(ctx.home));
+    let env = GoEnv::query(&go_binaries(ctx.home)).unwrap_or_else(|| GoEnv::defaults(ctx.home));
     report(ctx, &env)
 }
 
@@ -237,13 +268,11 @@ fn report(ctx: &Ctx, env: &GoEnv) -> (ToolReport, Vec<Recommendation>) {
         .flat_map(|s| s.items.iter())
         .filter_map(|i| i.path.as_ref().map(|p| (PathBuf::from(p), i.bytes)))
         .collect();
-    let summary = match (detected, toolchain_count) {
-        (false, _) => "No Go tooling found.".into(),
-        (true, 0) => format!("{} location(s) analyzed.", roots.len()),
-        (true, n) => format!(
-            "{} location(s) analyzed, including {n} downloaded toolchain(s).",
-            roots.len()
-        ),
+    let summary = match (detected, roots.len(), toolchain_count) {
+        (false, ..) => "No Go tooling found.".into(),
+        (true, 0, _) => "No caches or installed programs yet.".into(),
+        (true, n, 0) => format!("{n} location(s) analyzed."),
+        (true, n, t) => format!("{n} location(s) analyzed, including {t} downloaded toolchain(s)."),
     };
     (
         ToolReport {
@@ -304,26 +333,55 @@ mod tests {
         assert_eq!(GoEnv::parse("go: unknown flag -json"), None);
     }
 
+    /// A `go` that answers `go env -json` only when it may not download a toolchain.
+    fn fake_go(path: &Path, version: &str) {
+        use std::os::unix::fs::PermissionsExt;
+        let script = format!(
+            r#"#!/bin/sh
+[ "$GOTOOLCHAIN" = local ] && [ "$1 $2" = "env -json" ] || exit 1
+echo '{{"GOVERSION": "{version}", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "GOCACHE": "/c"}}'
+"#
+        );
+        write(path, 0);
+        std::fs::write(path, script).unwrap();
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
     #[test]
     fn asks_the_installed_go_without_letting_it_download_a_toolchain() {
-        use std::os::unix::fs::PermissionsExt;
         let dir = crate::test_support::sandbox();
         let home = dir.path().canonicalize().unwrap();
         let go = home.join("go-bin");
-        std::fs::write(
-            &go,
-            r#"#!/bin/sh
-[ "$GOTOOLCHAIN" = local ] && [ "$1 $2" = "env -json" ] || exit 1
-echo '{"GOVERSION": "go1.27.3", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "GOCACHE": "/c"}'
-"#,
-        )
-        .unwrap();
-        std::fs::set_permissions(&go, std::fs::Permissions::from_mode(0o755)).unwrap();
+        fake_go(&go, "go1.27.3");
         let missing = home.join("missing/go");
-        let env = GoEnv::query(&[missing.to_str().unwrap(), go.to_str().unwrap()]).unwrap();
+        let env = GoEnv::query(&[missing.clone(), go]).unwrap();
         assert_eq!(env.version.as_deref(), Some("go1.27.3"));
         assert_eq!(env.cache, Some(PathBuf::from("/c")));
-        assert_eq!(GoEnv::query(&[missing.to_str().unwrap()]), None);
+        assert_eq!(GoEnv::query(&[missing]), None);
+    }
+
+    #[test]
+    fn finds_the_newest_go_installed_by_mise_or_asdf() {
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        let mise = home.join(".local/share/mise/installs/go");
+        let asdf = home.join(".asdf/installs/golang");
+        fake_go(&mise.join("1.26.0/bin/go"), "go1.26.0");
+        fake_go(&asdf.join("1.27.3/go/bin/go"), "go1.27.3");
+        fake_go(&mise.join("1.9.7/bin/go"), "go1.9.7");
+        std::fs::create_dir_all(mise.join("not-a-version/bin")).unwrap();
+        std::os::unix::fs::symlink(mise.join("1.26.0"), mise.join("latest")).unwrap();
+
+        assert_eq!(
+            managed_go(&home),
+            vec![
+                asdf.join("1.27.3/go/bin/go"),
+                mise.join("1.26.0/bin/go"),
+                mise.join("1.9.7/bin/go"),
+            ]
+        );
+        let env = GoEnv::query(&managed_go(&home)).unwrap();
+        assert_eq!(env.version.as_deref(), Some("go1.27.3"));
     }
 
     #[test]
@@ -433,5 +491,18 @@ echo '{"GOVERSION": "go1.27.3", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "GOC
         assert!(!report.detected);
         assert!(report.sections.is_empty());
         assert!(recs.is_empty());
+    }
+
+    #[test]
+    fn go_without_caches_says_so() {
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        let env = GoEnv {
+            version: Some("go1.27.3".into()),
+            ..GoEnv::defaults(&home)
+        };
+        let (report, _) = report(&ctx(&home), &env);
+        assert!(report.detected);
+        assert_eq!(report.summary, "No caches or installed programs yet.");
     }
 }
