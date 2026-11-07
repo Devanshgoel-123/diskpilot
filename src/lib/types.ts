@@ -225,6 +225,8 @@ export interface Recommendation {
   source: string;
   /** Older version, leftover, installer or duplicate, with the evidence. */
   marker?: Marker | null;
+  /** The app to clear this in; DiskPilot only opens it. */
+  clearInApp?: string | null;
 }
 
 export type MarkerKind = "olderVersion" | "leftover" | "installer" | "duplicate";

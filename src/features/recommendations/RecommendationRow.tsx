@@ -1,5 +1,5 @@
-import { ChevronDown, FolderOpen, FolderTree, Terminal } from "lucide-react";
-import type { ReactNode } from "react";
+import { AppWindow, ChevronDown, FolderOpen, FolderTree, Terminal } from "lucide-react";
+import { useState, type ReactNode } from "react";
 
 import { AppIcon } from "@/components/shared/AppIcon";
 import { CategoryBadge } from "@/components/shared/CategoryBadge";
@@ -8,7 +8,7 @@ import { MarkerTag } from "@/components/shared/MarkerTag";
 import { SizeBar } from "@/components/shared/SizeBar";
 import { TierBadge } from "@/components/shared/TierBadge";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import { CONFIDENCE_LABEL } from "@/lib/categories";
 import { MARKER_META } from "@/lib/markers";
 import { formatBytes, formatCount, formatRelative, tildify } from "@/lib/format";
@@ -128,7 +128,9 @@ export function RecommendationRow({
                 </span>
               ) : (
                 <span className="block text-subtle-foreground">
-                  DiskPilot will not remove this.
+                  {rec.clearInApp
+                    ? `DiskPilot will not remove this. Clear it in ${rec.clearInApp}.`
+                    : "DiskPilot will not remove this."}
                 </span>
               )}
             </Fact>
@@ -170,7 +172,10 @@ export function RecommendationRow({
               </div>
             ) : null}
           </dl>
-          <div className="mt-2 flex gap-1.5">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {rec.clearInApp ? (
+              <OpenOwnerApp ruleId={rec.classification.ruleId} name={rec.clearInApp} />
+            ) : null}
             <Button variant="ghost" size="sm" onClick={() => void api.revealInFinder(rec.path)}>
               <FolderOpen />
               Reveal in Finder
@@ -183,5 +188,30 @@ export function RecommendationRow({
         </div>
       ) : null}
     </li>
+  );
+}
+
+/** Opens the app this storage is cleared in. DiskPilot itself removes nothing. */
+function OpenOwnerApp({ ruleId, name }: { ruleId: string; name: string }) {
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => {
+          setError(null);
+          api.openOwnerApp(ruleId).catch((e: unknown) => setError(errorMessage(e)));
+        }}
+      >
+        <AppWindow />
+        Open {name}
+      </Button>
+      {error ? (
+        <span role="alert" className="text-xs text-critical">
+          {error}
+        </span>
+      ) : null}
+    </>
   );
 }

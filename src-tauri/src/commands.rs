@@ -432,6 +432,28 @@ pub fn reveal_in_finder(state: State<'_, AppState>, path: String) -> AppResult<(
     }
 }
 
+/// Opens the app whose storage a Cleanup item points at, so people clear it
+/// there. Only the apps listed in the cleanup policies can be opened.
+#[tauri::command]
+pub fn open_owner_app(rule_id: String) -> AppResult<()> {
+    let app = crate::recommend::policies::owner_app(&rule_id)
+        .ok_or_else(|| AppError::Other("DiskPilot does not open an app for this item.".into()))?;
+    for id in app.bundle_ids {
+        let opened = std::process::Command::new("/usr/bin/open")
+            .args(["-b", id])
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success());
+        if opened {
+            return Ok(());
+        }
+    }
+    Err(AppError::Other(format!(
+        "{} is not installed on this Mac, or macOS could not open it.",
+        app.name
+    )))
+}
+
 /// A Quick Look thumbnail (PNG bytes) of a file DiskPilot listed, so people
 /// can see a photo, video or document before deciding to remove it.
 ///

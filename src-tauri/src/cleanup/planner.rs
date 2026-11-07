@@ -158,6 +158,7 @@ mod tests {
             notes: vec![],
             source: "scan".into(),
             marker: None,
+            clear_in_app: None,
         }
     }
 

@@ -35,6 +35,41 @@ pub struct Policy {
     pub before_you_start: Option<&'static str>,
 }
 
+/// An app whose storage people clear from inside that app, not with
+/// DiskPilot. DiskPilot only opens it.
+#[derive(Debug)]
+pub struct OwnerApp {
+    pub name: &'static str,
+    /// Tried in order with `open -b`.
+    pub bundle_ids: &'static [&'static str],
+}
+
+/// The only apps DiskPilot opens, keyed by the rule that finds their storage.
+const OWNER_APPS: &[(&str, OwnerApp)] = &[
+    (
+        "chat.telegram-media",
+        OwnerApp {
+            name: "Telegram",
+            bundle_ids: &["ru.keepcoder.Telegram"],
+        },
+    ),
+    (
+        "chat.whatsapp-media",
+        OwnerApp {
+            name: "WhatsApp",
+            bundle_ids: &["net.whatsapp.WhatsApp"],
+        },
+    ),
+];
+
+/// The app to clear this rule's storage in, when DiskPilot leaves it to the app.
+pub fn owner_app(rule_id: &str) -> Option<&'static OwnerApp> {
+    OWNER_APPS
+        .iter()
+        .find(|(id, _)| *id == rule_id)
+        .map(|(_, app)| app)
+}
+
 const MB: u64 = 1_000_000;
 const TRASH_OR_DELETE: &[CleanupMethod] = &[CleanupMethod::Trash, CleanupMethod::Delete];
 const TRASH_ONLY: &[CleanupMethod] = &[CleanupMethod::Trash];
@@ -800,3 +835,26 @@ pub fn policy_for(rule_id: &str) -> Option<&'static Policy> {
 
 /// Extensions of installers and archives worth reviewing in Downloads.
 pub const DOWNLOAD_INSTALLER_EXTENSIONS: &[&str] = &["dmg", "pkg", "mpkg", "iso", "xip", "zip"];
+
+#[cfg(test)]
+mod owner_app_tests {
+    use super::*;
+
+    #[test]
+    fn storage_cleared_in_its_own_app_is_never_removed_by_diskpilot() {
+        for (rule, app) in OWNER_APPS {
+            let policy = policy_for(rule).unwrap_or_else(|| panic!("{rule} has no policy"));
+            assert!(policy.methods.is_empty(), "{rule} must stay app-only");
+            assert!(!app.bundle_ids.is_empty(), "{rule} names no app to open");
+        }
+        assert_eq!(
+            owner_app("chat.telegram-media").map(|a| a.name),
+            Some("Telegram")
+        );
+        assert_eq!(
+            owner_app("chat.whatsapp-media").map(|a| a.name),
+            Some("WhatsApp")
+        );
+        assert!(owner_app("browser.chromium-caches").is_none());
+    }
+}

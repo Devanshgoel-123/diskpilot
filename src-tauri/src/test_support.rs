@@ -39,5 +39,6 @@ pub fn recommendation() -> crate::model::Recommendation {
         notes: vec![],
         source: "scan".into(),
         marker: None,
+        clear_in_app: None,
     }
 }

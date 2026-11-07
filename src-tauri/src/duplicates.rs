@@ -647,6 +647,7 @@ pub fn removal_recommendations(
                 notes: Vec::new(),
                 source: "duplicates".into(),
                 marker: None,
+                clear_in_app: None,
             });
         }
     }

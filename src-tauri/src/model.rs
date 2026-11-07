@@ -358,6 +358,9 @@ pub struct Recommendation {
     /// duplicate, with the evidence in `detail`.
     #[serde(default)]
     pub marker: Option<Marker>,
+    /// The app this is cleared in, when DiskPilot only opens that app.
+    #[serde(default)]
+    pub clear_in_app: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

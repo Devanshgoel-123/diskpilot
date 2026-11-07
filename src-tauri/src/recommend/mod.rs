@@ -188,6 +188,7 @@ fn build(c: Candidate, now_ms: i64) -> Recommendation {
         notes,
         source: "scan".into(),
         marker: None,
+        clear_in_app: policies::owner_app(p.rule_id).map(|a| a.name.to_string()),
     }
 }
 
@@ -279,6 +280,7 @@ fn downloads_installers(summary: &ScanSummary, classifier: &Classifier) -> Vec<R
             notes: Vec::new(),
             source: "scan".into(),
             marker: None,
+            clear_in_app: None,
         })
         .collect()
 }

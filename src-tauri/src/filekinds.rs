@@ -183,6 +183,7 @@ pub fn removal_recommendations(
             notes: Vec::new(),
             source: "file-kinds".into(),
             marker: None,
+            clear_in_app: None,
         });
     }
     (recs, rejected)

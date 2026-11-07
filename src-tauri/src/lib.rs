@@ -104,6 +104,7 @@ pub fn run() {
             commands::list_directory,
             commands::get_item_details,
             commands::reveal_in_finder,
+            commands::open_owner_app,
             commands::file_thumbnail,
             commands::get_scan_history,
             commands::get_app_badges,

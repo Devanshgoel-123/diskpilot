@@ -286,6 +286,7 @@ impl RecSpec<'_> {
             notes: self.notes,
             source: self.source.to_string(),
             marker: None,
+            clear_in_app: None,
         }
     }
 }
