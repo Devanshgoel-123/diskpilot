@@ -2,9 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Minimal permissions for the main window. Filesystem access happens only through DiskPilot's own typed, validated Rust commands; the frontend gets no generic fs or shell plugin. Updates come only from DiskPilot's GitHub releases and are verified against its signing key. Notifications are DiskPilot's own weekly reminder, and Open at login can only be switched on or off.",
-  "windows": [
-    "main"
-  ],
+  "windows": ["main"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
