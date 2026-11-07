@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Schedule } from "@/lib/types";
@@ -45,9 +45,13 @@ beforeEach(() => {
   permission.answer = "denied";
 });
 
+/** Rendered, with the saved settings and Open at login both loaded. */
 async function renderLoaded() {
   render(<BackgroundSettings />);
-  await screen.findByRole("option", { name: "Never", selected: true });
+  await waitFor(() => {
+    expect(screen.getByRole("combobox", { name: "Rescan automatically" })).toBeEnabled();
+    expect(screen.getByRole("switch", { name: "Open at login" })).toBeEnabled();
+  });
 }
 
 describe("Background settings", () => {
