@@ -538,7 +538,7 @@ mod imp {
             .into_iter()
             .map(|e| desktop_app(e, &shared))
             .collect();
-        desktop.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        desktop.sort_by_key(|a| a.name.to_lowercase());
         for app in desktop {
             index.add(app);
         }
