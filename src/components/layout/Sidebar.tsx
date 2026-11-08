@@ -145,8 +145,9 @@ export function Sidebar() {
       aria-label="Main"
       className="flex w-[220px] shrink-0 flex-col border-r border-border bg-sidebar"
     >
-      {/* Space for the macOS traffic lights; doubles as a window drag handle. */}
-      <div data-tauri-drag-region className="h-[38px] shrink-0" />
+      {/* Room for the macOS traffic lights (smaller under the Windows title bar);
+          doubles as a window drag handle. */}
+      <div data-tauri-drag-region className="h-[var(--titlebar-inset)] shrink-0" />
       <div data-tauri-drag-region className="flex items-center gap-2 px-4 pb-3">
         <img src="/logo.svg" alt="" className="pointer-events-none size-[22px]" />
         <span className="pointer-events-none text-[13px] font-semibold">DiskPilot</span>
