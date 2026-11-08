@@ -74,10 +74,13 @@ impl ScanOptions {
         }
     }
 
-    /// Measure other apps' containers after everything else.
+    /// Measure other apps' containers after everything else. Only macOS
+    /// has app containers; elsewhere this changes nothing.
     #[must_use]
     pub fn deferring_app_containers(mut self) -> Self {
-        self.defer_children_of = Some(self.home.join("Library").join("Containers"));
+        if cfg!(target_os = "macos") {
+            self.defer_children_of = Some(self.home.join("Library").join("Containers"));
+        }
         self
     }
 }
