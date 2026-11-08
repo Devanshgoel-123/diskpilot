@@ -6,7 +6,9 @@
 
 use std::fs;
 use std::io;
+#[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
+#[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
@@ -99,6 +101,7 @@ impl FileOps for RealFileOps {
 /// - a sticky folder holds another user's items.
 ///
 /// Links are never followed.
+#[cfg(unix)]
 fn removal_blocker(dir: &Path, meta: &fs::Metadata) -> io::Result<Option<&'static str>> {
     const READ_ONLY: &str = "it contains read-only folders, so DiskPilot will not delete it";
     let parent_ok = dir.parent().is_some_and(writable);
@@ -161,9 +164,38 @@ fn item_blocker(path: &Path, meta: &fs::Metadata) -> Option<&'static str> {
     None
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn item_blocker(_path: &Path, _meta: &fs::Metadata) -> Option<&'static str> {
     None
+}
+
+/// Windows: refuses when an item inside is read-only (Windows would stop
+/// part-way through), or is in use by a running program, checked by asking
+/// for delete access to every file before anything is removed. Junctions and
+/// links are never followed; removing one removes only the link.
+#[cfg(windows)]
+fn removal_blocker(dir: &Path, meta: &fs::Metadata) -> io::Result<Option<&'static str>> {
+    const READ_ONLY: &str = "it contains read-only items, so DiskPilot will not delete it";
+    const IN_USE: &str = "a program is using files inside it, so DiskPilot will not delete it";
+    if crate::platform::read_only(meta) {
+        return Ok(Some(READ_ONLY));
+    }
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for entry in fs::read_dir(&d)? {
+            let path = entry?.path();
+            let m = path.symlink_metadata()?;
+            if crate::platform::read_only(&m) {
+                return Ok(Some(READ_ONLY));
+            }
+            if m.is_dir() {
+                stack.push(path);
+            } else if !m.file_type().is_symlink() && !crate::platform::deletable(&path) {
+                return Ok(Some(IN_USE));
+            }
+        }
+    }
+    Ok(None)
 }
 
 /// Whether `path` itself (not a link's target) has an extended ACL.
@@ -191,6 +223,7 @@ fn has_acl(path: &Path) -> bool {
 
 /// Whether this user may remove entries from `dir`, by the kernel's own
 /// check of ownership and permission bits. ACLs are checked separately.
+#[cfg(unix)]
 fn writable(dir: &Path) -> bool {
     let Ok(c_path) = std::ffi::CString::new(dir.as_os_str().as_bytes()) else {
         return false;
@@ -426,6 +459,7 @@ mod tests {
         assert_eq!(*fake.0.lock().unwrap(), vec![b.clone()]);
     }
 
+    #[cfg(unix)]
     #[test]
     fn deleting_a_folder_never_follows_links_out_of_it() {
         let dir = crate::test_support::sandbox();
@@ -451,6 +485,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn deleting_a_tree_with_read_only_folders_touches_nothing() {
         use std::os::unix::fs::PermissionsExt;
@@ -610,6 +645,7 @@ mod tests {
         assert_eq!(record.items[0].status, ItemStatus::Skipped);
     }
 
+    #[cfg(unix)]
     #[test]
     fn re_checks_safety_at_execution_time() {
         let dir = crate::test_support::sandbox();

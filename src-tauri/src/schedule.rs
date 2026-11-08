@@ -64,23 +64,13 @@ pub struct Local {
     pub hour: u32,
 }
 
-/// `ms` in this Mac's time zone.
+/// `ms` in this computer's time zone.
 pub fn local(ms: i64) -> Local {
-    let secs = ms.div_euclid(1000) as libc::time_t;
-    // SAFETY: `tm` is plain data written by localtime_r; both pointers are
-    // valid for the call.
-    let tm = unsafe {
-        let mut tm: libc::tm = std::mem::zeroed();
-        libc::localtime_r(&secs, &mut tm);
-        tm
-    };
-    // `c_long` is 32 bits on some targets.
-    #[allow(clippy::useless_conversion)]
-    let offset_ms = i64::from(tm.tm_gmtoff) * 1000;
+    let (offset_secs, weekday, hour) = crate::platform::local_time(ms.div_euclid(1000));
     Local {
-        day: (ms + offset_ms).div_euclid(DAY_MS),
-        weekday: u32::try_from(tm.tm_wday).unwrap_or(0),
-        hour: u32::try_from(tm.tm_hour).unwrap_or(0),
+        day: (ms + offset_secs * 1000).div_euclid(DAY_MS),
+        weekday,
+        hour,
     }
 }
 

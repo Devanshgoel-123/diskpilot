@@ -19,6 +19,7 @@ pub mod explorer;
 pub mod filekinds;
 pub mod history;
 pub mod model;
+pub mod platform;
 pub mod preview;
 pub mod privacy;
 pub mod recommend;
@@ -30,6 +31,10 @@ pub mod snapshot;
 pub mod state;
 #[cfg(test)]
 pub mod test_support;
+#[cfg(unix)]
+pub mod trash;
+#[cfg(windows)]
+#[path = "recycle_bin.rs"]
 pub mod trash;
 pub mod tray;
 pub mod tray_icon;

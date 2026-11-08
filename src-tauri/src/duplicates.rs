@@ -15,7 +15,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{File, Metadata};
 use std::io::{self, Read};
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -23,6 +22,7 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+use crate::platform;
 use crate::scanner::{now_ms, to_ms};
 
 pub const EVENT_DUPLICATES_PROGRESS: &str = "duplicates://progress";
@@ -193,7 +193,7 @@ fn list_files(
         *unreadable += 1;
         return Vec::new();
     };
-    let dev = root_meta.dev();
+    let dev = platform::device(&root_meta);
     let mut seen_inodes: HashSet<(u64, u64)> = HashSet::new();
     let mut out = Vec::new();
     let mut examined = 0u64;
@@ -212,7 +212,7 @@ fn list_files(
                 *unreadable += 1;
                 continue;
             };
-            if meta.dev() != dev || meta.file_type().is_symlink() {
+            if platform::device(&meta) != dev || meta.file_type().is_symlink() {
                 continue;
             }
             let name = entry.file_name().to_string_lossy().into_owned();
@@ -222,14 +222,27 @@ fn list_files(
                 }
                 continue;
             }
-            if !meta.is_file() || name.starts_with('.') {
+            // Hidden files, and cloud files whose data is not on this computer:
+            // reading one to compare it would download it.
+            if !meta.is_file()
+                || name.starts_with('.')
+                || platform::hidden(&meta)
+                || !platform::is_local(&meta)
+            {
                 continue;
             }
             examined += 1;
             if examined % 500 == 0 {
                 tick(examined, &path);
             }
-            if meta.len() < min_bytes || !seen_inodes.insert((meta.dev(), meta.ino())) {
+            if meta.len() < min_bytes {
+                continue;
+            }
+            // Hard links to one file are not copies. Windows needs to open the
+            // file to know its identity, so it is only asked for files that
+            // are big enough to matter.
+            let id = platform::identity(&meta).or_else(|| platform::identity_at(&path));
+            if id.is_some_and(|id| !seen_inodes.insert((id.volume, id.index))) {
                 continue;
             }
             out.push(Candidate {
@@ -527,8 +540,11 @@ pub fn same_contents(a: &Path, b: &Path) -> io::Result<bool> {
     if !regular(&ma) || !regular(&mb) || ma.len() != mb.len() {
         return Ok(false);
     }
-    if ma.dev() == mb.dev() && ma.ino() == mb.ino() {
-        return Ok(false);
+    let id = |p: &Path, m: &Metadata| platform::identity(m).or_else(|| platform::identity_at(p));
+    if let (Some(ia), Some(ib)) = (id(a, &ma), id(b, &mb)) {
+        if (ia.volume, ia.index) == (ib.volume, ib.index) {
+            return Ok(false);
+        }
     }
     let (mut fa, mut fb) = (File::open(a)?, File::open(b)?);
     let (mut ba, mut bb) = (vec![0u8; 256 * 1024], vec![0u8; 256 * 1024]);
@@ -718,6 +734,7 @@ mod tests {
         assert_eq!(r.groups[0].files.len(), 2);
     }
 
+    #[cfg(unix)]
     #[test]
     fn skips_hard_links_hidden_folders_bundles_and_symlinks() {
         let dir = crate::test_support::sandbox();

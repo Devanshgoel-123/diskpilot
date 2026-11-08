@@ -15,7 +15,6 @@ use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::ffi::OsString;
 use std::fs::{self, Metadata};
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -37,6 +36,7 @@ use crate::model::{
     Category, CategoryTotal, DetectedLocation, DirectorySize, FileEntry, ScanIssue, ScanProgress,
     ScanSummary,
 };
+use crate::platform;
 
 const MAX_ERROR_SAMPLES: usize = 200;
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(120);
@@ -124,8 +124,7 @@ pub fn to_ms(t: SystemTime) -> Option<i64> {
 }
 
 pub fn allocated_bytes(meta: &Metadata) -> u64 {
-    // st_blocks is always in 512-byte units, independent of the fs block size.
-    meta.blocks().saturating_mul(512)
+    crate::platform::allocated_bytes(meta)
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -627,7 +626,7 @@ pub fn scan_with_partial(
     let shared = Shared {
         opts,
         classifier,
-        root_dev: root_meta.dev(),
+        root_dev: crate::platform::device(&root_meta),
         cancel,
         files: AtomicU64::new(0),
         dirs: AtomicU64::new(0),
@@ -910,7 +909,7 @@ pub fn measure(path: &Path) -> u64 {
     if !root_meta.is_dir() {
         return allocated_bytes(&root_meta);
     }
-    let dev = root_meta.dev();
+    let dev = platform::device(&root_meta);
     let mut seen = HashSet::new();
     let mut total = allocated_bytes(&root_meta);
     let mut stack = vec![path.to_path_buf()];
@@ -922,11 +921,13 @@ pub fn measure(path: &Path) -> u64 {
             let Ok(meta) = entry.metadata() else { continue };
             let ft = meta.file_type();
             if ft.is_dir() {
-                if meta.dev() == dev {
+                if platform::device(&meta) == dev {
                     total += allocated_bytes(&meta);
                     stack.push(entry.path());
                 }
-            } else if meta.nlink() <= 1 || seen.insert((meta.dev(), meta.ino())) {
+            } else if platform::link_count(&meta) <= 1
+                || platform::identity(&meta).is_none_or(|id| seen.insert((id.volume, id.index)))
+            {
                 total += allocated_bytes(&meta);
             }
         }

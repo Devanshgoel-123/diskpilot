@@ -11,9 +11,7 @@
 
 use std::fs;
 use std::io::{self, BufReader, BufWriter, Read, Write};
-use std::os::unix::ffi::{OsStrExt, OsStringExt};
-use std::os::unix::fs::OpenOptionsExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use flate2::read::DeflateDecoder;
 use flate2::write::DeflateEncoder;
@@ -79,7 +77,7 @@ pub fn encode(outcome: &ScanOutcome, w: impl Write) -> io::Result<()> {
     let mut entries: Vec<(&[u8], &DirStats)> = outcome
         .index
         .iter()
-        .map(|(p, s)| (p.as_os_str().as_bytes(), s))
+        .map(|(p, s)| (crate::platform::path_bytes(p), s))
         .collect();
     entries.sort_unstable_by(|a, b| a.0.cmp(b.0));
     z.write_all(&(entries.len() as u64).to_le_bytes())?;
@@ -142,8 +140,11 @@ pub fn decode(r: impl Read) -> io::Result<ScanOutcome> {
         }
         let mut readable = [0u8; 1];
         z.read_exact(&mut readable)?;
+        let Some(key) = crate::platform::path_from_bytes(path.clone()) else {
+            return Err(invalid("path is not valid on this system"));
+        };
         index.insert(
-            PathBuf::from(std::ffi::OsString::from_vec(path.clone())),
+            key,
             DirStats {
                 bytes: v[0],
                 files: v[1],
@@ -162,12 +163,11 @@ pub fn decode(r: impl Read) -> io::Result<ScanOutcome> {
 pub fn save(dir: &Path, outcome: &ScanOutcome) -> io::Result<()> {
     fs::create_dir_all(dir)?;
     let tmp = dir.join(format!("{FILE_NAME}.tmp"));
-    let file = fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(0o600)
-        .open(&tmp)?;
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let file = options.open(&tmp)?;
     let result = encode(outcome, BufWriter::new(&file)).and_then(|()| file.sync_all());
     if let Err(e) = result {
         let _ = fs::remove_file(&tmp);
@@ -254,6 +254,7 @@ mod tests {
         assert!(decode(buf.as_slice()).is_err());
     }
 
+    #[cfg(unix)]
     #[test]
     fn saves_privately_loads_and_removes() {
         use std::os::unix::fs::PermissionsExt;

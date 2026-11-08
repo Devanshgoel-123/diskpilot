@@ -6,8 +6,9 @@
 
 use std::ffi::OsString;
 use std::io;
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
+
+use crate::platform;
 #[cfg(target_os = "macos")]
 use std::sync::atomic::AtomicBool;
 
@@ -55,9 +56,13 @@ impl Stat {
             // bulk listing does not report them.
             logical: if is_dir { 0 } else { meta.len() },
             modified_ms: meta.modified().ok().and_then(super::to_ms),
-            nlink: if is_dir { 1 } else { meta.nlink() },
-            ino: meta.ino(),
-            other_volume: kind == Kind::Dir && meta.dev() != root_dev,
+            nlink: if is_dir {
+                1
+            } else {
+                platform::link_count(meta)
+            },
+            ino: platform::identity(meta).map_or(0, |id| id.index),
+            other_volume: kind == Kind::Dir && platform::device(meta) != root_dev,
         }
     }
 }
@@ -335,7 +340,7 @@ mod bulk {
 #[cfg(all(test, target_os = "macos"))]
 mod tests {
     use super::*;
-    use std::os::unix::fs::{symlink, PermissionsExt};
+    use std::os::unix::fs::{symlink, MetadataExt, PermissionsExt};
 
     fn sorted(mut l: Listing) -> Vec<(OsString, Stat)> {
         l.entries.sort_by(|a, b| a.0.cmp(&b.0));
