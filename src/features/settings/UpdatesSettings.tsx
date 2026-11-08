@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { formatRelative } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import { useUpdates } from "@/lib/updates";
+import { words } from "@/lib/platform";
 
 import { Section, Setting } from "./parts";
 
@@ -28,7 +29,7 @@ export function UpdatesSettings() {
     <Section title="Updates">
       <Setting
         label="Check for updates automatically"
-        description="Once a day, DiskPilot asks GitHub whether a newer version exists. Nothing about you or this Mac is sent, and an update is installed only when you choose to, after its signature is verified."
+        description={`Once a day, DiskPilot asks GitHub whether a newer version exists. Nothing about you or this ${words().computer} is sent, and an update is installed only when you choose to, after its signature is verified.`}
         control={
           <input
             type="checkbox"

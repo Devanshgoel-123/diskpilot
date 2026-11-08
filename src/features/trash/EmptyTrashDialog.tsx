@@ -8,6 +8,7 @@ import { formatBytes, formatCount } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { TrashPreview, TrashProgress, TrashResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { isWindows, words } from "@/lib/platform";
 
 import "./trash.css";
 import { entryIcon } from "./fileKind";
@@ -65,7 +66,10 @@ function TrashFlow() {
       })
       .catch((e: unknown) => {
         if (!live) return;
-        setError({ title: "DiskPilot couldn't read the Trash", message: errorMessage(e) });
+        setError({
+          title: `DiskPilot couldn't read the ${words().trash}`,
+          message: errorMessage(e),
+        });
         setPhase("error");
       });
     return () => {
@@ -142,7 +146,7 @@ function TrashFlow() {
       void app.refreshDisk();
       void app.refreshHistory();
     } catch (e) {
-      setError({ title: "The Trash was not emptied", message: errorMessage(e) });
+      setError({ title: `The ${words().trash} was not emptied`, message: errorMessage(e) });
       setPhase("error");
     }
   };
@@ -231,7 +235,7 @@ function TrashFlow() {
               </Button>
               <Button variant="destructive" className="group" onClick={() => void start()}>
                 <TrashGlyph />
-                Empty Trash
+                {words().emptyTrash}
               </Button>
             </>
           ) : phase === "working" ? (
@@ -247,9 +251,11 @@ function TrashFlow() {
               <Button ref={cancelRef} variant="secondary" onClick={() => close(false)}>
                 Close
               </Button>
-              <Button onClick={() => void api.openFullDiskAccessSettings()}>
-                Open System Settings
-              </Button>
+              {isWindows() ? null : (
+                <Button onClick={() => void api.openFullDiskAccessSettings()}>
+                  Open System Settings
+                </Button>
+              )}
             </>
           ) : phase === "error" ? (
             <>
@@ -280,7 +286,7 @@ function TrashFlow() {
 
         <p className="sr-only" role="status" aria-live="polite">
           {phase === "working"
-            ? "Emptying the Trash."
+            ? `Emptying the ${words().trash}.`
             : phase === "result" && result
               ? `${resultTitle(result)} ${formatBytes(result.record.bytesFreed)} reclaimed.`
               : ""}
@@ -316,7 +322,7 @@ function resultTitle(r: TrashResult): string {
 function Loading() {
   return (
     <>
-      <DialogTitle className="text-[17px]">Looking in the Trash…</DialogTitle>
+      <DialogTitle className="text-[17px]">Looking in the {words().trash}…</DialogTitle>
       <DialogDescription className="mt-1 flex items-center gap-2 text-[13px]">
         <Loader2 className="size-3.5 animate-spin" aria-hidden />
         Measuring every item so you can see exactly what will be deleted.
@@ -356,7 +362,7 @@ function Confirm({
   const restBytes = rest.reduce((s, e) => s + e.bytes, 0);
   return (
     <>
-      <DialogTitle className="text-[17px]">Empty the Trash?</DialogTitle>
+      <DialogTitle className="text-[17px]">Empty the {words().trash}?</DialogTitle>
       <DialogDescription className="mt-1 text-[13px] leading-relaxed">
         {n === 1 ? "This item will be" : `These ${formatCount(n)} items will be`} deleted
         permanently. This can't be undone.
@@ -371,7 +377,7 @@ function Confirm({
       </div>
 
       <ul
-        aria-label="Items in the Trash"
+        aria-label={`Items in the ${words().trash}`}
         className={cn(
           "mt-4 divide-y divide-border rounded-lg border border-border",
           showAll && "max-h-52 overflow-y-auto",
@@ -413,8 +419,8 @@ function Confirm({
 
       <p className="mt-3 flex gap-2 text-xs leading-relaxed text-muted-foreground">
         <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-        Only the items listed here are deleted. Anything you move to the Trash after this is left
-        alone.
+        Only the items listed here are deleted. Anything you move to the {words().trash} after this
+        is left alone.
       </p>
     </>
   );
@@ -437,10 +443,11 @@ function Working({
   return (
     <>
       <DialogTitle className="text-[17px]">
-        {stopping ? "Stopping after the current file…" : "Emptying the Trash…"}
+        {stopping ? "Stopping after the current file…" : `Emptying the ${words().trash}…`}
       </DialogTitle>
       <DialogDescription className="mt-1 text-[13px]">
-        Deleting one file at a time. Stopping leaves anything not yet deleted in the Trash.
+        Deleting one file at a time. Stopping leaves anything not yet deleted in the {words().trash}
+        .
       </DialogDescription>
 
       <p className="mt-4 flex items-baseline gap-2">
@@ -454,7 +461,7 @@ function Working({
 
       <div
         role="progressbar"
-        aria-label="Emptying the Trash"
+        aria-label={`Emptying the ${words().trash}`}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(fraction * 100)}
@@ -510,7 +517,7 @@ function Result({
       <DialogDescription className="mt-1 text-[13px] leading-relaxed">
         {plural(Math.round(files), "file")} {outcome === "done" ? "successfully " : ""}removed.
         {outcome !== "done"
-          ? ` ${plural(left, "item")} ${left === 1 ? "is" : "are"} still in the Trash.`
+          ? ` ${plural(left, "item")} ${left === 1 ? "is" : "are"} still in the ${words().trash}.`
           : ""}
         {available != null && outcome === "done"
           ? ` ${formatBytes(available)} is now available on this disk.`
@@ -543,9 +550,9 @@ function Result({
       {result.permissionDenied ? (
         <p className="mt-3 flex gap-2 text-xs leading-relaxed text-muted-foreground">
           <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          Some files are locked, or belong to another user or to macOS. DiskPilot leaves them as
-          they are. Finder can remove them: open the Trash in Finder and choose Empty, and it will
-          ask for your password if one is needed.
+          {isWindows()
+            ? "Some files are in use, locked, or belong to another user or to Windows. DiskPilot leaves them as they are. Close the apps using them and try again, or empty the Recycle Bin from File Explorer, which asks for permission if it is needed."
+            : "Some files are locked, or belong to another user or to macOS. DiskPilot leaves them as they are. Finder can remove them: open the Trash in Finder and choose Empty, and it will ask for your password if one is needed."}
         </p>
       ) : null}
     </>
@@ -555,11 +562,13 @@ function Result({
 function Denied() {
   return (
     <>
-      <DialogTitle className="text-[17px]">DiskPilot can't see inside the Trash</DialogTitle>
+      <DialogTitle className="text-[17px]">
+        DiskPilot can&apos;t see inside the {words().trash}
+      </DialogTitle>
       <DialogDescription className="mt-1 text-[13px] leading-relaxed">
-        macOS keeps the Trash private. To empty it here, turn on DiskPilot in System Settings,
-        Privacy &amp; Security, Full Disk Access, then choose Check again. You can also empty the
-        Trash from Finder.
+        {isWindows()
+          ? "Windows did not let DiskPilot list the Recycle Bin. Choose Check again, or empty it from File Explorer or the desktop."
+          : "macOS keeps the Trash private. To empty it here, turn on DiskPilot in System Settings, Privacy & Security, Full Disk Access, then choose Check again. You can also empty the Trash from Finder."}
       </DialogDescription>
     </>
   );
@@ -568,10 +577,10 @@ function Denied() {
 function Empty() {
   return (
     <>
-      <DialogTitle className="text-[17px]">The Trash is empty</DialogTitle>
+      <DialogTitle className="text-[17px]">The {words().trash} is empty</DialogTitle>
       <DialogDescription className="mt-1 text-[13px] leading-relaxed">
-        There's nothing to delete. Items you clean up in DiskPilot go to the Trash first and will
-        show up here.
+        There's nothing to delete. Items you clean up in DiskPilot go to the {words().trash} first
+        and will show up here.
       </DialogDescription>
     </>
   );

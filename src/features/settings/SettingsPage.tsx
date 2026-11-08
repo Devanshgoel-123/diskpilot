@@ -10,6 +10,7 @@ import { formatBytes, formatRelative, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { ThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
+import { isWindows, words } from "@/lib/platform";
 
 import { AssistantSettings } from "./AssistantSettings";
 import { BackgroundSettings } from "./BackgroundSettings";
@@ -47,12 +48,12 @@ function SavedResults() {
       description={
         fileBytes != null && summary ? (
           <>
-            Results from the scan {formatRelative(summary.finishedAtMs)} are kept on this Mac (
-            {formatBytes(fileBytes)}) so they appear right away next time. They hold folder names
-            and sizes, never file contents. A new scan replaces them.
+            Results from the scan {formatRelative(summary.finishedAtMs)} are kept on this{" "}
+            {words().computer} ({formatBytes(fileBytes)}) so they appear right away next time. They
+            hold folder names and sizes, never file contents. A new scan replaces them.
           </>
         ) : (
-          "The last scan is kept on this Mac so results appear right away next time. Nothing is saved yet."
+          `The last scan is kept on this ${words().computer} so results appear right away next time. Nothing is saved yet.`
         )
       }
       control={
@@ -130,8 +131,10 @@ export function SettingsPage() {
                   <span className="font-mono text-foreground">
                     {tildify(scanRoot ?? home ?? "~", home)}
                   </span>
-                  {scanRoot ? null : " (your home folder)"}. macOS may ask for permission to read
-                  protected folders such as Desktop, Documents and Downloads.
+                  {scanRoot ? null : ` (your ${words().homeFolder})`}.
+                  {isWindows()
+                    ? null
+                    : " macOS may ask for permission to read protected folders such as Desktop, Documents and Downloads."}
                 </>
               }
               control={
@@ -154,7 +157,11 @@ export function SettingsPage() {
             />
             <Setting
               label="Scan behavior"
-              description="Symbolic links are never followed, other volumes are skipped, and hard-linked files are counted once. Sizes are space allocated on disk."
+              description={
+                isWindows()
+                  ? "Links and junctions are never followed, other drives are skipped, and hard-linked files are counted once. Files kept online only by OneDrive are never opened, so nothing downloads. Sizes are space allocated on disk."
+                  : "Symbolic links are never followed, other volumes are skipped, and hard-linked files are counted once. Sizes are space allocated on disk."
+              }
               control={null}
             />
             <SavedResults />
@@ -165,7 +172,7 @@ export function SettingsPage() {
           <Section title="Safety">
             <Setting
               label="Cleanup safety"
-              description="Cleanup is always previewed with exact paths and confirmed by you. Items go to the Trash by default; permanent deletion is offered only for regenerable data. Every path is re-checked right before it is touched, protected system and home folders are refused, and symbolic links are never followed. A Docker volume is removed only when you choose it and confirm by typing a name."
+              description={`Cleanup is always previewed with exact paths and confirmed by you. Items go to the ${words().trash} by default; permanent deletion is offered only for regenerable data. Every path is re-checked right before it is touched, protected system and home folders are refused, and ${isWindows() ? "links and junctions are" : "symbolic links are"} never followed. A Docker volume is removed only when you choose it and confirm by typing a name.`}
               control={
                 <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Lock className="size-3" aria-hidden />
@@ -175,7 +182,7 @@ export function SettingsPage() {
             />
             <Setting
               label="Privacy"
-              description="Scanning, analysis and cleanup run entirely on this Mac. There is no account and no telemetry. The optional assistant is the only feature that uses the network, and only when you ask it a question."
+              description={`Scanning, analysis and cleanup run entirely on this ${words().computer}. There is no account and no telemetry. The optional assistant is the only feature that uses the network, and only when you ask it a question.`}
               control={null}
             />
           </Section>

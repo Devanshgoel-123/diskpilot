@@ -18,12 +18,13 @@ import { TrashGlyph } from "@/features/trash/TrashGlyph";
 import { useTrash } from "@/features/trash/trashStore";
 import type { CleanupMethod, CleanupPlan, CleanupRecord } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { words } from "@/lib/platform";
 
-const METHODS: { id: CleanupMethod; title: string; text: string }[] = [
+const methods = (): { id: CleanupMethod; title: string; text: string }[] => [
   {
     id: "trash",
-    title: "Move to Trash",
-    text: "Recoverable until you empty the Trash. Space is freed when you do.",
+    title: `Move to ${words().trash}`,
+    text: `Recoverable until you empty the ${words().trash}. Space is freed when you do.`,
   },
   {
     id: "delete",
@@ -110,7 +111,7 @@ export function CleanupDialog({
   const count = plan?.items.length ?? 0;
   const destructiveLabel =
     method === "trash"
-      ? `Move ${count} item${count === 1 ? "" : "s"} to Trash`
+      ? `Move ${count} item${count === 1 ? "" : "s"} to ${words().trash}`
       : `Delete ${count} item${count === 1 ? "" : "s"} permanently`;
 
   return (
@@ -129,7 +130,7 @@ export function CleanupDialog({
 
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
               <div role="radiogroup" aria-label="Cleanup method" className="grid grid-cols-2 gap-2">
-                {METHODS.map((m) => {
+                {methods().map((m) => {
                   const allowed = allowedMethods.includes(m.id);
                   return (
                     <button
@@ -282,7 +283,7 @@ function ResultView({
         <DialogDescription>
           {ok} of {record.items.length} items done.{" "}
           {record.bytesTrashed > 0
-            ? `${formatBytes(record.bytesTrashed)} moved to the Trash. Empty the Trash to free the space.`
+            ? `${formatBytes(record.bytesTrashed)} moved to the ${words().trash}. Empty the ${words().trash} to free the space.`
             : null}
           {record.bytesFreed > 0 ? `${formatBytes(record.bytesFreed)} freed.` : null} Sizes
           elsewhere reflect the last scan until you rescan.
@@ -317,7 +318,7 @@ function ResultView({
             }}
           >
             <TrashGlyph />
-            Empty Trash…
+            {words().emptyTrash}…
           </Button>
         ) : null}
         <Button onClick={onClose}>Done</Button>

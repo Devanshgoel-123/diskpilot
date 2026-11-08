@@ -15,6 +15,8 @@ import { formatBytes, formatRelative, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { AppFootprint, AppStorageReport } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { isWindows, words } from "@/lib/platform";
+import { WindowsSections } from "@/features/windows/sections";
 
 type SortKey = "total" | "data" | "app" | "name";
 
@@ -49,7 +51,7 @@ function Reveal({ path }: { path: string }) {
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Show in Finder"
+          aria-label={words().showInFileManager}
           onClick={(e) => {
             e.stopPropagation();
             api.revealInFinder(path).catch(() => setFailed(true));
@@ -59,7 +61,7 @@ function Reveal({ path }: { path: string }) {
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        {failed ? "Only folders inside the last scan can be shown" : "Show in Finder"}
+        {failed ? "Only folders inside the last scan can be shown" : words().showInFileManager}
       </TooltipContent>
     </Tooltip>
   );
@@ -190,7 +192,11 @@ export function ApplicationsPage() {
     <>
       <PageHeader
         title="Applications"
-        description="Installed apps and the data each keeps in your Library."
+        description={
+          isWindows()
+            ? "Installed apps and the data each keeps in AppData."
+            : "Installed apps and the data each keeps in your Library."
+        }
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[1120px] space-y-8 px-6 pt-6 pb-10">
@@ -221,9 +227,12 @@ export function ApplicationsPage() {
               <div className="flex flex-wrap items-end justify-between gap-6">
                 <dl className="flex flex-wrap gap-x-10 gap-y-3">
                   <Figure label="Apps" value={String(report.apps.length)} />
-                  <Figure label="In app bundles" value={formatBytes(appTotal)} />
                   <Figure
-                    label="App data in Library"
+                    label={isWindows() ? "In program folders" : "In app bundles"}
+                    value={formatBytes(appTotal)}
+                  />
+                  <Figure
+                    label={isWindows() ? "App data in AppData" : "App data in Library"}
                     value={report.dataScanned ? formatBytes(dataTotal) : "Not scanned"}
                   />
                   {report.leftovers.length ? (
@@ -264,8 +273,8 @@ export function ApplicationsPage() {
               {!report.dataScanned ? (
                 <div className="flex items-center justify-between gap-4 rounded-lg bg-panel-raised px-4 py-3">
                   <p className="text-[13px] text-muted-foreground">
-                    App sizes are shown. Scan your home folder to add each app&apos;s caches,
-                    containers and support files.
+                    App sizes are shown. Scan your {words().homeFolder} to add each app&apos;s
+                    caches, containers and support files.
                   </p>
                   <Button size="sm" disabled={scanning} onClick={() => void startScan()}>
                     {scanning ? "Scanning…" : "Scan"}
@@ -313,7 +322,7 @@ export function ApplicationsPage() {
               {report.leftovers.length ? (
                 <Section
                   title="Left behind by removed apps"
-                  description="Sandbox data from apps that are no longer installed. It can hold documents the app saved, so DiskPilot never removes it. Review it in Finder."
+                  description={`Sandbox data from apps that are no longer installed. It can hold documents the app saved, so DiskPilot never removes it. Review it in ${words().fileManager}.`}
                 >
                   <ul className="border-t border-border">
                     {report.leftovers.map((l) => (
@@ -343,6 +352,8 @@ export function ApplicationsPage() {
                   </ul>
                 </Section>
               ) : null}
+
+              <WindowsSections page="applications" />
             </>
           )}
         </div>
