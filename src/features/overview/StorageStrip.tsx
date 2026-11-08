@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { recoverableByCategory } from "@/lib/analysis";
 import { CATEGORY_META } from "@/lib/categories";
 import { formatBytes, formatPercent } from "@/lib/format";
+import { isWindows, words } from "@/lib/platform";
 import type { DiskInfo, Recommendation, ScanSummary } from "@/lib/types";
 
 interface Segment {
@@ -32,8 +33,11 @@ export function StorageStrip({
   summary,
   recommendations,
   onReview,
+  title = "Startup disk",
 }: {
   disk: DiskInfo;
+  /** The heading: "Startup disk" on macOS, the drive's name on Windows. */
+  title?: string;
   summary: ScanSummary | null;
   recommendations: Recommendation[];
   onReview: () => void;
@@ -72,7 +76,7 @@ export function StorageStrip({
       <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-4">
         <div>
           <h2 id="storage-heading" className="text-xs text-muted-foreground">
-            Startup disk
+            {title}
           </h2>
           <p className="tabular mt-1 text-[28px] leading-8 font-semibold tracking-tight">
             {formatBytes(disk.usedBytes)}
@@ -85,14 +89,18 @@ export function StorageStrip({
           <Figure
             label="Available"
             value={formatBytes(disk.availableBytes)}
-            tip="Space free right now. Finder may show more because it also counts purgeable space, such as local snapshots, that macOS frees on demand."
+            tip={
+              isWindows()
+                ? "Space free on this drive right now."
+                : "Space free right now. Finder may show more because it also counts purgeable space, such as local snapshots, that macOS frees on demand."
+            }
           />
           {summary ? (
             <Figure
               label="Likely recoverable"
               value={formatBytes(recoverableTotal)}
               tone="safe"
-              tip="The total of Likely safe recommendations: regenerable data such as caches and build output. Every item is still previewed and confirmed, and goes to the Trash first."
+              tip={`The total of Likely safe recommendations: regenerable data such as caches and build output. Every item is still previewed and confirmed, and goes to the ${words().trash} first.`}
             />
           ) : null}
           {summary && recoverableTotal > 0 ? (
