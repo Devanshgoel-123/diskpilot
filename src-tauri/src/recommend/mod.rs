@@ -12,7 +12,10 @@ use std::path::{Path, PathBuf};
 use crate::classifier::{Classifier, FsProbe};
 use crate::model::{Classification, Recommendation, ScanSummary, Tier};
 use crate::scanner::{to_ms, DirIndex};
-use policies::{policy_for, Expand, Policy, DOWNLOAD_INSTALLER_EXTENSIONS};
+use policies::{
+    policy_for, Expand, Policy, DOWNLOAD_INSTALLER_EXTENSIONS,
+    WINDOWS_DOWNLOAD_INSTALLER_EXTENSIONS,
+};
 
 const DAY_MS: i64 = 86_400_000;
 /// A project untouched this long is called out as possibly inactive.
@@ -160,6 +163,15 @@ fn build(c: Candidate, now_ms: i64) -> Recommendation {
                 .to_string(),
         );
     }
+    // Most of WinSxS is hard links into System32; its size says little about
+    // what DISM can free, so no estimate is claimed.
+    let unknown_reclaim = p.rule_id == "windows.component-store";
+    if unknown_reclaim {
+        notes.push(
+            "Its size overstates what cleanup frees, because most files are shared with System32. DISM /AnalyzeComponentStore reports the real figure."
+                .to_string(),
+        );
+    }
 
     Recommendation {
         id: c.path.display().to_string(),
@@ -179,7 +191,9 @@ fn build(c: Candidate, now_ms: i64) -> Recommendation {
         proposed_action: p.proposed_action.to_string(),
         methods: p.methods.to_vec(),
         alternative: p.alternative.map(str::to_string),
-        estimated_reclaim_bytes: if p.methods.is_empty() && p.alternative.is_none() {
+        estimated_reclaim_bytes: if unknown_reclaim
+            || (p.methods.is_empty() && p.alternative.is_none())
+        {
             0
         } else {
             c.bytes
@@ -247,17 +261,21 @@ fn project_activity_ms(project: &Path) -> Option<i64> {
 
 /// Large installers and archives sitting in ~/Downloads.
 fn downloads_installers(summary: &ScanSummary, classifier: &Classifier) -> Vec<Recommendation> {
-    let downloads = classifier.home().join("Downloads");
+    let (extensions, bin) = if classifier.is_windows() {
+        (WINDOWS_DOWNLOAD_INSTALLER_EXTENSIONS, "Recycle Bin")
+    } else {
+        (DOWNLOAD_INSTALLER_EXTENSIONS, "Trash")
+    };
     summary
         .largest_files
         .iter()
         .filter(|f| f.bytes >= 50_000_000)
-        .filter(|f| Path::new(&f.path).starts_with(&downloads))
+        .filter(|f| classifier.is_in_home_folder(Path::new(&f.path), "Downloads"))
         .filter(|f| {
-            Path::new(&f.path)
+            Path::new(&f.name)
                 .extension()
                 .map(|e| e.to_string_lossy().to_ascii_lowercase())
-                .is_some_and(|e| DOWNLOAD_INSTALLER_EXTENSIONS.contains(&e.as_str()))
+                .is_some_and(|e| extensions.contains(&e.as_str()))
         })
         .map(|f| Recommendation {
             id: f.path.clone(),
@@ -272,7 +290,7 @@ fn downloads_installers(summary: &ScanSummary, classifier: &Classifier) -> Vec<R
             classification: classifier.classify_path(Path::new(&f.path), false, &FsProbe),
             safe_because: "Installers are usually not needed after the app is installed.".to_string(),
             risks: "This may be the only copy of what it contains, or an installer you cannot download again.".to_string(),
-            proposed_action: "Move the file to the Trash".to_string(),
+            proposed_action: format!("Move the file to the {bin}"),
             methods: vec![crate::model::CleanupMethod::Trash],
             alternative: None,
             estimated_reclaim_bytes: f.bytes,
@@ -367,7 +385,7 @@ mod tests {
     }
 
     fn run(s: &ScanSummary, index: &DirIndex) -> Vec<Recommendation> {
-        recommend(s, index, &Classifier::new(HOME), 0)
+        recommend(s, index, &Classifier::macos(HOME), 0)
     }
 
     #[test]
@@ -571,7 +589,7 @@ mod tests {
         let mut index = DirIndex::new();
         index.insert(backup.clone(), stats(8_000_000_000));
         let now = 1_700_000_000_000 + 40 * DAY_MS;
-        let recs = recommend(&s, &index, &Classifier::new(HOME), now);
+        let recs = recommend(&s, &index, &Classifier::macos(HOME), now);
         assert_eq!(recs.len(), 1);
         let r = &recs[0];
         assert_eq!(r.title, format!("{} · Test iPhone", r.classification.label));
@@ -591,9 +609,15 @@ mod tests {
     #[test]
     fn every_policy_references_a_real_rule_and_explains_risk() {
         use crate::classifier::rules::DIR_RULES;
-        for p in policies::POLICIES {
+        use crate::classifier::windows_rules::WINDOWS_DIR_RULES;
+        let mut ids = std::collections::HashSet::new();
+        for p in policies::POLICIES.iter().chain(policies::WINDOWS_POLICIES) {
+            assert!(ids.insert(p.rule_id), "two policies for {}", p.rule_id);
             assert!(
-                DIR_RULES.iter().any(|r| r.id == p.rule_id),
+                DIR_RULES
+                    .iter()
+                    .chain(WINDOWS_DIR_RULES)
+                    .any(|r| r.id == p.rule_id),
                 "unknown rule {}",
                 p.rule_id
             );
@@ -609,6 +633,116 @@ mod tests {
             }
             if p.methods.contains(&CleanupMethod::Delete) {
                 assert_ne!(p.tier, Tier::Keep);
+            }
+        }
+    }
+
+    #[test]
+    fn windows_installers_in_downloads_are_review_first() {
+        use crate::classifier::WindowsRoots;
+        let file = |name: &str| FileEntry {
+            path: format!(r"C:\Users\Test\Downloads\{name}"),
+            name: name.into(),
+            bytes: 900_000_000,
+            logical_bytes: 900_000_000,
+            modified_ms: None,
+            classification: class("home.downloads", "Downloads"),
+        };
+        let s = summary(
+            vec![],
+            vec![
+                file("Setup.EXE"),
+                file("App.msix"),
+                file("Big.dmg"),
+                file("movie.mp4"),
+            ],
+        );
+        let c = Classifier::windows(WindowsRoots::for_home(r"C:\Users\Test"));
+        let recs = recommend(&s, &DirIndex::new(), &c, 0);
+        let titles: Vec<&str> = recs.iter().map(|r| r.title.as_str()).collect();
+        assert_eq!(recs.len(), 2, "{titles:?}");
+        assert!(recs.iter().all(|r| r.tier == Tier::ReviewFirst
+            && r.proposed_action == "Move the file to the Recycle Bin"));
+    }
+
+    #[test]
+    fn windows_system_areas_point_to_windows_tools_and_are_never_actionable() {
+        let s = summary(
+            vec![
+                loc(
+                    r"C:\Windows\WinSxS",
+                    9_000_000_000,
+                    "windows.component-store",
+                ),
+                loc(r"C:\Windows.old", 20_000_000_000, "windows.old"),
+                loc(
+                    r"C:\Windows\SoftwareDistribution\Download",
+                    2_000_000_000,
+                    "windows.update-cache",
+                ),
+                loc(
+                    r"C:\Windows\Installer",
+                    5_000_000_000,
+                    "windows.installer-cache",
+                ),
+            ],
+            vec![],
+        );
+        let recs = run(&s, &DirIndex::new());
+        assert_eq!(recs.len(), 4);
+        assert!(recs.iter().all(|r| r.methods.is_empty()));
+        let find = |p: &str| recs.iter().find(|r| r.path == p).unwrap();
+        let sxs = find(r"C:\Windows\WinSxS");
+        assert!(sxs
+            .alternative
+            .as_deref()
+            .unwrap()
+            .contains("/StartComponentCleanup"));
+        // Hard links make WinSxS look bigger than what cleanup frees.
+        assert_eq!(sxs.estimated_reclaim_bytes, 0);
+        assert!(sxs
+            .notes
+            .iter()
+            .any(|n| n.contains("AnalyzeComponentStore")));
+        assert_eq!(
+            find(r"C:\Windows.old").estimated_reclaim_bytes,
+            20_000_000_000
+        );
+        assert_eq!(find(r"C:\Windows\Installer").tier, Tier::Keep);
+    }
+
+    #[test]
+    fn windows_policies_never_act_on_system_areas() {
+        use crate::classifier::rules::Matcher;
+        use crate::classifier::rules::Root;
+        use crate::classifier::windows_rules::WINDOWS_DIR_RULES;
+        let system = [
+            Root::SystemRoot,
+            Root::ProgramData,
+            Root::SystemDrive,
+            Root::AnyDrive,
+        ];
+        for rule in WINDOWS_DIR_RULES {
+            let Some(policy) = policies::policy_for(rule.id) else {
+                continue;
+            };
+            let in_system = matches!(&rule.matcher, Matcher::Under(opts)
+                if opts.iter().any(|(root, _)| system.contains(root)));
+            let steam = rule.id.starts_with("steam.") && rule.id != "steam.web-cache";
+            if in_system || steam {
+                assert!(
+                    policy.methods.is_empty(),
+                    "{} must not be actionable",
+                    rule.id
+                );
+            }
+            if rule.category == crate::model::Category::SystemFiles {
+                assert!(policy.methods.is_empty(), "{}", rule.id);
+                assert!(
+                    policy.alternative.is_some() || policy.tier == Tier::Keep,
+                    "{} names no Windows tool",
+                    rule.id
+                );
             }
         }
     }
