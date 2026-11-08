@@ -95,3 +95,8 @@ pub fn relaunch_elevated() -> std::io::Result<()> {
         "Only available on Windows",
     ))
 }
+
+/// The absolute path with links resolved: `std::fs::canonicalize`.
+pub fn canonicalize(path: &Path) -> std::io::Result<std::path::PathBuf> {
+    std::fs::canonicalize(path)
+}

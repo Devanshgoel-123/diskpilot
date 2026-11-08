@@ -238,9 +238,77 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
+/// The absolute path with links resolved, in the form people and the rest
+/// of DiskPilot use: `C:\Users\…` rather than the `\\?\C:\Users\…` that
+/// `std::fs::canonicalize` returns. The prefix is kept only when dropping it
+/// would change which file the path names (a name Windows treats specially,
+/// such as one ending in a dot or space, or a device name like `CON`). The
+/// standard library adds the prefix back itself for paths over 260
+/// characters.
+pub fn canonicalize(path: &Path) -> std::io::Result<PathBuf> {
+    std::fs::canonicalize(path).map(simplify)
+}
+
+/// Drop the `\\?\` prefix from a verbatim path when that is safe.
+pub fn simplify(path: PathBuf) -> PathBuf {
+    let Some(s) = path.to_str() else {
+        return path;
+    };
+    let (rest, unc) = if let Some(r) = s.strip_prefix(r"\\?\UNC\") {
+        (r, true)
+    } else if let Some(r) = s.strip_prefix(r"\\?\") {
+        (r, false)
+    } else {
+        return path;
+    };
+    let drive = rest.as_bytes();
+    let has_drive = drive.len() >= 2 && drive[0].is_ascii_alphabetic() && drive[1] == b':';
+    if !unc && !has_drive {
+        // \\?\Volume{…} and other device paths have no plain form.
+        return path;
+    }
+    let reserved = |c: &str| {
+        let stem = c.split('.').next().unwrap_or("").to_ascii_uppercase();
+        matches!(
+            stem.as_str(),
+            "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+        ) || ((stem.starts_with("COM") || stem.starts_with("LPT"))
+            && stem.len() == 4
+            && stem.as_bytes()[3].is_ascii_digit())
+    };
+    let skip = if unc { 0 } else { 1 };
+    let unsafe_component = rest
+        .split('\\')
+        .skip(skip)
+        .any(|c| c.ends_with('.') || c.ends_with(' ') || reserved(c));
+    if unsafe_component {
+        return path;
+    }
+    if unc {
+        PathBuf::from(format!(r"\\{rest}"))
+    } else {
+        PathBuf::from(rest)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn verbatim_prefix_is_dropped_when_safe() {
+        let s = |p: &str| simplify(PathBuf::from(p)).display().to_string();
+        assert_eq!(s(r"\\?\C:\Users\me\Downloads"), r"C:\Users\me\Downloads");
+        assert_eq!(s(r"\\?\C:\"), r"C:\");
+        assert_eq!(s(r"\\?\UNC\server\share\dir"), r"\\server\share\dir");
+        assert_eq!(s(r"C:\already\plain"), r"C:\already\plain");
+        // Kept: the plain form would name something else, or has none.
+        assert_eq!(s(r"\\?\C:\odd name."), r"\\?\C:\odd name.");
+        assert_eq!(s(r"\\?\C:\dir\nul.txt"), r"\\?\C:\dir\nul.txt");
+        assert_eq!(s(r"\\?\C:\dir\COM1"), r"\\?\C:\dir\COM1");
+        assert_eq!(s(r"\\?\Volume{0}\x"), r"\\?\Volume{0}\x");
+        assert_eq!(s(r"\\?\C:\COMPANY\LPT"), r"C:\COMPANY\LPT");
+    }
 
     #[test]
     fn civil_days() {
