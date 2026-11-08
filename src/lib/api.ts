@@ -41,6 +41,10 @@ import type {
   TrashProgress,
   TrashResult,
   TrashSummary,
+  CompactMethod,
+  CompactPreview,
+  CompactResult,
+  WslOverview,
 } from "./types";
 
 export const inDesktopApp = (): boolean => isTauri();
@@ -121,6 +125,14 @@ export const api = {
   dockerInspect: (kind: "container" | "image" | "volume", id: string) =>
     invoke<string>("docker_inspect", { kind, id }),
   dockerDiagnostics: () => invoke<DiagnosticFinding[]>("docker_diagnostics"),
+
+  /** WSL 2 and Docker Desktop virtual disks (Windows; `supported` is false on macOS). */
+  wslDisks: () => invoke<WslOverview>("wsl_disks"),
+  wslCompactPreview: (diskId: string, method: CompactMethod) =>
+    invoke<CompactPreview>("wsl_compact_preview", { diskId, method }),
+  /** Runs the reviewed preview `previewId`; `typed` must equal its `confirmName`. */
+  wslCompactExecute: (previewId: string, typed: string) =>
+    invoke<CompactResult>("wsl_compact_execute", { previewId, typed }),
 };
 
 export function onScanProgress(cb: (p: ScanProgress) => void): Promise<UnlistenFn> {

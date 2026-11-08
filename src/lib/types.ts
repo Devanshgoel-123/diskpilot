@@ -276,7 +276,7 @@ export interface CleanupItemResult {
 
 export interface CleanupRecord {
   id: string;
-  kind: "files" | "docker" | "trash";
+  kind: "files" | "docker" | "trash" | "wsl";
   title: string;
   startedAtMs: number;
   finishedAtMs: number;
@@ -478,6 +478,85 @@ export interface DiagnosticFinding {
   title: string;
   detail: string;
   bytes: number | null;
+}
+
+// ---- WSL and Docker virtual disks (src-tauri/src/wsl) ----------------------
+
+export type VirtualDiskKind = "distro" | "dockerData" | "dockerSystem";
+
+export interface VirtualDisk {
+  /** Stable id: `distro:{GUID}` or `docker:{file}`. */
+  id: string;
+  kind: VirtualDiskKind;
+  /** The distribution's name, or "Docker Desktop data". */
+  name: string;
+  /** The registered WSL distribution, when there is one. */
+  distro: string | null;
+  /** The .vhdx file. */
+  path: string;
+  fileBytes: number;
+  /** Space on the drive (less than fileBytes when sparse). */
+  allocatedBytes: number;
+  sparse: boolean;
+  /** null when not known (Docker disks, or WSL did not answer). */
+  running: boolean | null;
+  isDefault: boolean;
+  /** Space Linux uses inside, when it could be measured. */
+  usedBytes: number | null;
+  /** allocatedBytes minus usedBytes, when usedBytes is known. */
+  reclaimableBytes: number | null;
+  /** How usedBytes was found, or why it is unknown. */
+  usageNote: string;
+}
+
+export interface WslOverview {
+  /** false on macOS. */
+  supported: boolean;
+  disks: VirtualDisk[];
+  totalBytes: number;
+  reclaimableBytes: number;
+  message: string | null;
+}
+
+export type CompactMethod = "compact" | "sparse";
+export type CompactTool = "optimizeVhd" | "diskpart" | "wslManage";
+
+export interface CompactStep {
+  label: string;
+  /** Program and arguments exactly as run; `<script>` stands for the script file. */
+  command: string[];
+  /** Runs as administrator after a UAC prompt. */
+  elevated: boolean;
+  /** The script's full text, for an administrator step. */
+  script: string | null;
+}
+
+export interface CompactPreview {
+  id: string;
+  disk: VirtualDisk;
+  method: CompactMethod;
+  tool: CompactTool | null;
+  title: string;
+  steps: CompactStep[];
+  effects: string[];
+  warnings: string[];
+  /** Set when this cannot run; show the reason instead of a confirm button. */
+  blocked: string | null;
+  /** The name to type to confirm. */
+  confirmName: string;
+  beforeBytes: number;
+  estimatedReclaimBytes: number | null;
+}
+
+export interface CompactResult {
+  preview: CompactPreview;
+  succeeded: boolean;
+  beforeBytes: number;
+  afterBytes: number;
+  freedBytes: number;
+  output: string;
+  error: string | null;
+  record: CleanupRecord;
 }
 
 // ---- Developer tools analysis (src-tauri/src/devtools) ---------------------
