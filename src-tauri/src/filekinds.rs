@@ -60,6 +60,7 @@ impl FileKind {
                 "mp3", "m4a", "aac", "wav", "aif", "aiff", "flac", "ogg", "opus", "wma", "caf",
             ],
             FileKind::Archives => &["zip", "rar", "7z", "tar", "gz", "tgz", "bz2", "xz", "zst"],
+            FileKind::Installers if cfg!(windows) => WINDOWS_INSTALLERS,
             FileKind::Installers => &["dmg", "pkg", "mpkg", "iso", "exe", "msi", "apk", "ipa"],
             FileKind::Documents => &[
                 "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "epub",
@@ -81,10 +82,40 @@ impl FileKind {
     }
 }
 
+/// Installers on Windows: the macOS list plus Windows app packages.
+const WINDOWS_INSTALLERS: &[&str] = &[
+    "exe",
+    "msi",
+    "msix",
+    "msixbundle",
+    "appx",
+    "appxbundle",
+    "iso",
+    "dmg",
+    "pkg",
+    "apk",
+    "ipa",
+];
+
+/// Folders in a Windows profile whose files belong to programs, not to the
+/// person (the equivalent of `~/Library`).
+const WINDOWS_SKIPPED_HOME_DIRS: &[&[&str]] = &[
+    &["AppData"],
+    &["go", "pkg"],
+    &["miniconda3"],
+    &["anaconda3"],
+    &["miniforge3"],
+    &["scoop"],
+    &["MicrosoftEdgeBackups"],
+];
+
 /// Whether files directly inside `dir` are personal files: under `home`,
 /// and not inside `~/Library`, a hidden folder, a bundle or a dependency
 /// folder.
 pub fn personal_dir(dir: &Path, home: &Path) -> bool {
+    if cfg!(windows) {
+        return personal_dir_windows(&dir.to_string_lossy(), &home.to_string_lossy());
+    }
     let Ok(rel) = dir.strip_prefix(home) else {
         return false;
     };
@@ -93,6 +124,21 @@ pub fn personal_dir(dir: &Path, home: &Path) -> bool {
     }
     rel.components()
         .all(|c| c.as_os_str().to_str().is_some_and(|n| !skipped_dir_name(n)))
+}
+
+/// [`personal_dir`] on Windows: names compare ignoring case, `\\?\` paths
+/// from the scanner match the profile folder, and AppData is skipped.
+fn personal_dir_windows(dir: &str, home: &str) -> bool {
+    use crate::classifier::windows_paths::{eq_ignore_case, WinPath};
+    let (dir, home) = (WinPath::parse(dir), WinPath::parse(home));
+    if home.parts.is_empty() || !dir.starts_with_parts(&home.parts) {
+        return false;
+    }
+    let rel = &dir.parts[home.parts.len()..];
+    let skipped = WINDOWS_SKIPPED_HOME_DIRS.iter().any(|d| {
+        rel.len() >= d.len() && rel.iter().zip(d.iter()).all(|(a, b)| eq_ignore_case(a, b))
+    });
+    !skipped && rel.iter().all(|n| !skipped_dir_name(n))
 }
 
 /// One type's total and its largest files.
@@ -327,6 +373,45 @@ mod tests {
         assert_eq!(FileKind::of(OsStr::new(".hidden.mp4")), None);
     }
 
+    #[test]
+    fn windows_profile_folders_hold_personal_files_outside_appdata() {
+        let home = r"C:\Users\a";
+        for d in [
+            r"C:\Users\a",
+            r"C:\Users\a\Downloads",
+            r"\\?\C:\Users\a\Videos\Trips",
+            r"c:\users\A\Documents",
+        ] {
+            assert!(personal_dir_windows(d, home), "{d}");
+        }
+        for d in [
+            r"C:\Users\b\Downloads",
+            r"C:\Users\a\AppData\Local\Temp",
+            r"C:\Users\a\appdata\Roaming\x",
+            r"C:\Users\a\.cache",
+            r"C:\Users\a\code\app\node_modules\x",
+            r"C:\Users\a\go\pkg\mod",
+            r"C:\Users\a\scoop\apps",
+        ] {
+            assert!(!personal_dir_windows(d, home), "{d}");
+        }
+    }
+
+    #[test]
+    fn windows_app_packages_are_installers() {
+        if cfg!(windows) {
+            for name in ["Setup.msix", "App.APPXBUNDLE", "tool.msi", "x.exe"] {
+                assert_eq!(
+                    FileKind::of(OsStr::new(name)),
+                    Some(FileKind::Installers),
+                    "{name}"
+                );
+            }
+        }
+        assert!(WINDOWS_INSTALLERS.contains(&"msixbundle"));
+    }
+
+    #[cfg(not(windows))]
     #[test]
     fn only_folders_a_person_manages_hold_personal_files() {
         let home = Path::new("/Users/a");
