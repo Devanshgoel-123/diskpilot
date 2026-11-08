@@ -60,6 +60,9 @@ windows-sys = { version = "0.61", features = [
   "Win32_System_Ioctl",
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
+  "Win32_System_Registry",
+  "Win32_Security_WinTrust",
+  "Win32_Security_Cryptography",
 ] }
 # Shell integration: thumbnails, icons, File Explorer, installed programs.
 windows = { version = "0.62", features = [

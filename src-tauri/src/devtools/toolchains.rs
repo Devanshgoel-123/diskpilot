@@ -186,6 +186,38 @@ pub fn rust(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
     )
 }
 
+const PYTHON_CACHES_MAC: &[(&str, &str, &str)] = &[
+    (
+        "pip cache",
+        "Library/Caches/pip",
+        "Clean with `pip cache purge`",
+    ),
+    ("uv cache", ".cache/uv", "Clean with `uv cache clean`"),
+    (
+        "Poetry cache",
+        "Library/Caches/pypoetry",
+        "Clean with `poetry cache clear --all .`",
+    ),
+];
+
+const PYTHON_CACHES_WINDOWS: &[(&str, &str, &str)] = &[
+    (
+        "pip cache",
+        "AppData/Local/pip/Cache",
+        "Clean with `pip cache purge`",
+    ),
+    (
+        "uv cache",
+        "AppData/Local/uv/cache",
+        "Clean with `uv cache clean`",
+    ),
+    (
+        "Poetry cache",
+        "AppData/Local/pypoetry/Cache",
+        "Clean with `poetry cache clear --all .`",
+    ),
+];
+
 pub fn python(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
     let mut sections = Vec::new();
     let venvs = project_items(
@@ -210,19 +242,11 @@ pub fn python(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
     }
     let caches = path_items(
         ctx,
-        &[
-            (
-                "pip cache",
-                "Library/Caches/pip",
-                "Clean with `pip cache purge`",
-            ),
-            ("uv cache", ".cache/uv", "Clean with `uv cache clean`"),
-            (
-                "Poetry cache",
-                "Library/Caches/pypoetry",
-                "Clean with `poetry cache clear --all .`",
-            ),
-        ],
+        if cfg!(windows) {
+            PYTHON_CACHES_WINDOWS
+        } else {
+            PYTHON_CACHES_MAC
+        },
     );
     if !caches.is_empty() {
         sections.push(ToolSection {

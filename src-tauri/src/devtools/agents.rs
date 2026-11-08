@@ -13,7 +13,8 @@ use crate::model::{CleanupMethod, MarkerKind, Recommendation, Tier};
 pub struct VersionedCli {
     pub name: &'static str,
     pub versions_dir: &'static str,
-    /// Launcher symlink pointing into the current version.
+    /// Launcher symlink pointing into the current version. On Windows the
+    /// launcher is a copy of the current version's binary instead.
     pub launcher: &'static str,
     /// Report the recommendations belong to.
     pub source: &'static str,
@@ -22,7 +23,11 @@ pub struct VersionedCli {
 pub const CLAUDE_CODE: VersionedCli = VersionedCli {
     name: "Claude Code",
     versions_dir: ".local/share/claude/versions",
-    launcher: ".local/bin/claude",
+    launcher: if cfg!(windows) {
+        ".local/bin/claude.exe"
+    } else {
+        ".local/bin/claude"
+    },
     source: "claude-code",
 };
 
@@ -46,10 +51,15 @@ const DATA_DIRS: &[(&str, &str, &str)] = &[
     ),
 ];
 
-/// The version folder (a direct child of `versions`) the launcher points into.
+/// The version folder (a direct child of `versions`) the launcher points into,
+/// or, when the launcher is a plain copy (Windows), the one version it is a
+/// copy of.
 fn current_version(ctx: &Ctx, cli: &VersionedCli) -> Option<PathBuf> {
     let versions = ctx.home_path(cli.versions_dir);
-    let target = std::fs::read_link(ctx.home_path(cli.launcher)).ok()?;
+    let launcher = ctx.home_path(cli.launcher);
+    let Ok(target) = std::fs::read_link(&launcher) else {
+        return copied_version(&launcher, &versions);
+    };
     let target = if target.is_absolute() {
         target
     } else {
@@ -58,6 +68,41 @@ fn current_version(ctx: &Ctx, cli: &VersionedCli) -> Option<PathBuf> {
     let rel = target.strip_prefix(&versions).ok()?;
     let first = rel.components().next()?;
     Some(versions.join(first))
+}
+
+/// The single version binary the launcher file is a copy of: same length and
+/// the same first and last 64 KB. `None` when no entry or more than one
+/// matches, so an unclear case never marks anything superseded.
+fn copied_version(launcher: &Path, versions: &Path) -> Option<PathBuf> {
+    let meta = launcher.symlink_metadata().ok()?;
+    if !meta.is_file() {
+        return None;
+    }
+    let mut matches = version_entries(versions).into_iter().filter(|entry| {
+        entry
+            .symlink_metadata()
+            .is_ok_and(|m| m.is_file() && m.len() == meta.len())
+            && same_ends(launcher, entry, meta.len())
+    });
+    let first = matches.next()?;
+    matches.next().is_none().then_some(first)
+}
+
+fn same_ends(a: &Path, b: &Path, len: u64) -> bool {
+    use std::io::{Read, Seek, SeekFrom};
+    const SPAN: u64 = 64 * 1024;
+    let read = |path: &Path| -> Option<Vec<u8>> {
+        let mut f = std::fs::File::open(path).ok()?;
+        let mut head = vec![0u8; SPAN.min(len) as usize];
+        f.read_exact(&mut head).ok()?;
+        let tail_start = len.saturating_sub(SPAN);
+        f.seek(SeekFrom::Start(tail_start)).ok()?;
+        let mut tail = Vec::new();
+        f.take(SPAN).read_to_end(&mut tail).ok()?;
+        head.extend(tail);
+        Some(head)
+    };
+    matches!((read(a), read(b)), (Some(x), Some(y)) if x == y)
 }
 
 /// Version entries may be folders or single binaries.
@@ -251,6 +296,26 @@ mod tests {
         );
         assert_eq!(recs.len(), 1);
         assert!(recs[0].path.ends_with("2.1.312"));
+    }
+
+    #[test]
+    fn a_copied_launcher_names_the_version_it_copies() {
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        let vdir = home.join(".local/share/claude/versions");
+        std::fs::create_dir_all(&vdir).unwrap();
+        std::fs::write(vdir.join("2.1.312"), b"old build").unwrap();
+        std::fs::write(vdir.join("2.1.316"), b"new build").unwrap();
+        let launcher = home.join(".local/bin/claude.exe");
+        std::fs::create_dir_all(launcher.parent().unwrap()).unwrap();
+        std::fs::write(&launcher, b"new build").unwrap();
+        assert_eq!(
+            copied_version(&launcher, &vdir).as_deref(),
+            Some(vdir.join("2.1.316").as_path())
+        );
+        // Two identical candidates: unclear, so nothing is current.
+        std::fs::write(vdir.join("2.1.317"), b"new build").unwrap();
+        assert!(copied_version(&launcher, &vdir).is_none());
     }
 
     #[test]

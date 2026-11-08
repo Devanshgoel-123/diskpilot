@@ -193,23 +193,34 @@ impl IdeData {
     }
 }
 
-const IDE_ROOTS: &[(&str, IdeData, bool)] = &[
-    ("Library/Caches/JetBrains", IdeData::Caches, false),
-    ("Library/Logs/JetBrains", IdeData::Logs, false),
-    (
-        "Library/Application Support/JetBrains",
-        IdeData::Settings,
-        false,
-    ),
-    // Android Studio keeps its folders under Google; only its own count.
-    ("Library/Caches/Google", IdeData::Caches, true),
-    ("Library/Logs/Google", IdeData::Logs, true),
-    (
-        "Library/Application Support/Google",
-        IdeData::Settings,
-        true,
-    ),
-];
+const IDE_ROOTS: &[(&str, IdeData, bool)] = if cfg!(windows) {
+    // Windows keeps caches, indexes and logs together under %LOCALAPPDATA%
+    // and settings and plugins under %APPDATA%.
+    &[
+        ("AppData/Local/JetBrains", IdeData::Caches, false),
+        ("AppData/Roaming/JetBrains", IdeData::Settings, false),
+        ("AppData/Local/Google", IdeData::Caches, true),
+        ("AppData/Roaming/Google", IdeData::Settings, true),
+    ]
+} else {
+    &[
+        ("Library/Caches/JetBrains", IdeData::Caches, false),
+        ("Library/Logs/JetBrains", IdeData::Logs, false),
+        (
+            "Library/Application Support/JetBrains",
+            IdeData::Settings,
+            false,
+        ),
+        // Android Studio keeps its folders under Google; only its own count.
+        ("Library/Caches/Google", IdeData::Caches, true),
+        ("Library/Logs/Google", IdeData::Logs, true),
+        (
+            "Library/Application Support/Google",
+            IdeData::Settings,
+            true,
+        ),
+    ]
+};
 
 const IDE_NAMES: &[(&str, &str)] = &[
     ("IntelliJIdea", "IntelliJ IDEA"),
@@ -282,7 +293,10 @@ fn ides(ctx: &Ctx, opts: &Options) -> Option<(ToolSection, Vec<Recommendation>)>
     let mut found = Found::new(opts.min_recommended_bytes);
     for (product, entries) in by_product {
         let display = ide_display(&product);
-        let installed = ide_installed(&product, opts.apps);
+        // On Windows, JetBrains Toolbox installs IDEs where the app list does
+        // not see them, so a missing app is not evidence there: only older
+        // versions are flagged.
+        let installed = cfg!(windows) || ide_installed(&product, opts.apps);
         let Some(newest) = entries.iter().map(|(v, _, _)| v.clone()).max() else {
             continue;
         };
@@ -485,8 +499,23 @@ fn versioned_dirs(
     }
 }
 
+/// The Android SDK: `ANDROID_HOME` (or the older `ANDROID_SDK_ROOT`) when
+/// set, otherwise where Android Studio installs it.
+fn android_sdk(ctx: &Ctx) -> PathBuf {
+    ctx.env_path("ANDROID_HOME")
+        .or_else(|| ctx.env_path("ANDROID_SDK_ROOT"))
+        .filter(|_| cfg!(windows))
+        .unwrap_or_else(|| {
+            ctx.home_path(if cfg!(windows) {
+                "AppData/Local/Android/Sdk"
+            } else {
+                "Library/Android/sdk"
+            })
+        })
+}
+
 fn android(ctx: &Ctx, opts: &Options) -> Option<(ToolSection, Vec<Recommendation>)> {
-    let sdk = ctx.home_path("Library/Android/sdk");
+    let sdk = android_sdk(ctx);
     let mut found = Found::new(opts.min_recommended_bytes);
     for (sub, what) in [
         ("build-tools", "Android build tools"),
@@ -503,10 +532,56 @@ fn android(ctx: &Ctx, opts: &Options) -> Option<(ToolSection, Vec<Recommendation
             "A project that pins this version downloads it again on its next build.",
         );
     }
+    if cfg!(windows) {
+        emulator_items(ctx, &sdk, &mut found);
+    }
     found.section(
         "Android SDK",
         "Android Studio installs new SDK tools next to old ones and does not remove them.",
     )
+}
+
+/// Emulator system images and virtual devices, listed with their sizes.
+/// Which ones a person still needs is theirs to judge, so they are removed
+/// in Android Studio's Device Manager and SDK Manager, not here.
+fn emulator_items(ctx: &Ctx, sdk: &Path, found: &mut Found) {
+    // system-images/android-34/google_apis/x86_64
+    for api in subdirs(&sdk.join("system-images")) {
+        for variant in subdirs(&api) {
+            for abi in subdirs(&variant) {
+                let bytes = ctx.size(&abi);
+                found.item(
+                    format!(
+                        "System image {} {} {}",
+                        name_of(&api),
+                        name_of(&variant),
+                        name_of(&abi)
+                    ),
+                    &abi,
+                    bytes,
+                    "Remove unused images in Android Studio's SDK Manager.".into(),
+                    ItemState::Info,
+                );
+            }
+        }
+    }
+    let avd_root = ctx
+        .env_path("ANDROID_AVD_HOME")
+        .unwrap_or_else(|| ctx.home_path(".android/avd"));
+    for avd in subdirs(&avd_root) {
+        let name = name_of(&avd);
+        let Some(device) = name.strip_suffix(".avd") else {
+            continue;
+        };
+        let bytes = ctx.size(&avd);
+        found.item(
+            format!("Virtual device {}", device.replace('_', " ")),
+            &avd,
+            bytes,
+            "Delete devices you no longer use in Android Studio's Device Manager.".into(),
+            ItemState::Info,
+        );
+    }
 }
 
 fn gradle(ctx: &Ctx, opts: &Options) -> Option<(ToolSection, Vec<Recommendation>)> {
@@ -548,9 +623,13 @@ fn read_trimmed(path: &Path) -> Option<String> {
 
 struct Runtime {
     name: &'static str,
+    /// Where the version folders are, relative to the home folder.
     dir: &'static str,
     /// Files naming the version in use, which is never flagged.
     in_use: &'static [&'static str],
+    /// How to find the folder and the version in use, when not by `dir` and
+    /// `in_use` files alone.
+    locate: Locate,
     /// Group versions by this many leading components (1: major, 2: minor).
     group: usize,
     uninstall: &'static str,
@@ -558,14 +637,29 @@ struct Runtime {
     risks: &'static str,
 }
 
+#[derive(Clone, Copy)]
+enum Locate {
+    /// `dir`, with the version in use read from the `in_use` files.
+    Files,
+    /// nvm-windows: `NVM_HOME` (or `%APPDATA%\nvm`), its `settings.txt`,
+    /// and the link nvm points at the version in use.
+    NvmWindows,
+    /// fnm: `FNM_DIR` (or `dir`), versions in `node-versions`, the default
+    /// in the `aliases\default` link.
+    Fnm,
+    /// Volta: versions in `dir`, the default in `tools\user\platform.json`.
+    Volta,
+}
+
 /// (parsed version, folder name without a leading "v", folder)
 type VersionDir = (Vec<u64>, String, PathBuf);
 
-const RUNTIMES: &[Runtime] = &[
+const RUNTIMES_MAC: &[Runtime] = &[
     Runtime {
         name: "Node.js",
         dir: ".nvm/versions/node",
         in_use: &[".nvm/alias/default"],
+        locate: Locate::Files,
         group: 1,
         uninstall: "nvm uninstall",
         methods: TRASH,
@@ -575,6 +669,7 @@ const RUNTIMES: &[Runtime] = &[
         name: "Python",
         dir: ".pyenv/versions",
         in_use: &[".pyenv/version"],
+        locate: Locate::Files,
         group: 2,
         uninstall: "pyenv uninstall",
         // Virtual environments point at the interpreter; leave it to pyenv.
@@ -585,6 +680,7 @@ const RUNTIMES: &[Runtime] = &[
         name: "Ruby",
         dir: ".rbenv/versions",
         in_use: &[".rbenv/version"],
+        locate: Locate::Files,
         group: 2,
         uninstall: "rbenv uninstall",
         methods: &[],
@@ -592,19 +688,164 @@ const RUNTIMES: &[Runtime] = &[
     },
 ];
 
+const RUNTIMES_WINDOWS: &[Runtime] = &[
+    Runtime {
+        name: "Node.js (nvm)",
+        dir: "AppData/Roaming/nvm",
+        in_use: &[],
+        locate: Locate::NvmWindows,
+        group: 1,
+        uninstall: "nvm uninstall",
+        methods: TRASH,
+        risks: "Global npm packages installed under this version are removed with it.",
+    },
+    Runtime {
+        name: "Node.js (fnm)",
+        dir: "AppData/Roaming/fnm",
+        in_use: &[],
+        locate: Locate::Fnm,
+        group: 1,
+        uninstall: "fnm uninstall",
+        methods: TRASH,
+        risks: "Global npm packages installed under this version are removed with it.",
+    },
+    Runtime {
+        name: "Node.js (Volta)",
+        dir: "AppData/Local/Volta/tools/image/node",
+        in_use: &[],
+        locate: Locate::Volta,
+        group: 1,
+        uninstall: "",
+        methods: TRASH,
+        risks: "A project that pins this exact version makes Volta download it again.",
+    },
+    Runtime {
+        name: "Python (pyenv-win)",
+        dir: ".pyenv/pyenv-win/versions",
+        in_use: &[".pyenv/pyenv-win/version"],
+        locate: Locate::Files,
+        group: 2,
+        uninstall: "pyenv uninstall",
+        methods: &[],
+        risks: "Virtual environments created with this interpreter stop working.",
+    },
+];
+
+const RUNTIMES: &[Runtime] = if cfg!(windows) {
+    RUNTIMES_WINDOWS
+} else {
+    RUNTIMES_MAC
+};
+
+/// `root` and `path` from nvm-windows' `settings.txt`.
+pub fn parse_nvm_settings(text: &str) -> (Option<PathBuf>, Option<PathBuf>) {
+    let mut root = None;
+    let mut path = None;
+    for line in text.lines() {
+        let Some((key, value)) = line.split_once(':') else {
+            continue;
+        };
+        let value = value.trim();
+        if value.is_empty() {
+            continue;
+        }
+        match key.trim() {
+            "root" => root = Some(PathBuf::from(value)),
+            "path" => path = Some(PathBuf::from(value)),
+            _ => {}
+        }
+    }
+    (root, path)
+}
+
+/// The version folder name a link points into: the component after
+/// `marker` when given ("node-versions"), otherwise the link's last one.
+fn linked_version(link: &Path, marker: Option<&str>) -> Option<String> {
+    let target = fs::read_link(link).ok()?;
+    let name = match marker {
+        Some(m) => {
+            let mut parts = target.components().map(|c| c.as_os_str().to_string_lossy());
+            parts.find(|p| p == m)?;
+            parts.next()?.into_owned()
+        }
+        None => target.file_name()?.to_string_lossy().into_owned(),
+    };
+    Some(name.trim_start_matches('v').to_string())
+}
+
+/// The Node version Volta runs by default, from `platform.json`.
+pub fn parse_volta_platform(text: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(text).ok()?;
+    v.get("node")?
+        .get("runtime")?
+        .as_str()
+        .map(|s| s.trim_start_matches('v').to_string())
+}
+
+/// nvm-windows' version folder and the version in use.
+pub fn nvm_windows(ctx: &Ctx) -> (PathBuf, HashSet<String>) {
+    let home = ctx
+        .env_path("NVM_HOME")
+        .unwrap_or_else(|| ctx.home_path("AppData/Roaming/nvm"));
+    let settings = super::read_small(&home.join("settings.txt"), 64 * 1024).unwrap_or_default();
+    let (root, link) = parse_nvm_settings(&settings);
+    let link = ctx.env_path("NVM_SYMLINK").or(link);
+    let in_use = link
+        .and_then(|l| linked_version(&l, None))
+        .into_iter()
+        .collect();
+    (root.unwrap_or(home), in_use)
+}
+
+/// Where a runtime's versions are and which of them are in use.
+fn locate(ctx: &Ctx, rt: &Runtime) -> (PathBuf, HashSet<String>) {
+    match rt.locate {
+        Locate::Files => (
+            ctx.home_path(rt.dir),
+            rt.in_use
+                .iter()
+                .filter_map(|f| read_trimmed(&ctx.home_path(f)))
+                .flat_map(|s| s.lines().map(|l| l.trim().to_string()).collect::<Vec<_>>())
+                .collect(),
+        ),
+        Locate::NvmWindows => nvm_windows(ctx),
+        Locate::Fnm => {
+            let base = ctx
+                .env_path("FNM_DIR")
+                .unwrap_or_else(|| ctx.home_path(rt.dir));
+            let in_use =
+                linked_version(&base.join("aliases").join("default"), Some("node-versions"))
+                    .into_iter()
+                    .collect();
+            (base.join("node-versions"), in_use)
+        }
+        Locate::Volta => {
+            let platform = ctx.home_path("AppData/Local/Volta/tools/user/platform.json");
+            let in_use = super::read_small(&platform, 1024 * 1024)
+                .and_then(|t| parse_volta_platform(&t))
+                .into_iter()
+                .collect();
+            (ctx.home_path(rt.dir), in_use)
+        }
+    }
+}
+
 fn runtimes(ctx: &Ctx, opts: &Options) -> Option<(ToolSection, Vec<Recommendation>)> {
+    runtimes_in(ctx, opts, RUNTIMES)
+}
+
+fn runtimes_in(
+    ctx: &Ctx,
+    opts: &Options,
+    table: &[Runtime],
+) -> Option<(ToolSection, Vec<Recommendation>)> {
     let mut found = Found::new(opts.min_recommended_bytes);
-    for rt in RUNTIMES {
-        let in_use: HashSet<String> = rt
-            .in_use
-            .iter()
-            .filter_map(|f| read_trimmed(&ctx.home_path(f)))
-            .flat_map(|s| s.lines().map(|l| l.trim().to_string()).collect::<Vec<_>>())
-            .collect();
+    for rt in table {
+        let (dir, in_use) = locate(ctx, rt);
         // Only plain version folders ("3.11.4", "v20.1.0"); skip names like
         // "miniconda3-latest" or "3.12.0/envs/x".
         let mut groups: BTreeMap<Vec<u64>, Vec<VersionDir>> = BTreeMap::new();
-        for p in subdirs(&ctx.home_path(rt.dir)) {
+        for p in subdirs(&dir) {
             let name = name_of(&p);
             let bare = name.trim_start_matches('v');
             if !bare.chars().all(|c| c.is_ascii_digit() || c == '.') {
@@ -646,7 +887,8 @@ fn runtimes(ctx: &Ctx, opts: &Options) -> Option<(ToolSection, Vec<Recommendatio
                         } else {
                             "Move the older version to the Trash"
                         },
-                        alternative: Some(format!("{} {name}", rt.uninstall)),
+                        alternative: (!rt.uninstall.is_empty())
+                            .then(|| format!("{} {name}", rt.uninstall)),
                         marker: (MarkerKind::OlderVersion, format!("{} {newest_s} is newer", rt.name)),
                         state: ItemState::Superseded,
                     }
@@ -665,7 +907,11 @@ fn runtimes(ctx: &Ctx, opts: &Options) -> Option<(ToolSection, Vec<Recommendatio
     }
     found.section(
         "Language versions",
-        "Node.js (nvm), Python (pyenv) and Ruby (rbenv) keep every version you install.",
+        if cfg!(windows) {
+            "Node.js (nvm-windows, fnm, Volta) and Python (pyenv-win) keep every version you install."
+        } else {
+            "Node.js (nvm), Python (pyenv) and Ruby (rbenv) keep every version you install."
+        },
     )
 }
 
@@ -743,9 +989,104 @@ fn homebrew(ctx: &Ctx, opts: &Options) -> Option<(ToolSection, Vec<Recommendatio
     )
 }
 
+// ---- Scoop (Windows) ------------------------------------------------------
+
+/// Older app versions Scoop keeps next to the one its `current` link points
+/// to, until `scoop cleanup` runs. Scoop removes them; DiskPilot shows the
+/// command.
+fn scoop(ctx: &Ctx, opts: &Options) -> Option<(ToolSection, Vec<Recommendation>)> {
+    let root = opts.scoop?;
+    let mut found = Found::new(opts.min_recommended_bytes);
+    for app in subdirs(&root.join("apps")) {
+        // `current` is a junction, which `subdirs` never lists.
+        let versions: Vec<PathBuf> = subdirs(&app)
+            .into_iter()
+            .filter(|p| name_of(p) != "current" && !name_of(p).starts_with('.'))
+            .collect();
+        if versions.len() < 2 {
+            continue;
+        }
+        let name = name_of(&app);
+        let linked = fs::read_link(app.join("current"))
+            .ok()
+            .and_then(|t| t.file_name().map(|n| n.to_string_lossy().into_owned()));
+        let Some(current) = linked.filter(|c| versions.iter().any(|p| &name_of(p) == c)) else {
+            // Without the link it is not clear which version runs.
+            continue;
+        };
+        for path in versions {
+            let v = name_of(&path);
+            let title = format!("Scoop {name} {v}");
+            if v == current {
+                let bytes = ctx.size(&path);
+                found.item(
+                    title,
+                    &path,
+                    bytes,
+                    "Version in use".into(),
+                    ItemState::Current,
+                );
+                continue;
+            }
+            Finding {
+                title,
+                path: &path,
+                tier: Tier::ReviewFirst,
+                methods: &[],
+                detected_because: format!(
+                    "Scoop keeps {name} {v} after updating; {current} is the version in use."
+                ),
+                safe_because: "Scoop runs the version its current link points to; older ones stay until `scoop cleanup`.",
+                risks: "Something pinned to this exact version would need it reinstalled.",
+                proposed_action: "Remove it with Scoop",
+                alternative: Some(format!("scoop cleanup {name}")),
+                marker: (MarkerKind::OlderVersion, format!("{name} {current} is in use")),
+                state: ItemState::Superseded,
+            }
+            .record(ctx, &mut found);
+        }
+    }
+    let cache = root.join("cache");
+    if super::exists(&cache) {
+        let bytes = ctx.size(&cache);
+        if bytes > 0 {
+            found.item(
+                "Scoop download cache".into(),
+                &cache,
+                bytes,
+                "Installers Scoop downloaded. Clear with `scoop cache rm *`.".into(),
+                ItemState::Info,
+            );
+        }
+    }
+    found.section(
+        "Scoop",
+        "Older app versions Scoop keeps until `scoop cleanup` runs. DiskPilot shows the command; Scoop removes them.",
+    )
+}
+
 // ---- Downloads: installers and duplicates ---------------------------------
 
-const INSTALLER_EXTS: &[&str] = &["dmg", "pkg", "mpkg", "xip"];
+const INSTALLER_EXTS: &[&str] = if cfg!(windows) {
+    &["msi", "msix", "msixbundle", "appx", "appxbundle"]
+} else {
+    &["dmg", "pkg", "mpkg", "xip"]
+};
+
+/// Words that mark an `.exe` in Downloads as an installer on Windows. Other
+/// `.exe` files may be portable programs that run from there.
+const EXE_INSTALLER_WORDS: &[&str] = &["setup", "install"];
+
+/// Whether `name` (with lowercase extension `ext`) is an installer.
+fn is_installer(name: &str, ext: &str, windows: bool) -> bool {
+    if INSTALLER_EXTS.contains(&ext) {
+        return true;
+    }
+    windows && ext == "exe" && {
+        let lower = name.to_ascii_lowercase();
+        EXE_INSTALLER_WORDS.iter().any(|w| lower.contains(w))
+    }
+}
 /// Words in installer names that say nothing about which app it installs.
 const NOISE: &[&str] = &[
     "installer",
@@ -768,6 +1109,11 @@ const NOISE: &[&str] = &[
     "stable",
     "beta",
 ];
+/// More words without meaning in Windows installer names
+/// ("VSCodeUserSetup-x64-1.95.3.exe").
+const WINDOWS_NOISE: &[&str] = &[
+    "win", "win32", "win64", "windows", "x86", "amd64", "user", "system",
+];
 const APP_ALIASES: &[(&str, &str)] = &[
     ("vscode", "visualstudiocode"),
     ("code", "visualstudiocode"),
@@ -788,7 +1134,11 @@ pub fn installer_key(file_name: &str) -> String {
     let mut key = String::new();
     for token in stem.split(|c: char| !c.is_ascii_alphanumeric()) {
         let t = token.to_ascii_lowercase();
-        if t.is_empty() || t.chars().all(|c| c.is_ascii_digit()) || NOISE.contains(&t.as_str()) {
+        if t.is_empty()
+            || t.chars().all(|c| c.is_ascii_digit())
+            || NOISE.contains(&t.as_str())
+            || (cfg!(windows) && WINDOWS_NOISE.contains(&t.as_str()))
+        {
             continue;
         }
         // Version-like tokens: "v1", "4b2".
@@ -933,7 +1283,7 @@ fn downloads(ctx: &Ctx, opts: &Options) -> Option<(ToolSection, Vec<Recommendati
             .extension()
             .map(|e| e.to_string_lossy().to_ascii_lowercase())
             .unwrap_or_default();
-        if !INSTALLER_EXTS.contains(&ext.as_str()) {
+        if !is_installer(&name, &ext, cfg!(windows)) {
             continue;
         }
         if let Some(app) = installed_app_for(&name, opts.apps) {
@@ -991,6 +1341,8 @@ pub struct Options<'a> {
     pub apps: &'a [String],
     /// Homebrew prefixes to look in.
     pub brew_prefixes: &'a [PathBuf],
+    /// Scoop's folder (Windows).
+    pub scoop: Option<&'a Path>,
     /// Smaller findings are listed in the report but not recommended.
     pub min_recommended_bytes: u64,
 }
@@ -1007,6 +1359,7 @@ pub fn analyze_with(ctx: &Ctx, env: &Options) -> (ToolReport, Vec<Recommendation
         gradle(ctx, env),
         runtimes(ctx, env),
         homebrew(ctx, env),
+        scoop(ctx, env),
         downloads(ctx, env),
     ]
     .into_iter()
@@ -1043,12 +1396,21 @@ pub fn analyze_with(ctx: &Ctx, env: &Options) -> (ToolReport, Vec<Recommendation
 }
 
 pub fn analyze(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
-    let prefixes: Vec<PathBuf> = BREW_PREFIXES.iter().map(PathBuf::from).collect();
+    let prefixes: Vec<PathBuf> = if cfg!(windows) {
+        Vec::new()
+    } else {
+        BREW_PREFIXES.iter().map(PathBuf::from).collect()
+    };
+    let scoop = cfg!(windows).then(|| {
+        ctx.env_path("SCOOP")
+            .unwrap_or_else(|| ctx.home_path("scoop"))
+    });
     analyze_with(
         ctx,
         &Options {
             apps: &crate::apps::installed_names(ctx.home),
             brew_prefixes: &prefixes,
+            scoop: scoop.as_deref(),
             min_recommended_bytes: MIN_RECOMMENDED_BYTES,
         },
     )
@@ -1063,6 +1425,7 @@ mod tests {
         Options {
             apps,
             brew_prefixes: &[],
+            scoop: None,
             min_recommended_bytes: 0,
         }
     }
@@ -1273,6 +1636,7 @@ mod tests {
             &Options {
                 apps: &[],
                 brew_prefixes: &prefixes,
+                scoop: None,
                 min_recommended_bytes: 0,
             },
         );
@@ -1292,6 +1656,7 @@ mod tests {
             &Options {
                 apps: &[],
                 brew_prefixes: &[],
+                scoop: None,
                 min_recommended_bytes: MIN_RECOMMENDED_BYTES,
             },
         );
@@ -1304,5 +1669,152 @@ mod tests {
             .unwrap();
         assert_eq!(old.state, ItemState::Superseded);
         assert!(old.recommendation_id.is_none());
+    }
+}
+
+/// Windows version managers and Scoop. The parsers and tables run on every
+/// platform; links are created with the platform's own call.
+#[cfg(test)]
+mod windows_tests {
+    use super::super::tests::{ctx, write};
+    use super::*;
+
+    fn opts(scoop: Option<&Path>) -> Options<'_> {
+        Options {
+            apps: &[],
+            brew_prefixes: &[],
+            scoop,
+            min_recommended_bytes: 0,
+        }
+    }
+
+    fn link_dir(target: &Path, link: &Path) {
+        std::fs::create_dir_all(link.parent().unwrap()).unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(target, link).unwrap();
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_dir(target, link)
+            .or_else(|_| junction(target, link))
+            .unwrap();
+    }
+
+    /// Symbolic links need Developer Mode on Windows; a junction does not.
+    #[cfg(windows)]
+    fn junction(target: &Path, link: &Path) -> std::io::Result<()> {
+        let status = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(link)
+            .arg(target)
+            .status()?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(std::io::Error::other("mklink /J failed"))
+        }
+    }
+
+    #[test]
+    fn parses_nvm_windows_settings_and_volta_platform() {
+        let (root, path) = parse_nvm_settings(
+            "root: C:\\Users\\a\\AppData\\Roaming\\nvm\r\npath: C:\\nvm4w\\nodejs\r\narch: 64\r\nproxy: none\r\n",
+        );
+        assert_eq!(
+            root,
+            Some(PathBuf::from("C:\\Users\\a\\AppData\\Roaming\\nvm"))
+        );
+        assert_eq!(path, Some(PathBuf::from("C:\\nvm4w\\nodejs")));
+        assert_eq!(parse_nvm_settings("root:\n"), (None, None));
+        assert_eq!(
+            parse_volta_platform(r#"{"node":{"runtime":"20.11.1","npm":null}}"#).as_deref(),
+            Some("20.11.1")
+        );
+        assert_eq!(parse_volta_platform("{}"), None);
+    }
+
+    #[test]
+    fn older_node_versions_are_flagged_for_each_windows_manager() {
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        // nvm-windows: versions in its root, the link names the one in use.
+        let nvm = home.join("AppData/Roaming/nvm");
+        for v in ["v20.10.0", "v20.11.0", "v18.1.0", "v18.2.0"] {
+            write(&nvm.join(v).join("node.exe"), 100);
+        }
+        let link = home.join("nvm4w/nodejs");
+        link_dir(&nvm.join("v18.1.0"), &link);
+        std::fs::write(
+            nvm.join("settings.txt"),
+            format!("root: {}\npath: {}\n", nvm.display(), link.display()),
+        )
+        .unwrap();
+        // fnm: the default alias links into node-versions.
+        let fnm = home.join("AppData/Roaming/fnm");
+        for v in ["v22.1.0", "v22.2.0"] {
+            write(
+                &fnm.join("node-versions")
+                    .join(v)
+                    .join("installation/node.exe"),
+                100,
+            );
+        }
+        link_dir(
+            &fnm.join("node-versions/v22.1.0/installation"),
+            &fnm.join("aliases/default"),
+        );
+        // Volta: platform.json names the default.
+        let volta = home.join("AppData/Local/Volta/tools");
+        for v in ["16.1.0", "16.2.0"] {
+            write(&volta.join("image/node").join(v).join("node.exe"), 100);
+        }
+        write(&volta.join("user/platform.json"), 0);
+        std::fs::write(
+            volta.join("user/platform.json"),
+            r#"{"node":{"runtime":"16.2.0"}}"#,
+        )
+        .unwrap();
+
+        let c = ctx(&home);
+        let (_, recs) = runtimes_in(&c, &opts(None), RUNTIMES_WINDOWS).unwrap();
+        let mut titles: Vec<&str> = recs.iter().map(|r| r.title.as_str()).collect();
+        titles.sort_unstable();
+        // nvm: 18.2.0 is newer but 18.1.0 is in use, so only 20.10.0 is
+        // flagged. fnm: 22.1.0 is the default. Volta: 16.2.0 is the default.
+        assert_eq!(
+            titles,
+            vec!["Node.js (Volta) 16.1.0", "Node.js (nvm) 20.10.0"]
+        );
+        assert!(recs.iter().all(|r| r.methods == vec![CleanupMethod::Trash]));
+    }
+
+    #[test]
+    fn scoop_versions_beside_the_current_link_are_flagged() {
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        let root = home.join("scoop");
+        let app = root.join("apps/git");
+        write(&app.join("2.44.0/git.exe"), 5000);
+        write(&app.join("2.45.1/git.exe"), 5000);
+        link_dir(&app.join("2.45.1"), &app.join("current"));
+        // One version only: nothing to clean up.
+        write(&root.join("apps/7zip/24.08/7z.exe"), 5000);
+        write(&root.join("cache/git#2.45.1#x.7z"), 5000);
+
+        let c = ctx(&home);
+        let (section, recs) = scoop(&c, &opts(Some(&root))).unwrap();
+        assert_eq!(recs.len(), 1);
+        assert_eq!(recs[0].title, "Scoop git 2.44.0");
+        assert_eq!(recs[0].alternative.as_deref(), Some("scoop cleanup git"));
+        assert!(recs[0].methods.is_empty());
+        assert!(section
+            .items
+            .iter()
+            .any(|i| i.label == "Scoop download cache"));
+    }
+
+    #[test]
+    fn exe_files_count_as_installers_only_by_name_on_windows() {
+        assert!(is_installer("VSCodeUserSetup-x64.exe", "exe", true));
+        assert!(!is_installer("ripgrep.exe", "exe", true));
+        assert!(!is_installer("VSCodeUserSetup-x64.exe", "exe", false));
     }
 }

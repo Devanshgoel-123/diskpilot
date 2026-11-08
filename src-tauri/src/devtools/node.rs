@@ -9,7 +9,7 @@ use super::{
 };
 use crate::model::Recommendation;
 
-const CACHES: &[(&str, &str, &str)] = &[
+const CACHES_MAC: &[(&str, &str, &str)] = &[
     ("npm cache", ".npm", "npm cache clean --force"),
     ("pnpm store", "Library/pnpm/store", "pnpm store prune"),
     ("pnpm store", ".pnpm-store", "pnpm store prune"),
@@ -22,6 +22,28 @@ const CACHES: &[(&str, &str, &str)] = &[
     ),
     ("Bun cache", ".bun/install/cache", "bun pm cache rm"),
 ];
+
+const CACHES_WINDOWS: &[(&str, &str, &str)] = &[
+    (
+        "npm cache",
+        "AppData/Local/npm-cache",
+        "npm cache clean --force",
+    ),
+    ("pnpm store", "AppData/Local/pnpm/store", "pnpm store prune"),
+    ("Yarn cache", "AppData/Local/Yarn/Cache", "yarn cache clean"),
+    (
+        "Yarn Berry cache",
+        ".yarn/berry/cache",
+        "yarn cache clean --mirror",
+    ),
+    ("Bun cache", ".bun/install/cache", "bun pm cache rm"),
+];
+
+const CACHES: &[(&str, &str, &str)] = if cfg!(windows) {
+    CACHES_WINDOWS
+} else {
+    CACHES_MAC
+};
 
 const MANIFESTS: &[&str] = &[
     "package.json",
@@ -131,16 +153,25 @@ pub fn analyze(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
     }
 
     // ---- nvm versions ---------------------------------------------------------
-    let nvm_dir = ctx.home_path(".nvm/versions/node");
-    let default = nvm_default(ctx.home);
+    let (nvm_dir, default) = if cfg!(windows) {
+        // nvm-windows: its root folder, and the version its link points to.
+        let (dir, in_use) = super::versions::nvm_windows(ctx);
+        (dir, in_use.into_iter().next())
+    } else {
+        (ctx.home_path(".nvm/versions/node"), nvm_default(ctx.home))
+    };
     let nvm_items: Vec<ToolItem> = subdirs(&nvm_dir)
         .into_iter()
+        // nvm-windows keeps other folders next to the versions.
+        .filter(|dir| !cfg!(windows) || super::versions::parse_version(&name_of(dir)).is_some())
         .map(|dir| {
             let v = name_of(&dir);
             let is_default = default.as_deref().is_some_and(|d| matches_alias(&v, d));
             let bytes = ctx.size(&dir);
             ToolItem {
-                detail: if is_default {
+                detail: if is_default && cfg!(windows) {
+                    "Version in use (nvm use)".into()
+                } else if is_default {
                     "Default version (nvm alias default)".into()
                 } else {
                     format!(
@@ -222,6 +253,7 @@ mod tests {
         assert!(!matches_alias("v220.0.0", "22"));
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn reports_caches_and_default_runtime() {
         let dir = crate::test_support::sandbox();
@@ -246,6 +278,37 @@ mod tests {
                 .count(),
             1
         );
+        assert!(report
+            .sections
+            .iter()
+            .any(|s| s.title == "Package manager caches"));
+    }
+
+    /// nvm-windows keeps versions in its root, named by settings.txt, and
+    /// npm's cache is in %LOCALAPPDATA%.
+    #[cfg(windows)]
+    #[test]
+    fn reports_windows_caches_and_nvm_versions() {
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        write(&home.join("AppData/Local/npm-cache/_cacache/a"), 1000);
+        let nvm = home.join("AppData/Roaming/nvm");
+        write(&nvm.join("v20.1.0/node.exe"), 100);
+        write(&nvm.join("v22.11.0/node.exe"), 100);
+        std::fs::write(
+            nvm.join("settings.txt"),
+            format!("root: {}\r\n", nvm.display()),
+        )
+        .unwrap();
+
+        let (report, _) = analyze(&ctx(&home));
+        assert!(report.detected);
+        let versions = report
+            .sections
+            .iter()
+            .find(|s| s.title.contains("nvm"))
+            .unwrap();
+        assert_eq!(versions.items.len(), 2);
         assert!(report
             .sections
             .iter()

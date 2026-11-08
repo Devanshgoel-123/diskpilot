@@ -1191,13 +1191,142 @@ pub async fn docker_diagnostics(
         if o.status.state != DockerState::Running {
             return Err(docker_error(docker::cli::DockerError::NotRunning));
         }
-        let raw = home.join("Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw");
-        let vm_disk = raw
-            .symlink_metadata()
-            .ok()
-            .filter(|m| m.is_file())
-            .map(|m| (scanner::allocated_bytes(&m), m.len()));
+        let vm_disk = if cfg!(windows) {
+            // Docker Desktop's data disk in WSL (docker_data.vhdx).
+            crate::wsl::find_disks(&home)
+                .into_iter()
+                .filter(|d| d.kind == crate::wsl::DiskKind::DockerData)
+                .find_map(|d| crate::wsl::file_size(&d.path))
+                .map(|s| (s.allocated, s.len))
+        } else {
+            let raw = home.join("Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw");
+            raw.symlink_metadata()
+                .ok()
+                .filter(|m| m.is_file())
+                .map(|m| (scanner::allocated_bytes(&m), m.len()))
+        };
         Ok(actions::diagnostics(&o, vm_disk))
+    })
+    .await
+}
+
+// ---- WSL and Docker virtual disks (Windows) --------------------------------
+
+/// Docker's own figure for what it uses, when Docker is running.
+fn docker_used(home: &Path) -> Option<u64> {
+    let cli = DockerCli::locate(home)?;
+    if docker::status(Some(&cli)).state != DockerState::Running {
+        return None;
+    }
+    docker::usage(&cli).ok().map(|u| u.total_bytes())
+}
+
+/// WSL 2 distributions' and Docker Desktop's virtual disks, with their size
+/// on the drive and, where it can be measured without starting anything,
+/// how much of it is free inside. Read-only.
+#[tauri::command]
+pub async fn wsl_disks(state: State<'_, AppState>) -> AppResult<crate::wsl::WslOverview> {
+    let home = state.home.clone();
+    blocking(move || {
+        let used = if cfg!(windows) {
+            docker_used(&home)
+        } else {
+            None
+        };
+        Ok(crate::wsl::overview(&home, used))
+    })
+    .await
+}
+
+/// How long a reviewed compaction can wait before it must be reviewed again.
+const WSL_REVIEW_TTL_MS: i64 = 10 * 60 * 1000;
+
+/// The preview for compacting a disk, or making it sparse, built from the
+/// disk as it is now.
+fn wsl_fresh_preview(
+    home: &Path,
+    disk_id: &str,
+    method: crate::wsl::compact::CompactMethod,
+    measure: bool,
+) -> AppResult<crate::wsl::compact::CompactPreview> {
+    use crate::wsl::compact;
+    if !cfg!(windows) {
+        return Err(AppError::Other(
+            "Virtual disks can only be compacted on Windows.".into(),
+        ));
+    }
+    let docker = docker_used(home);
+    let disk = if measure {
+        crate::wsl::overview(home, docker)
+            .disks
+            .into_iter()
+            .find(|d| d.id == disk_id)
+    } else {
+        compact::fresh_disk(home, disk_id)
+    }
+    .ok_or_else(|| AppError::Other("This disk is no longer there. Refresh the list.".into()))?;
+    let root = crate::wsl::system_root();
+    let hyperv = method == compact::CompactMethod::Compact && compact::hyperv_available(&root);
+    Ok(compact::build_preview(
+        &disk,
+        method,
+        hyperv,
+        docker.is_some(),
+        &root,
+    ))
+}
+
+#[tauri::command]
+pub async fn wsl_compact_preview(
+    state: State<'_, AppState>,
+    disk_id: String,
+    method: crate::wsl::compact::CompactMethod,
+) -> AppResult<crate::wsl::compact::CompactPreview> {
+    let home = state.home.clone();
+    let mut preview = blocking(move || wsl_fresh_preview(&home, &disk_id, method, true)).await?;
+    let now = now_ms();
+    preview.id = unique_id("wsl", now);
+    let mut reviews = state.wsl_reviews();
+    reviews.retain(|_, (_, at)| now - *at < WSL_REVIEW_TTL_MS);
+    if preview.blocked.is_none() {
+        reviews.insert(
+            preview.id.clone(),
+            (crate::wsl::compact::Reviewed::of(&preview), now),
+        );
+    }
+    Ok(preview)
+}
+
+/// Compact the disk (or make it sparse) the person reviewed by preview id
+/// and confirmed by typing its name. The disk and the exact steps are
+/// checked again first, and the result is recorded in cleanup history.
+#[tauri::command]
+pub async fn wsl_compact_execute(
+    state: State<'_, AppState>,
+    preview_id: String,
+    typed: String,
+) -> AppResult<crate::wsl::compact::CompactResult> {
+    let (reviewed, at) = state
+        .wsl_reviews()
+        .remove(&preview_id)
+        .ok_or_else(|| AppError::Other("This preview has expired. Review it again.".into()))?;
+    if now_ms() - at > WSL_REVIEW_TTL_MS {
+        return Err(AppError::Other(
+            "This preview has expired. Review it again.".into(),
+        ));
+    }
+    let home = state.home.clone();
+    let history = state.history.clone();
+    blocking(move || {
+        let mut fresh = wsl_fresh_preview(&home, &reviewed.disk_id, reviewed.method, false)?;
+        // The estimate came from the measured preview; keep what was shown.
+        fresh.id = preview_id;
+        let result =
+            crate::wsl::compact::execute(fresh, &reviewed, &typed).map_err(AppError::Other)?;
+        if let Some(h) = history {
+            h.record_cleanup(&result.record)?;
+        }
+        Ok(result)
     })
     .await
 }

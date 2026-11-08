@@ -40,6 +40,7 @@ pub mod tray;
 pub mod tray_icon;
 #[cfg(any(windows, test))]
 pub mod winshell;
+pub mod wsl;
 
 use tauri::Manager;
 
@@ -102,6 +103,7 @@ pub fn run() {
                 trash: std::sync::Mutex::default(),
                 duplicates: std::sync::Mutex::default(),
                 docker_reviews: std::sync::Mutex::default(),
+                wsl_reviews: std::sync::Mutex::default(),
             });
             schedule::spawn(app.handle().clone());
             Ok(())
@@ -162,6 +164,9 @@ pub fn run() {
             commands::docker_execute,
             commands::docker_inspect,
             commands::docker_diagnostics,
+            commands::wsl_disks,
+            commands::wsl_compact_preview,
+            commands::wsl_compact_execute,
         ])
         // The menu bar item keeps running when the window is closed; it, the
         // Dock icon and Quit bring the window back or end the app. On Windows

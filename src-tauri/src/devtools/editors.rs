@@ -9,7 +9,7 @@ use serde::Deserialize;
 use super::agent_data::{self, Agent};
 use super::{
     app_version, exists, file_uri_to_path, modified_ms, name_of, outermost_total, subdirs, Ctx,
-    ItemState, RecSpec, ToolItem, ToolReport, ToolSection,
+    ItemState, RecSpec, ToolItem, ToolReport, ToolSection, APP_DATA,
 };
 use crate::model::{CleanupMethod, MarkerKind, Recommendation, Tier};
 
@@ -22,45 +22,98 @@ struct EditorPaths {
     extensions: PathBuf,
 }
 
+/// Where an editor keeps its app, its data and its extensions.
+struct EditorLayout {
+    /// The app bundle on macOS.
+    mac_app: &'static str,
+    /// Install folders on Windows, relative to the home folder (user
+    /// installs) or absolute under Program Files (system installs).
+    win_apps: &'static [&'static str],
+    /// The data folder's name under Application Support or `%APPDATA%`.
+    data: &'static str,
+    extensions: &'static str,
+}
+
+const CURSOR: EditorLayout = EditorLayout {
+    mac_app: "/Applications/Cursor.app",
+    win_apps: &["AppData/Local/Programs/cursor"],
+    data: "Cursor",
+    extensions: ".cursor/extensions",
+};
+
+const VSCODE: EditorLayout = EditorLayout {
+    mac_app: "/Applications/Visual Studio Code.app",
+    win_apps: &[
+        "AppData/Local/Programs/Microsoft VS Code",
+        "%ProgramFiles%/Microsoft VS Code",
+    ],
+    data: "Code",
+    extensions: ".vscode/extensions",
+};
+
+const WINDSURF: EditorLayout = EditorLayout {
+    mac_app: "/Applications/Windsurf.app",
+    win_apps: &["AppData/Local/Programs/Windsurf"],
+    data: "Windsurf",
+    extensions: ".windsurf/extensions",
+};
+
+fn paths(
+    ctx: &Ctx,
+    id: &'static str,
+    name: &'static str,
+    extras: &'static Agent,
+    l: &EditorLayout,
+) -> EditorPaths {
+    let app_bundle = if cfg!(windows) {
+        let found: Vec<PathBuf> = l
+            .win_apps
+            .iter()
+            .map(|a| super::win_location(ctx, a))
+            .collect();
+        found
+            .iter()
+            .find(|p| exists(p))
+            .or(found.first())
+            .cloned()
+            .unwrap_or_default()
+    } else {
+        PathBuf::from(l.mac_app)
+    };
+    EditorPaths {
+        id,
+        extras,
+        name,
+        app_bundle,
+        app_support: ctx.home_path(&format!("{APP_DATA}/{}", l.data)),
+        extensions: ctx.home_path(l.extensions),
+    }
+}
+
 pub fn cursor(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
     analyze(
         ctx,
-        EditorPaths {
-            id: "cursor",
-            extras: &agent_data::CURSOR_EXTRA,
-            name: "Cursor",
-            app_bundle: PathBuf::from("/Applications/Cursor.app"),
-            app_support: ctx.home_path("Library/Application Support/Cursor"),
-            extensions: ctx.home_path(".cursor/extensions"),
-        },
+        paths(ctx, "cursor", "Cursor", &agent_data::CURSOR_EXTRA, &CURSOR),
     )
 }
 
 pub fn vscode(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
     analyze(
         ctx,
-        EditorPaths {
-            id: "vscode",
-            extras: &agent_data::VSCODE_EXTRA,
-            name: "VS Code",
-            app_bundle: PathBuf::from("/Applications/Visual Studio Code.app"),
-            app_support: ctx.home_path("Library/Application Support/Code"),
-            extensions: ctx.home_path(".vscode/extensions"),
-        },
+        paths(ctx, "vscode", "VS Code", &agent_data::VSCODE_EXTRA, &VSCODE),
     )
 }
 
 pub fn windsurf(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
     analyze(
         ctx,
-        EditorPaths {
-            id: "windsurf",
-            extras: &agent_data::WINDSURF_EXTRA,
-            name: "Windsurf",
-            app_bundle: PathBuf::from("/Applications/Windsurf.app"),
-            app_support: ctx.home_path("Library/Application Support/Windsurf"),
-            extensions: ctx.home_path(".windsurf/extensions"),
-        },
+        paths(
+            ctx,
+            "windsurf",
+            "Windsurf",
+            &agent_data::WINDSURF_EXTRA,
+            &WINDSURF,
+        ),
     )
 }
 
@@ -412,26 +465,39 @@ mod tests {
     use super::super::tests::{ctx, write};
     use super::*;
 
+    fn c_home(home: &Path) -> Ctx<'_> {
+        ctx(home)
+    }
+
+    /// A `file://` URI the way the editor writes it on this platform.
+    fn file_uri(path: &Path) -> String {
+        let text = path.display().to_string();
+        if cfg!(windows) {
+            let text = text.trim_start_matches("\\\\?\\").replace('\\', "/");
+            let (drive, rest) = text.split_at(1);
+            format!("file:///{}%3A{}", drive.to_ascii_lowercase(), &rest[1..])
+        } else {
+            format!("file://{text}")
+        }
+    }
+
     #[test]
     fn flags_workspaces_of_deleted_projects_and_leftover_extensions() {
         let dir = crate::test_support::sandbox();
         let home = dir.path().canonicalize().unwrap();
         let live = home.join("code/live");
         std::fs::create_dir_all(&live).unwrap();
-        let ws = home.join("Library/Application Support/Cursor/User/workspaceStorage");
+        let ws = c_home(&home).home_path(&format!("{APP_DATA}/Cursor/User/workspaceStorage"));
         write(&ws.join("aaa/state.vscdb"), 5000);
         std::fs::write(
             ws.join("aaa/workspace.json"),
-            format!(r#"{{"folder":"file://{}"}}"#, live.display()),
+            format!(r#"{{"folder":"{}"}}"#, file_uri(&live)),
         )
         .unwrap();
         write(&ws.join("bbb/state.vscdb"), 2_000_000);
         std::fs::write(
             ws.join("bbb/workspace.json"),
-            format!(
-                r#"{{"folder":"file://{}/code/gone%20away"}}"#,
-                home.display()
-            ),
+            format!(r#"{{"folder":"{}/code/gone%20away"}}"#, file_uri(&home)),
         )
         .unwrap();
         let ext = home.join(".cursor/extensions");

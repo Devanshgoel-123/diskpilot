@@ -75,6 +75,9 @@ pub struct AppState {
     /// Docker previews shown to the person, by id, with when they were made.
     /// Executing names one; it is single use and short-lived.
     pub docker_reviews: Mutex<HashMap<String, (crate::docker::actions::Reviewed, i64)>>,
+    /// Virtual-disk compaction previews shown to the person, by id, with when
+    /// they were made. Single use and short-lived, like Docker's.
+    pub wsl_reviews: Mutex<HashMap<String, (crate::wsl::compact::Reviewed, i64)>>,
 }
 
 impl AppState {
@@ -96,6 +99,12 @@ impl AppState {
         self.docker_reviews
             .lock()
             .unwrap_or_else(|e| e.into_inner())
+    }
+
+    pub fn wsl_reviews(
+        &self,
+    ) -> MutexGuard<'_, HashMap<String, (crate::wsl::compact::Reviewed, i64)>> {
+        self.wsl_reviews.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn plans(&self) -> MutexGuard<'_, HashMap<String, CleanupPlan>> {
