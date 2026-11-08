@@ -233,6 +233,9 @@ struct Info {
     /// Allocated and logical size of the unnamed `$DATA` stream.
     data: Option<(u64, u64)>,
     reparse_tag: Option<u32>,
+    /// Clusters used by named streams (alternate data streams), which hold
+    /// real data: compressed system files keep theirs in one.
+    stream_alloc: u64,
 }
 
 /// One name of a file: a hard link in folder `parent`.
@@ -319,6 +322,10 @@ fn parse_record(number: u64, rec: &[u8], out: &mut Chunk) {
             ATTR_DATA if attr.name_len == 0 => {
                 info.data = data_size(&attr);
             }
+            // Resident named streams live inside the record.
+            ATTR_DATA if attr.non_resident => {
+                info.stream_alloc += data_size(&attr).map_or(0, |(alloc, _)| alloc);
+            }
             ATTR_REPARSE_POINT => {
                 info.reparse_tag = attr.value().and_then(|v| u32_at(v, 0));
             }
@@ -369,6 +376,7 @@ struct Node {
     modified: i64,
     alloc: u64,
     size: u64,
+    stream_alloc: u64,
 }
 
 /// Collects parsed records chunk by chunk, in any order.
@@ -442,6 +450,7 @@ impl Builder {
                 node.alloc = alloc;
                 node.size = size;
             }
+            node.stream_alloc += info.stream_alloc;
             if let Some(tag) = info.reparse_tag {
                 node.reparse_tag = tag;
             }
@@ -570,7 +579,11 @@ impl Tree {
                 let is_dir = kind == Kind::Dir;
                 let stat = Stat {
                     kind,
-                    alloc: if is_dir { 0 } else { node.alloc },
+                    alloc: if is_dir {
+                        0
+                    } else {
+                        node.alloc + node.stream_alloc
+                    },
                     logical: if is_dir { 0 } else { node.size },
                     modified_ms: listing::filetime_ms(node.modified),
                     nlink: u64::from(node.links.max(1)),
@@ -692,6 +705,21 @@ pub(crate) mod tests {
             a[0x28..0x30].copy_from_slice(&allocated.to_le_bytes());
             a[0x30..0x38].copy_from_slice(&size.to_le_bytes());
             a[0x38..0x40].copy_from_slice(&size.to_le_bytes());
+            b
+        }
+
+        /// A non-resident named stream.
+        pub fn named_data(self, name: &str, allocated: u64, size: u64) -> Self {
+            let mut b = self.data(0, allocated, size, &[0x11, 0x01, 0x40, 0x00]);
+            // Mark the attribute just added as named; the name itself is
+            // never read.
+            let mut off = 0;
+            let mut last = 0;
+            while off < b.attrs.len() {
+                last = off;
+                off += u32::from_le_bytes(b.attrs[off + 4..off + 8].try_into().unwrap()) as usize;
+            }
+            b.attrs[last + 9] = name.encode_utf16().count() as u8;
             b
         }
 
@@ -930,6 +958,7 @@ pub(crate) mod tests {
                 RecordBuilder::file()
                     .extension_of(21)
                     .data(0, 8192, 8000, &[0x11, 0x02, 0x30, 0x00])
+                    .named_data("WofCompressedData", 4096, 3000)
                     .build(),
             ),
             (
@@ -968,7 +997,8 @@ pub(crate) mod tests {
             (Kind::File, 0, 50_000)
         );
         let frag = get(&root, "frag.bin");
-        assert_eq!((frag.alloc, frag.logical), (8192, 8000));
+        // The named stream's clusters count; its length does not.
+        assert_eq!((frag.alloc, frag.logical), (8192 + 4096, 8000));
         let posix = get(&root, "posix-name");
         assert_eq!((posix.alloc, posix.logical, posix.nlink), (16, 13, 2));
         assert_eq!(posix.modified_ms, Some(1_577_836_800_000));
