@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import type { Category, Confidence } from "./types";
+import { words } from "./platform";
 
 export interface CategoryMeta {
   label: string;
@@ -85,7 +86,9 @@ export const CATEGORY_META: Record<Category, CategoryMeta> = {
   },
   systemFiles: {
     label: "System files",
-    description: "Files that belong to macOS. Never modified by DiskPilot.",
+    get description() {
+      return `Files that belong to ${words().os}. Never modified by DiskPilot.`;
+    },
     icon: HardDrive,
     color: "var(--cat-system-files)",
   },

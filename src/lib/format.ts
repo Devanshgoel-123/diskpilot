@@ -69,15 +69,5 @@ export function formatDate(ms: number | null | undefined): string {
   });
 }
 
-/** Replace the home folder prefix with `~` for compact display. */
-export function tildify(path: string, home: string | undefined): string {
-  if (!home) return path;
-  if (path === home) return "~";
-  if (path.startsWith(home + "/")) return "~" + path.slice(home.length);
-  return path;
-}
-
-export function basename(path: string): string {
-  const parts = path.split("/").filter(Boolean);
-  return parts[parts.length - 1] ?? path;
-}
+// Path display lives in paths.ts; re-exported for existing imports.
+export { basename, tildify } from "./paths";

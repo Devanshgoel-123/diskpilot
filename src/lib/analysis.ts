@@ -9,13 +9,11 @@ import type {
   DetectedLocation,
   Recommendation,
 } from "./types";
+import { isInside } from "./paths";
+import { isWindows } from "./platform";
 
-/** True if `child` is strictly inside `parent` (component-wise). */
-export function isInside(child: string, parent: string): boolean {
-  if (child === parent) return false;
-  const p = parent.endsWith("/") ? parent : parent + "/";
-  return child.startsWith(p);
-}
+/** True if `child` is strictly inside `parent` (component-wise, either separator). */
+export { isInside };
 
 /** Drop items nested inside another item of the list, so sizes can be summed. */
 export function outermost<T extends { path: string }>(items: T[]): T[] {
@@ -126,7 +124,11 @@ const TOOL_DEFS: { id: string; name: string; description: string; prefixes: stri
   {
     id: "other",
     name: "Other developer storage",
-    description: "Gradle, Maven, Android, Homebrew, CLI caches and Git data.",
+    get description() {
+      return isWindows()
+        ? "Gradle, Maven, Android, CLI caches and Git data."
+        : "Gradle, Maven, Android, Homebrew, CLI caches and Git data.";
+    },
     prefixes: ["gradle.", "maven.", "android.", "homebrew.", "xdg.", "git."],
   },
 ];
