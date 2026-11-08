@@ -38,6 +38,7 @@ pub mod trash;
 pub mod trash;
 pub mod tray;
 pub mod tray_icon;
+pub mod wsl;
 
 use tauri::Manager;
 
