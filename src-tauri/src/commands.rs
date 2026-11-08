@@ -450,20 +450,35 @@ pub fn reveal_in_finder(state: State<'_, AppState>, path: String) -> AppResult<(
 pub fn open_owner_app(rule_id: String) -> AppResult<()> {
     let app = crate::recommend::policies::owner_app(&rule_id)
         .ok_or_else(|| AppError::Other("DiskPilot does not open an app for this item.".into()))?;
-    for id in app.bundle_ids {
-        let opened = std::process::Command::new("/usr/bin/open")
-            .args(["-b", id])
-            .stderr(std::process::Stdio::null())
-            .status()
-            .is_ok_and(|s| s.success());
-        if opened {
-            return Ok(());
+    #[cfg(windows)]
+    return crate::apps::win::open_owner_app(app.name).map_err(AppError::Other);
+    #[cfg(not(windows))]
+    {
+        for id in app.bundle_ids {
+            let opened = std::process::Command::new("/usr/bin/open")
+                .args(["-b", id])
+                .stderr(std::process::Stdio::null())
+                .status()
+                .is_ok_and(|s| s.success());
+            if opened {
+                return Ok(());
+            }
         }
+        Err(AppError::Other(format!(
+            "{} is not installed on this Mac, or macOS could not open it.",
+            app.name
+        )))
     }
-    Err(AppError::Other(format!(
-        "{} is not installed on this Mac, or macOS could not open it.",
-        app.name
-    )))
+}
+
+/// Start an installed program's own uninstaller, or open Settings > Apps
+/// (Windows). Called only after the person confirmed in the window, which
+/// shows the exact command first (`uninstallCommand`). `id` is the app's
+/// `bundleId` from `get_app_storage`; the command itself is read from the
+/// registry again here. DiskPilot never deletes a program's folder.
+#[tauri::command]
+pub async fn uninstall_app(id: String) -> AppResult<crate::apps::UninstallOutcome> {
+    blocking(move || crate::apps::uninstall(&id).map_err(AppError::Other)).await
 }
 
 /// A Quick Look thumbnail (PNG bytes) of a file DiskPilot listed, so people
