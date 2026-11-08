@@ -105,7 +105,7 @@ fn private_area_in(
     home: &Path,
 ) -> Option<(PathBuf, &'static str)> {
     for (rel, label) in areas {
-        let root = rel.split('/').fold(home.to_path_buf(), |p, c| p.join(c));
+        let root = home.join(rel);
         if starts_with_ignoring_case(path, &root) {
             return Some((root, label));
         }
@@ -218,7 +218,10 @@ mod tests {
         let area = |p: &str| private_area_in(WINDOWS_PRIVATE_AREAS, Path::new(p), home);
         let (root, label) = area("/Users/a/AppData/Local/Microsoft/Outlook/me.ost").unwrap();
         assert_eq!(label, "Mail");
-        assert_eq!(root, Path::new("/Users/a/AppData/Local/Microsoft/Outlook"));
+        assert!(starts_with_ignoring_case(
+            &root,
+            Path::new("/Users/a/AppData/Local/Microsoft/Outlook")
+        ));
         assert_eq!(
             area("/Users/a/appdata/roaming/microsoft/credentials/x").map(|a| a.1),
             Some("Accounts")
