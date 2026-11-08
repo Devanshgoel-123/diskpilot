@@ -167,10 +167,13 @@ describe("CompactDialog", () => {
       wslCompactPreview.mockResolvedValue(preview());
       render(<CompactDialog disk={disk} method="compact" onClose={() => {}} onDone={() => {}} />);
       await screen.findByText("wsl.exe --shutdown");
-      act(() => {
+      // Let the effect that starts the expiry timer run first.
+      await act(async () => {});
+      expect(screen.queryByText(/This review has expired/)).toBeNull();
+      await act(async () => {
         vi.advanceTimersByTime(10 * 60 * 1000);
       });
-      expect(screen.getByText(/This review has expired/)).toBeInTheDocument();
+      expect(await screen.findByText(/This review has expired/)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Review again" })).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
