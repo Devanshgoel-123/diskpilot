@@ -35,6 +35,19 @@ export interface DiskInfo {
   usedBytes: number;
 }
 
+/** A drive the user can scan (`list_drives`). macOS lists only the home volume. */
+export interface DriveInfo {
+  /** Where it is mounted, such as `C:\` or `/`. */
+  root: string;
+  /** Volume label, such as "Data"; empty when it has none. */
+  label: string;
+  fileSystem: string;
+  totalBytes: number;
+  availableBytes: number;
+  usedBytes: number;
+  kind: "fixed" | "removable";
+}
+
 export interface AppEnvironment {
   homeDir: string;
   os: string;
