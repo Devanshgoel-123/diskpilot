@@ -675,7 +675,19 @@ export interface AppFootprint {
   dataBytes: number;
   dataModifiedMs: number | null;
   locations: AppDataLocation[];
+  /** Windows: the publisher from the uninstall entry; null on macOS. */
+  publisher: string | null;
+  /** Windows: the installed version; null on macOS. */
+  version: string | null;
+  /**
+   * Windows: the exact command Uninstall starts (the program's own
+   * uninstaller). Null when Uninstall opens Settings > Apps instead, and on macOS.
+   */
+  uninstallCommand: string | null;
 }
+
+/** What Uninstall did on Windows. */
+export type UninstallOutcome = "uninstaller" | "settings";
 
 /** Sandbox data named for an app that is no longer installed. */
 export interface Leftover {
