@@ -257,7 +257,7 @@ mod tests {
     #[test]
     fn reports_caches_and_default_runtime() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         write(&home.join(".npm/_cacache/a"), 1000);
         write(&home.join(".nvm/versions/node/v20.1.0/bin/node"), 100);
         write(&home.join(".nvm/versions/node/v22.11.0/bin/node"), 100);
@@ -290,7 +290,7 @@ mod tests {
     #[test]
     fn reports_windows_caches_and_nvm_versions() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         write(&home.join("AppData/Local/npm-cache/_cacache/a"), 1000);
         let nvm = home.join("AppData/Roaming/nvm");
         write(&nvm.join("v20.1.0/node.exe"), 100);

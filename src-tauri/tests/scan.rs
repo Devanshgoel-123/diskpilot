@@ -25,7 +25,9 @@ fn fixture() -> Fixture {
     // Not the system temp dir: on macOS it lives under /private/var/folders,
     // which the classifier (correctly) treats as system cache.
     let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
-    let home = dir.path().canonicalize().unwrap().join("home");
+    let home = diskpilot_lib::platform::canonicalize(dir.path())
+        .unwrap()
+        .join("home");
     // App caches: ~/Library/Caches on macOS, the profile's temporary
     // folder on Windows.
     let caches = if cfg!(windows) {

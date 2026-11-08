@@ -276,7 +276,7 @@ mod tests {
     #[test]
     fn current_version_comes_from_the_launcher_symlink() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let vdir = home.join(".local/share/claude/versions");
         write(&vdir.join("2.1.312"), 4000);
         write(&vdir.join("2.1.316"), 4000);
@@ -301,7 +301,7 @@ mod tests {
     #[test]
     fn a_copied_launcher_names_the_version_it_copies() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let vdir = home.join(".local/share/claude/versions");
         std::fs::create_dir_all(&vdir).unwrap();
         std::fs::write(vdir.join("2.1.312"), b"old build").unwrap();
@@ -321,7 +321,7 @@ mod tests {
     #[test]
     fn without_a_launcher_nothing_is_recommended() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         write(
             &home.join(".local/share/cursor-agent/versions/2026.01.01-a/cursor-agent"),
             10,

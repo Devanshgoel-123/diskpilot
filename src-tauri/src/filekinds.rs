@@ -253,7 +253,7 @@ mod tests {
     #[test]
     fn only_listed_unchanged_files_are_planned() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let (a, b, c) = (home.join("a.mp4"), home.join("b.mp4"), home.join("c.mp4"));
         std::fs::write(&a, vec![1u8; 10]).unwrap();
         std::fs::write(&b, vec![1u8; 10]).unwrap();
@@ -289,7 +289,7 @@ mod tests {
     #[test]
     fn a_file_swapped_for_a_link_or_folder_is_refused() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let elsewhere = home.join("elsewhere.mp4");
         std::fs::write(&elsewhere, vec![1u8; 10]).unwrap();
         let (link, folder) = (home.join("link.mp4"), home.join("folder.mp4"));
@@ -320,7 +320,7 @@ mod tests {
     #[test]
     fn a_same_size_file_written_since_the_scan_is_refused() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let a = home.join("a.mp4");
         std::fs::write(&a, vec![1u8; 10]).unwrap();
         let mut listed = entry(&a, 10);

@@ -346,7 +346,7 @@ mod tests {
     #[test]
     fn recommends_only_unreferenced_and_partial_blobs() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let blobs = home.join(".ollama/models/blobs");
         write(&blobs.join("sha256-aaa"), 300);
         write(&blobs.join("sha256-bbb"), 200);
@@ -379,7 +379,7 @@ mod tests {
     #[test]
     fn lists_lm_studio_models_without_recommending() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         write(&home.join(".lmstudio/models/pub/model-gguf/m.gguf"), 1000);
         let (report, recs) = analyze(&ctx(&home));
         assert!(recs.is_empty());
@@ -389,7 +389,7 @@ mod tests {
     #[test]
     fn absent_when_nothing_installed() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let (report, recs) = analyze(&ctx(&home));
         assert!(!report.detected && recs.is_empty());
     }

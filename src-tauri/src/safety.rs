@@ -595,7 +595,7 @@ mod tests {
     #[test]
     fn authorize_rejects_symlinks_and_symlinked_parents() {
         let dir = crate::test_support::sandbox();
-        let root = dir.path().canonicalize().unwrap();
+        let root = crate::platform::canonicalize(dir.path()).unwrap();
         let home = Path::new("/nonexistent-home");
         let real = root.join("real");
         std::fs::create_dir(&real).unwrap();
@@ -783,7 +783,7 @@ mod windows_gate_tests {
     #[test]
     fn authorize_accepts_exact_paths_and_rejects_short_names_and_junctions() {
         let dir = crate::test_support::sandbox();
-        let root = dir.path().canonicalize().unwrap();
+        let root = crate::platform::canonicalize(dir.path()).unwrap();
         let home = Path::new(r"C:\nonexistent-home");
         let real = root.join("Some Long Folder Name");
         std::fs::create_dir(&real).unwrap();

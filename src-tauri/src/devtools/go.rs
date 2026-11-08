@@ -436,7 +436,7 @@ echo '{{"GOVERSION": "{version}", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "G
     #[test]
     fn asks_the_installed_go_without_letting_it_download_a_toolchain() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let go = home.join("go-bin");
         fake_go(&go, "go1.27.3");
         let missing = home.join("missing/go");
@@ -449,7 +449,7 @@ echo '{{"GOVERSION": "{version}", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "G
     #[test]
     fn finds_the_newest_go_installed_by_mise_or_asdf() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let mise = home.join(".local/share/mise/installs/go");
         let asdf = home.join(".asdf/installs/golang");
         fake_go(&mise.join("1.26.0/bin/go"), "go1.26.0");
@@ -473,7 +473,7 @@ echo '{{"GOVERSION": "{version}", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "G
     #[test]
     fn reports_caches_and_downloaded_toolchains() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let env = GoEnv::defaults(&ctx(&home));
         let toolchain = env
             .modcache
@@ -520,7 +520,7 @@ echo '{{"GOVERSION": "{version}", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "G
     #[test]
     fn a_custom_module_cache_is_never_offered_for_the_trash() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let env = GoEnv {
             modcache: home.join(".cache/gomod"),
             ..GoEnv::defaults(&ctx(&home))
@@ -569,7 +569,7 @@ echo '{{"GOVERSION": "{version}", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "G
     #[test]
     fn a_gocache_shared_with_other_tools_is_listed_but_never_recommended() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         // `go env -w GOCACHE=~/.cache`: Go writes its files next to pip's.
         let shared = home.join(".cache");
         let env = GoEnv {
@@ -604,7 +604,7 @@ echo '{{"GOVERSION": "{version}", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "G
     #[test]
     fn a_small_build_cache_is_listed_but_not_recommended() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let env = GoEnv::defaults(&ctx(&home));
         write(&env.cache.clone().unwrap().join("00/a-d"), 10);
         let (report, recs) = report(&ctx(&home), &env);
@@ -618,7 +618,7 @@ echo '{{"GOVERSION": "{version}", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "G
     #[test]
     fn nothing_is_detected_without_go_or_its_folders() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let (report, recs) = report(&ctx(&home), &GoEnv::defaults(&ctx(&home)));
         assert!(!report.detected);
         assert!(report.sections.is_empty());
@@ -628,7 +628,7 @@ echo '{{"GOVERSION": "{version}", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "G
     #[test]
     fn go_without_caches_says_so() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let env = GoEnv {
             version: Some("go1.27.3".into()),
             ..GoEnv::defaults(&ctx(&home))

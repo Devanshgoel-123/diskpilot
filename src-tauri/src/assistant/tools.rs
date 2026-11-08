@@ -342,7 +342,7 @@ pub fn run(ctx: &ToolContext, name: &str, input: &Value) -> ToolOutput {
             // area check sees the folder that will actually be listed.
             let path = match safety::parse_user_path(&expanded)
                 .and_then(|p| {
-                    std::fs::canonicalize(&p)
+                    crate::platform::canonicalize(&p)
                         .map_err(|_| safety::SafetyError::Missing(p.display().to_string()))
                 })
                 .and_then(|p| safety::ensure_within(&p, &root).map(|_| p))

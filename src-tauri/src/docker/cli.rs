@@ -251,7 +251,7 @@ impl DockerCli {
     pub fn locate(home: &Path) -> Option<Self> {
         candidate_paths(home)
             .into_iter()
-            .filter_map(|p| std::fs::canonicalize(p).ok())
+            .filter_map(|p| crate::platform::canonicalize(&p).ok())
             .filter(|p| p.metadata().is_ok_and(|m| m.is_file()))
             .find(|p| is_trusted(p))
             .map(|path| Self { path })

@@ -639,7 +639,7 @@ fn link_areas() -> Vec<PathBuf> {
     }
     areas
         .into_iter()
-        .filter_map(|p| p.canonicalize().ok())
+        .filter_map(|p| crate::platform::canonicalize(&p).ok())
         .collect()
 }
 
@@ -682,9 +682,8 @@ pub fn resolve_root(root: &Path) -> Result<PathBuf, ScanError> {
         path: root.display().to_string(),
         message,
     };
-    let canonical = root
-        .canonicalize()
-        .map_err(|e| invalid(describe_io_error(&e)))?;
+    let canonical =
+        crate::platform::canonicalize(root).map_err(|e| invalid(describe_io_error(&e)))?;
     let meta = fs::metadata(&canonical).map_err(|e| invalid(describe_io_error(&e)))?;
     if !meta.is_dir() {
         return Err(invalid("Not a folder".to_string()));
@@ -772,7 +771,7 @@ fn scan_from(
         index: Mutex::new(HashMap::new()),
         top_files: Mutex::new(BinaryHeap::new()),
         top_threshold: AtomicU64::new(0),
-        home: opts.home.canonicalize().ok(),
+        home: crate::platform::canonicalize(&opts.home).ok(),
         kind_bytes: std::array::from_fn(|_| AtomicU64::new(0)),
         kind_files: std::array::from_fn(|_| AtomicU64::new(0)),
         kind_top: std::array::from_fn(|_| Mutex::new(BinaryHeap::new())),
@@ -786,7 +785,7 @@ fn scan_from(
         defer_parent: opts
             .defer_children_of
             .as_deref()
-            .and_then(|d| d.canonicalize().ok())
+            .and_then(|d| crate::platform::canonicalize(d).ok())
             .filter(|d| d.starts_with(&root) && *d != root),
         deferred: Mutex::new(Vec::new()),
         deferred_parent_names: Mutex::new(None),

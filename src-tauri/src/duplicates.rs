@@ -695,7 +695,7 @@ mod tests {
     #[test]
     fn groups_only_identical_contents() {
         let dir = crate::test_support::sandbox();
-        let root = dir.path().canonicalize().unwrap();
+        let root = crate::platform::canonicalize(dir.path()).unwrap();
         let a = big(7, 200_000);
         let mut b = a.clone();
         *b.last_mut().unwrap() = 8; // same size and prefix, different end
@@ -725,7 +725,7 @@ mod tests {
     #[test]
     fn small_files_compare_by_whole_contents() {
         let dir = crate::test_support::sandbox();
-        let root = dir.path().canonicalize().unwrap();
+        let root = crate::platform::canonicalize(dir.path()).unwrap();
         write(&root.join("x"), &big(1, 5000));
         write(&root.join("y"), &big(1, 5000));
         write(&root.join("z"), &big(2, 5000));
@@ -738,7 +738,7 @@ mod tests {
     #[test]
     fn skips_hard_links_hidden_folders_bundles_and_symlinks() {
         let dir = crate::test_support::sandbox();
-        let root = dir.path().canonicalize().unwrap();
+        let root = crate::platform::canonicalize(dir.path()).unwrap();
         let data = big(3, 10_000);
         write(&root.join("a"), &data);
         std::fs::hard_link(root.join("a"), root.join("a-link")).unwrap();
@@ -758,7 +758,7 @@ mod tests {
         use std::ffi::CString;
         use std::os::unix::ffi::OsStrExt;
         let dir = crate::test_support::sandbox();
-        let root = dir.path().canonicalize().unwrap();
+        let root = crate::platform::canonicalize(dir.path()).unwrap();
         write(&root.join("orig"), &big(9, 300_000));
         let src = CString::new(root.join("orig").as_os_str().as_bytes()).unwrap();
         let dst = CString::new(root.join("clone").as_os_str().as_bytes()).unwrap();
@@ -775,7 +775,7 @@ mod tests {
     #[test]
     fn verifies_contents_before_removal() {
         let dir = crate::test_support::sandbox();
-        let root = dir.path().canonicalize().unwrap();
+        let root = crate::platform::canonicalize(dir.path()).unwrap();
         write(&root.join("a"), &big(4, 300_000));
         write(&root.join("b"), &big(4, 300_000));
         let mut c = big(4, 300_000);
@@ -789,7 +789,7 @@ mod tests {
     #[test]
     fn removal_keeps_one_copy_and_rechecks_contents() {
         let dir = crate::test_support::sandbox();
-        let root = dir.path().canonicalize().unwrap();
+        let root = crate::platform::canonicalize(dir.path()).unwrap();
         write(&root.join("a"), &big(6, 10_000));
         write(&root.join("b"), &big(6, 10_000));
         write(&root.join("c"), &big(6, 10_000));
@@ -822,7 +822,7 @@ mod tests {
     #[test]
     fn forgetting_removed_copies_updates_groups() {
         let dir = crate::test_support::sandbox();
-        let root = dir.path().canonicalize().unwrap();
+        let root = crate::platform::canonicalize(dir.path()).unwrap();
         write(&root.join("a"), &big(5, 10_000));
         write(&root.join("b"), &big(5, 10_000));
         let mut r = run(&root, 1);

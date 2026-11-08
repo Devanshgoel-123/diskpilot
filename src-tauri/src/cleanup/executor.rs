@@ -408,7 +408,7 @@ mod tests {
     #[test]
     fn deletes_planned_paths_and_records_results() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let target = home.join("proj/node_modules");
         fs::create_dir_all(target.join("pkg")).unwrap();
         fs::write(target.join("pkg/index.js"), "x").unwrap();
@@ -434,7 +434,7 @@ mod tests {
     #[test]
     fn an_extra_copy_stays_when_the_kept_copy_is_gone_or_changed() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let (a, b, c) = (home.join("a.bin"), home.join("b.bin"), home.join("c.bin"));
         for p in [&a, &b, &c] {
             fs::write(p, "same bytes").unwrap();
@@ -463,7 +463,7 @@ mod tests {
     #[test]
     fn deleting_a_folder_never_follows_links_out_of_it() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let outside = home.join("precious");
         fs::create_dir_all(&outside).unwrap();
         fs::write(outside.join("keep.txt"), "keep").unwrap();
@@ -490,7 +490,7 @@ mod tests {
     fn deleting_a_tree_with_read_only_folders_touches_nothing() {
         use std::os::unix::fs::PermissionsExt;
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         // Go's module cache: extracted modules are 0555 so builds cannot edit them.
         let target = home.join("go/pkg/mod");
         let module = target.join("golang.org/x/text@v0.1.0");
@@ -606,7 +606,7 @@ mod tests {
 
         for (what, setup, reason) in cases {
             let dir = crate::test_support::sandbox();
-            let home = dir.path().canonicalize().unwrap();
+            let home = crate::platform::canonicalize(dir.path()).unwrap();
             let target = home.join("holder/cache");
             fs::create_dir_all(target.join("sub")).unwrap();
             for f in ["a_sibling.txt", "z_sibling.txt", "sub/f.txt"] {
@@ -633,7 +633,7 @@ mod tests {
     #[test]
     fn a_file_that_became_a_folder_since_the_review_is_skipped() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let video = home.join("Movies/trip.mp4");
         fs::create_dir_all(&video).unwrap(); // was a file when planned
         fs::write(video.join("inside.txt"), "x").unwrap();
@@ -649,7 +649,7 @@ mod tests {
     #[test]
     fn re_checks_safety_at_execution_time() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let real = home.join("real");
         fs::create_dir_all(real.join("cache")).unwrap();
         // The folder was swapped for a symlink after planning.
@@ -675,7 +675,7 @@ mod tests {
     #[test]
     fn refuses_protected_paths_even_if_planned() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         // A folder the gate protects as a whole on each platform.
         let caches = home.join(if cfg!(windows) {
             "AppData/Local"

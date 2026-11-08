@@ -484,7 +484,7 @@ mod tests {
     #[test]
     fn flags_workspaces_of_deleted_projects_and_leftover_extensions() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let live = home.join("code/live");
         std::fs::create_dir_all(&live).unwrap();
         let ws = c_home(&home).home_path(&format!("{APP_DATA}/Cursor/User/workspaceStorage"));

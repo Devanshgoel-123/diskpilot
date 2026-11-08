@@ -164,7 +164,7 @@ mod tests {
 
     fn fixture() -> (tempfile::TempDir, std::path::PathBuf) {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         std::fs::create_dir_all(home.join("proj/node_modules")).unwrap();
         std::fs::create_dir_all(home.join("Library/Caches/com.x")).unwrap();
         (dir, home)

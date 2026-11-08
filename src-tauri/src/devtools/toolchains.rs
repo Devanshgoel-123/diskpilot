@@ -315,7 +315,7 @@ mod tests {
     #[test]
     fn marks_the_default_rust_toolchain() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         write(
             &home.join(".rustup/toolchains/stable-aarch64-apple-darwin/bin/rustc"),
             100,
@@ -344,7 +344,7 @@ mod tests {
     #[test]
     fn lists_hugging_face_models() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         write(
             &home.join(".cache/huggingface/hub/models--org--model-x/blobs/a"),
             5000,

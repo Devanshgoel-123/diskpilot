@@ -839,7 +839,7 @@ mod tests {
     #[test]
     fn app_storage_attributes_library_folders_and_finds_leftovers() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let mut scan = crate::scanner::DirIndex::new();
         let stats = |bytes| crate::scanner::DirStats {
             bytes,

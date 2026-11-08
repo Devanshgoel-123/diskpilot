@@ -1734,7 +1734,7 @@ mod windows_tests {
     #[test]
     fn older_node_versions_are_flagged_for_each_windows_manager() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         // nvm-windows: versions in its root, the link names the one in use.
         let nvm = home.join("AppData/Roaming/nvm");
         for v in ["v20.10.0", "v20.11.0", "v18.1.0", "v18.2.0"] {
@@ -1789,7 +1789,7 @@ mod windows_tests {
     #[test]
     fn scoop_versions_beside_the_current_link_are_flagged() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let root = home.join("scoop");
         let app = root.join("apps/git");
         write(&app.join("2.44.0/git.exe"), 5000);

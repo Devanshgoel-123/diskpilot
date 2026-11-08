@@ -473,7 +473,7 @@ mod tests {
     fn go_module_cache_is_left_to_go_and_the_build_cache_is_offered() {
         use crate::cleanup::planner::build_plan;
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let at = |rel: &str| {
             std::fs::create_dir_all(home.join(rel)).unwrap();
             home.join(rel).display().to_string()

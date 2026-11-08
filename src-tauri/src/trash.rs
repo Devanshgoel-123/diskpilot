@@ -549,7 +549,9 @@ mod tests {
 
     fn fixture() -> (tempfile::TempDir, PathBuf) {
         let dir = crate::test_support::sandbox();
-        let trash = dir.path().canonicalize().unwrap().join(".Trash");
+        let trash = crate::platform::canonicalize(dir.path())
+            .unwrap()
+            .join(".Trash");
         fs::create_dir_all(trash.join("Old Project/src")).unwrap();
         fs::write(trash.join("Old Project/src/a.rs"), vec![1u8; 20_000]).unwrap();
         fs::write(trash.join("Old Project/b.txt"), vec![1u8; 5_000]).unwrap();
@@ -631,7 +633,9 @@ mod tests {
     #[test]
     fn never_follows_links_out_of_the_trash() {
         let (d, trash) = fixture();
-        let outside = d.path().canonicalize().unwrap().join("Documents");
+        let outside = crate::platform::canonicalize(d.path())
+            .unwrap()
+            .join("Documents");
         fs::create_dir_all(&outside).unwrap();
         fs::write(outside.join("thesis.pdf"), b"precious").unwrap();
         std::os::unix::fs::symlink(&outside, trash.join("Old Project/docs")).unwrap();
@@ -646,7 +650,9 @@ mod tests {
     #[test]
     fn refuses_names_that_leave_the_trash() {
         let (d, trash) = fixture();
-        let victim = d.path().canonicalize().unwrap().join("victim.txt");
+        let victim = crate::platform::canonicalize(d.path())
+            .unwrap()
+            .join("victim.txt");
         fs::write(&victim, b"x").unwrap();
         let mut preview = inventory(&trash, "p".into(), 0).unwrap();
         for name in ["../victim.txt", "/etc/hosts", "Old Project/src", ""] {

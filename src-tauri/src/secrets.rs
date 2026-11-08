@@ -442,7 +442,7 @@ mod tests {
     #[test]
     fn reports_files_with_counts_and_first_line() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let key = fake("hf_", "a1B2c3D4e5F6g7H8i9J0kLmNoPqRsTuVw");
         let log = home.join(".claude/projects/-Users-x-app/s1.jsonl");
         std::fs::create_dir_all(log.parent().unwrap()).unwrap();

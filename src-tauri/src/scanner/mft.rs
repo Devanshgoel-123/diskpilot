@@ -326,7 +326,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir(dir.path().join("sub")).unwrap();
         std::fs::write(dir.path().join("sub/a.bin"), vec![1u8; 100_000]).unwrap();
-        let root = dir.path().canonicalize().unwrap();
+        let root = crate::platform::canonicalize(dir.path()).unwrap();
         // New records reach the disk when Windows writes its cache, usually
         // within seconds.
         for _ in 0..40 {

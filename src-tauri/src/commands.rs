@@ -1456,7 +1456,7 @@ mod tests {
     #[test]
     fn previews_only_regular_files_reached_without_links() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let photos = home.join("Photos");
         std::fs::create_dir_all(&photos).unwrap();
         std::fs::write(photos.join("a.jpg"), "x").unwrap();

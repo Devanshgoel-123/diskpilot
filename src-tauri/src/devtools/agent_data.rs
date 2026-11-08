@@ -1170,7 +1170,7 @@ mod tests {
 
     fn home() -> (tempfile::TempDir, PathBuf) {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         (dir, home)
     }
 
