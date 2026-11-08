@@ -5,10 +5,10 @@
 //! space that is free right now, so DiskPilot's number can be lower.
 
 #[cfg(windows)]
-pub use windows::{disk_info, drives};
+pub use windows::{disk_info, drives, list_drives};
 
 #[cfg(unix)]
-pub use unix::disk_info;
+pub use unix::{disk_info, list_drives};
 
 #[cfg(unix)]
 mod unix {
@@ -16,7 +16,7 @@ mod unix {
     use std::os::unix::ffi::OsStrExt;
     use std::path::Path;
 
-    use crate::model::DiskInfo;
+    use crate::model::{DiskInfo, DriveInfo, DriveKind};
 
     // statfs field widths differ between platforms; the conversions are no-ops on
     // macOS but keep this portable.
@@ -45,6 +45,23 @@ mod unix {
         })
     }
 
+    /// The volume that holds `home`; macOS shows no drive picker.
+    pub fn list_drives(home: &Path) -> Vec<DriveInfo> {
+        disk_info(home)
+            .map(|d| {
+                vec![DriveInfo {
+                    label: String::new(),
+                    root: d.mount_point,
+                    file_system: d.file_system,
+                    total_bytes: d.total_bytes,
+                    available_bytes: d.available_bytes,
+                    used_bytes: d.used_bytes,
+                    kind: DriveKind::Fixed,
+                }]
+            })
+            .unwrap_or_default()
+    }
+
     fn c_chars_to_string(chars: &[libc::c_char]) -> String {
         // SAFETY: statfs NUL-terminates these fixed-size buffers.
         unsafe { CStr::from_ptr(chars.as_ptr()) }
@@ -62,7 +79,7 @@ mod windows {
         GetVolumePathNameW,
     };
 
-    use crate::model::DiskInfo;
+    use crate::model::{DiskInfo, DriveInfo, DriveKind};
     use crate::platform::wide;
 
     // GetDriveTypeW results (WinBase.h).
@@ -113,6 +130,12 @@ mod windows {
         })
     }
 
+    fn drive_type(root: &Path) -> u32 {
+        let w = wide(root.as_os_str());
+        // SAFETY: `w` is NUL-terminated.
+        unsafe { GetDriveTypeW(w.as_ptr()) }
+    }
+
     /// Fixed and removable drives with a file system, in letter order.
     pub fn drives() -> Vec<PathBuf> {
         // SAFETY: no arguments.
@@ -121,10 +144,55 @@ mod windows {
             .filter(|i| mask & (1 << i) != 0)
             .map(|i| PathBuf::from(format!("{}:\\", char::from(b'A' + i))))
             .filter(|root| {
-                let w = wide(root.as_os_str());
-                // SAFETY: `w` is NUL-terminated.
-                let ty = unsafe { GetDriveTypeW(w.as_ptr()) };
+                let ty = drive_type(root);
                 (ty == DRIVE_FIXED || ty == DRIVE_REMOVABLE) && disk_info(root).is_ok()
+            })
+            .collect()
+    }
+
+    fn volume_label(root: &Path) -> String {
+        let w = wide(root.as_os_str());
+        let mut name = [0u16; 261];
+        // SAFETY: only the volume name buffer is requested; `w` is NUL-terminated.
+        let ok = unsafe {
+            GetVolumeInformationW(
+                w.as_ptr(),
+                name.as_mut_ptr(),
+                name.len() as u32,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                0,
+            )
+        } != 0;
+        if ok {
+            from_wide(&name)
+        } else {
+            String::new()
+        }
+    }
+
+    /// Every drive from `drives()` with its label and capacity. `_home` keeps
+    /// the signature the same as on macOS.
+    pub fn list_drives(_home: &Path) -> Vec<DriveInfo> {
+        drives()
+            .into_iter()
+            .filter_map(|root| {
+                let d = disk_info(&root).ok()?;
+                Some(DriveInfo {
+                    root: root.display().to_string(),
+                    label: volume_label(&root),
+                    file_system: d.file_system,
+                    total_bytes: d.total_bytes,
+                    available_bytes: d.available_bytes,
+                    used_bytes: d.used_bytes,
+                    kind: if drive_type(&root) == DRIVE_REMOVABLE {
+                        DriveKind::Removable
+                    } else {
+                        DriveKind::Fixed
+                    },
+                })
             })
             .collect()
     }
@@ -141,5 +209,15 @@ mod tests {
         assert!(info.available_bytes <= info.total_bytes);
         assert!(info.used_bytes <= info.total_bytes);
         assert!(!info.mount_point.is_empty());
+    }
+
+    #[test]
+    fn lists_the_home_drive() {
+        let home = std::env::temp_dir();
+        let drives = list_drives(&home);
+        assert!(!drives.is_empty());
+        assert!(drives
+            .iter()
+            .all(|d| d.total_bytes > 0 && !d.root.is_empty()));
     }
 }
