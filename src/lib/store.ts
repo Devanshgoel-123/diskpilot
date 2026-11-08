@@ -184,6 +184,24 @@ function listModelsIfNeeded(): void {
   }
 }
 
+/** How often free space is read while the window is visible, as in the menu bar. */
+export const DISK_REFRESH_MS = 30_000;
+
+/**
+ * Keep free space current. Other apps write to the disk while DiskPilot is
+ * open, so the reading is refreshed when the window comes back into view and
+ * every 30 seconds while it is visible, the same as the menu bar.
+ */
+export function watchDisk(refresh: () => Promise<void>): void {
+  const visible = () => document.visibilityState === "visible";
+  const now = () => {
+    if (visible()) void refresh();
+  };
+  document.addEventListener("visibilitychange", now);
+  window.addEventListener("focus", now);
+  window.setInterval(now, DISK_REFRESH_MS);
+}
+
 export const useApp = create<AppState>((set, get) => ({
   ready: false,
   desktop: false,
@@ -225,6 +243,7 @@ export const useApp = create<AppState>((set, get) => ({
 
     if (!subscribed) {
       subscribed = true;
+      watchDisk(get().refreshDisk);
       // A scan DiskPilot started on its own (a scheduled rescan) shows as
       // scanning too, so its progress and partial results appear.
       await onScanProgress((progress) => {
@@ -313,8 +332,8 @@ export const useApp = create<AppState>((set, get) => ({
   refreshDisk: async () => {
     try {
       set({ disk: await api.getDiskInfo() });
-    } catch (e) {
-      set({ error: errorMessage(e) });
+    } catch {
+      // Keep the last reading; the next refresh tries again.
     }
   },
 
