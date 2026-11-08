@@ -325,6 +325,8 @@ fn with_app_containers(f: &Fixture) {
     fs::create_dir_all(f.home.join("Library/Containers/com.example.empty/Data/a/b")).unwrap();
 }
 
+// Measuring other apps' containers last is a macOS-only step.
+#[cfg(target_os = "macos")]
 #[test]
 fn app_containers_measured_last_give_identical_final_results() {
     let f = fixture();
@@ -417,7 +419,12 @@ fn personal_files_are_grouped_by_type() {
     write(&f.home.join("Movies/tiny.mp4"), 1_000);
     // Files that belong to an app or a tool are not listed.
     write(&f.home.join("Movies/Edit.fcpbundle/Media/a.mp4"), 5 * mb);
-    write(&f.home.join("Library/Caches/app/v.mp4"), 5 * mb);
+    let app_cache = if cfg!(windows) {
+        "AppData/Local/app/v.mp4"
+    } else {
+        "Library/Caches/app/v.mp4"
+    };
+    write(&f.home.join(app_cache), 5 * mb);
     write(&f.home.join(".hidden/v.mp4"), 5 * mb);
     write(&f.home.join("code/web/node_modules/x/v.mp4"), 5 * mb);
     write(&f.home.join("code/web/.next/static/v.mp4"), 5 * mb);
