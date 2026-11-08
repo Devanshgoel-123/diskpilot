@@ -18,7 +18,7 @@ use serde::Deserialize;
 use super::agents::{self, CLAUDE_CODE};
 use super::{
     app_version, exists, modified_ms, name_of, outermost_total, subdirs, Ctx, ItemState, RecSpec,
-    ToolItem, ToolReport, ToolSection,
+    ToolItem, ToolReport, ToolSection, APP_DATA,
 };
 use crate::docker::actions::human;
 use crate::model::{CleanupMethod, MarkerKind, Recommendation, Tier};
@@ -75,7 +75,7 @@ const fn e(label: &'static str, rel: &'static str, kind: Kind, detail: &'static 
 
 use Kind::*;
 
-pub const CLAUDE_CODE_DATA: Agent = Agent {
+const CLAUDE_CODE_DATA_MAC: Agent = Agent {
     id: "claude-code",
     name: "Claude Code",
     quit: "Close running Claude Code sessions first.",
@@ -137,7 +137,7 @@ pub const CLAUDE_CODE_DATA: Agent = Agent {
     ],
 };
 
-pub const CLAUDE_DESKTOP: Agent = Agent {
+const CLAUDE_DESKTOP_MAC: Agent = Agent {
     id: "claude-desktop",
     name: "Claude app",
     quit: "Quit the Claude app first.",
@@ -199,7 +199,7 @@ pub const CLAUDE_DESKTOP: Agent = Agent {
     ],
 };
 
-pub const CODEX: Agent = Agent {
+const CODEX_MAC: Agent = Agent {
     id: "codex",
     name: "Codex",
     quit: "Quit the Codex app and close running Codex sessions first.",
@@ -261,7 +261,7 @@ pub const CODEX: Agent = Agent {
     ],
 };
 
-pub const COPILOT: Agent = Agent {
+const COPILOT_MAC: Agent = Agent {
     id: "copilot",
     name: "GitHub Copilot",
     quit: "Quit your editor and close running Copilot CLI sessions first.",
@@ -294,7 +294,7 @@ pub const COPILOT: Agent = Agent {
 };
 
 /// Cleanable data in Cursor beyond the editor caches in [`super::editors`].
-pub const CURSOR_EXTRA: Agent = Agent {
+const CURSOR_EXTRA_MAC: Agent = Agent {
     id: "cursor",
     name: "Cursor",
     quit: "Quit Cursor first.",
@@ -318,7 +318,7 @@ pub const WINDSURF_EXTRA: Agent = Agent {
 };
 
 /// Cleanable data in VS Code beyond the editor caches in [`super::editors`].
-pub const VSCODE_EXTRA: Agent = Agent {
+const VSCODE_EXTRA_MAC: Agent = Agent {
     id: "vscode",
     name: "VS Code",
     quit: "Quit VS Code first.",
@@ -349,6 +349,264 @@ pub const VSCODE_EXTRA: Agent = Agent {
         ),
     ],
 };
+
+// ---- Windows locations ------------------------------------------------------
+//
+// The same agents keep their data under %USERPROFILE%, %APPDATA% and
+// %LOCALAPPDATA% on Windows. `AppData/...` names resolve to the profile's
+// known folders (see `Ctx::home_path`).
+
+const CLAUDE_CODE_DATA_WIN: Agent = Agent {
+    entries: &[
+        e(
+            "MCP and debug logs",
+            "AppData/Local/claude-cli-nodejs/Cache",
+            Logs,
+            "Per-project MCP server logs written by Claude Code.",
+        ),
+        e(
+            "Debug logs",
+            ".claude/debug",
+            Logs,
+            "Debug output from past sessions.",
+        ),
+        e(
+            "Shell snapshots",
+            ".claude/shell-snapshots",
+            Cache,
+            "Shell environment captured when a session starts; each session takes a new one.",
+        ),
+        e(
+            "Cache",
+            ".claude/cache",
+            Cache,
+            "Downloaded changelog and model metadata.",
+        ),
+        e(
+            "Edit checkpoints",
+            ".claude/file-history",
+            Checkpoints,
+            "Copies of files Claude Code edited, used to rewind changes in a session.",
+        ),
+        e(
+            "Pasted content",
+            ".claude/paste-cache",
+            History,
+            "Large pastes referenced from session transcripts.",
+        ),
+        e(
+            "Prompt history",
+            ".claude/history.jsonl",
+            History,
+            "Prompts you typed, used for history search.",
+        ),
+        e(
+            "Plugins",
+            ".claude/plugins",
+            Config,
+            "Installed plugins and marketplaces.",
+        ),
+        e(
+            "Settings",
+            ".claude/settings.json",
+            Config,
+            "Your Claude Code settings.",
+        ),
+    ],
+    ..CLAUDE_CODE_DATA_MAC
+};
+
+const CLAUDE_DESKTOP_WIN: Agent = Agent {
+    quit: "Quit the Claude app first, including from the notification area.",
+    entries: &[
+        e(
+            "Web cache",
+            "AppData/Roaming/Claude/Cache",
+            Cache,
+            "Chromium network cache.",
+        ),
+        e(
+            "Code cache",
+            "AppData/Roaming/Claude/Code Cache",
+            Cache,
+            "Compiled JavaScript cache.",
+        ),
+        e(
+            "GPU cache",
+            "AppData/Roaming/Claude/GPUCache",
+            Cache,
+            "Compiled graphics shaders.",
+        ),
+        e(
+            "Graphics cache",
+            "AppData/Roaming/Claude/DawnGraphiteCache",
+            Cache,
+            "WebGPU shader cache.",
+        ),
+        e(
+            "WebGPU cache",
+            "AppData/Roaming/Claude/DawnWebGPUCache",
+            Cache,
+            "WebGPU pipeline cache.",
+        ),
+        e(
+            "Logs",
+            "AppData/Roaming/Claude/logs",
+            Logs,
+            "Diagnostic logs, including MCP server logs.",
+        ),
+        e(
+            "App data",
+            "AppData/Roaming/Claude",
+            Config,
+            "Sign-in, settings, connectors and local state.",
+        ),
+    ],
+    ..CLAUDE_DESKTOP_MAC
+};
+
+const CODEX_WIN: Agent = Agent {
+    quit: "Close running Codex sessions first.",
+    entries: &[
+        e(
+            "CLI logs",
+            ".codex/log",
+            Logs,
+            "Logs written by the Codex CLI.",
+        ),
+        e(
+            "Sessions",
+            ".codex/sessions",
+            History,
+            "Saved sessions, used by codex resume.",
+        ),
+        e(
+            "Archived sessions",
+            ".codex/archived_sessions",
+            History,
+            "Sessions you archived.",
+        ),
+        e(
+            "Prompt history",
+            ".codex/history.jsonl",
+            History,
+            "Prompts you typed.",
+        ),
+        e(
+            "Configuration",
+            ".codex/config.toml",
+            Config,
+            "Your Codex settings.",
+        ),
+        e(
+            "Sign-in",
+            ".codex/auth.json",
+            Config,
+            "Codex sign-in. Never removed.",
+        ),
+    ],
+    ..CODEX_MAC
+};
+
+const COPILOT_WIN: Agent = Agent {
+    entries: &[
+        e(
+            "CLI logs",
+            ".copilot/logs",
+            Logs,
+            "Logs written by the Copilot CLI.",
+        ),
+        e(
+            "CLI sessions",
+            ".copilot/session-state",
+            History,
+            "Copilot CLI sessions, used to resume them.",
+        ),
+        e(
+            "CLI configuration",
+            ".copilot/config.json",
+            Config,
+            "Copilot CLI settings and trusted folders.",
+        ),
+        e(
+            "Sign-in",
+            "AppData/Local/github-copilot",
+            Config,
+            "Copilot sign-in shared by editors. Never removed.",
+        ),
+    ],
+    ..COPILOT_MAC
+};
+
+const CURSOR_EXTRA_WIN: Agent = Agent {
+    entries: &[
+        e(
+            "Downloaded update",
+            "AppData/Local/cursor-updater",
+            Update,
+            "A Cursor update downloaded by the updater. Cursor downloads it again if it is still needed.",
+        ),
+        e(
+            "Graphics cache",
+            "AppData/Roaming/Cursor/DawnGraphiteCache",
+            Cache,
+            "WebGPU shader cache.",
+        ),
+        e(
+            "WebGPU cache",
+            "AppData/Roaming/Cursor/DawnWebGPUCache",
+            Cache,
+            "WebGPU pipeline cache.",
+        ),
+        e(
+            "State database backup",
+            "AppData/Roaming/Cursor/User/globalStorage/state.vscdb.backup",
+            Backup,
+            "A copy of Cursor's state database, used only to recover from corruption.",
+        ),
+    ],
+    ..CURSOR_EXTRA_MAC
+};
+
+const VSCODE_EXTRA_WIN: Agent = Agent {
+    entries: &[
+        e(
+            "Graphics cache",
+            "AppData/Roaming/Code/DawnGraphiteCache",
+            Cache,
+            "WebGPU shader cache.",
+        ),
+        e(
+            "WebGPU cache",
+            "AppData/Roaming/Code/DawnWebGPUCache",
+            Cache,
+            "WebGPU pipeline cache.",
+        ),
+        e(
+            "State database backup",
+            "AppData/Roaming/Code/User/globalStorage/state.vscdb.backup",
+            Backup,
+            "A copy of VS Code's state database, used only to recover from corruption.",
+        ),
+    ],
+    ..VSCODE_EXTRA_MAC
+};
+
+/// The table for this platform.
+const fn pick(mac: Agent, windows: Agent) -> Agent {
+    if cfg!(windows) {
+        windows
+    } else {
+        mac
+    }
+}
+
+pub const CLAUDE_CODE_DATA: Agent = pick(CLAUDE_CODE_DATA_MAC, CLAUDE_CODE_DATA_WIN);
+pub const CLAUDE_DESKTOP: Agent = pick(CLAUDE_DESKTOP_MAC, CLAUDE_DESKTOP_WIN);
+pub const CODEX: Agent = pick(CODEX_MAC, CODEX_WIN);
+pub const COPILOT: Agent = pick(COPILOT_MAC, COPILOT_WIN);
+pub const CURSOR_EXTRA: Agent = pick(CURSOR_EXTRA_MAC, CURSOR_EXTRA_WIN);
+pub const VSCODE_EXTRA: Agent = pick(VSCODE_EXTRA_MAC, VSCODE_EXTRA_WIN);
 
 /// Sections, recommendations and measured roots collected for one report.
 #[derive(Default)]
@@ -656,7 +914,11 @@ pub fn claude_code(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
 // ---- Claude app ---------------------------------------------------------------
 
 pub fn claude_desktop(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
-    let app = PathBuf::from("/Applications/Claude.app");
+    let app = if cfg!(windows) {
+        PathBuf::new()
+    } else {
+        PathBuf::from("/Applications/Claude.app")
+    };
     let mut c = Collected::default();
     collect_entries(ctx, &CLAUDE_DESKTOP, &mut c);
     let detected = !c.roots.is_empty();
@@ -672,7 +934,11 @@ pub fn claude_desktop(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
 // ---- Codex ------------------------------------------------------------------
 
 pub fn codex(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
-    let app = PathBuf::from("/Applications/Codex.app");
+    let app = if cfg!(windows) {
+        PathBuf::new()
+    } else {
+        PathBuf::from("/Applications/Codex.app")
+    };
     let mut c = Collected::default();
     collect_entries(ctx, &CODEX, &mut c);
     let detected = !c.roots.is_empty();
@@ -689,6 +955,7 @@ pub fn codex(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
 
 struct EditorDirs {
     name: &'static str,
+    /// Relative to [`APP_DATA`].
     global_storage: &'static str,
     extensions: &'static str,
 }
@@ -696,12 +963,12 @@ struct EditorDirs {
 const COPILOT_EDITORS: &[EditorDirs] = &[
     EditorDirs {
         name: "VS Code",
-        global_storage: "Library/Application Support/Code/User/globalStorage",
+        global_storage: "Code/User/globalStorage",
         extensions: ".vscode/extensions",
     },
     EditorDirs {
         name: "Cursor",
-        global_storage: "Library/Application Support/Cursor/User/globalStorage",
+        global_storage: "Cursor/User/globalStorage",
         extensions: ".cursor/extensions",
     },
 ];
@@ -741,7 +1008,7 @@ fn copilot_extension_data(ctx: &Ctx, out: &mut Collected) {
                 recommendation_id: None,
             });
         }
-        for dir in subdirs(&ctx.home_path(editor.global_storage)) {
+        for dir in subdirs(&ctx.home_path(&format!("{APP_DATA}/{}", editor.global_storage))) {
             let id = name_of(&dir);
             if !is_copilot_id(&id) {
                 continue;
@@ -935,7 +1202,9 @@ mod tests {
 
         let (report, recs) = codex(&ctx(&home));
         assert!(report.detected);
-        assert_eq!(recs.len(), 2);
+        // The Codex app (and its cache) exists only on macOS.
+        let expected = if cfg!(windows) { 1 } else { 2 };
+        assert_eq!(recs.len(), expected);
         assert!(recs
             .iter()
             .all(|r| r.tier == Tier::LikelySafe && r.source == "codex"));
@@ -948,7 +1217,7 @@ mod tests {
             .find(|s| s.title == "History and settings")
             .unwrap();
         assert!(kept.items.iter().all(|i| i.recommendation_id.is_none()));
-        assert!(report.summary.contains("2 items"));
+        assert!(report.summary.contains(&format!("{expected} item")));
     }
 
     #[test]
@@ -965,7 +1234,7 @@ mod tests {
     fn database_backups_are_recommended_only_when_stale() {
         let (_d, home) = home();
         let c = ctx(&home);
-        let gs = home.join("Library/Application Support/Cursor/User/globalStorage");
+        let gs = home.join(format!("{APP_DATA}/Cursor/User/globalStorage"));
         write(&gs.join("state.vscdb.backup"), 2_000_000);
 
         set_mtime(&gs.join("state.vscdb.backup"), 3, c.now_ms);
@@ -1021,7 +1290,7 @@ mod tests {
     #[test]
     fn copilot_storage_is_orphaned_only_when_the_extension_is_gone() {
         let (_d, home) = home();
-        let gs = home.join("Library/Application Support/Code/User/globalStorage");
+        let gs = home.join(format!("{APP_DATA}/Code/User/globalStorage"));
         write(&gs.join("github.copilot-chat/index.db"), 2_000_000);
         write(&gs.join("github.copilot/x.json"), 2_000_000);
         write(
