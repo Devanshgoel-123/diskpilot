@@ -76,6 +76,62 @@ pub fn identity_at(path: &Path) -> Option<FileIdentity> {
     })
 }
 
+/// Whether DiskPilot runs with administrator rights (an elevated token).
+pub fn is_elevated() -> bool {
+    use windows_sys::Win32::Security::{
+        GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
+    };
+    use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+    // SAFETY: the token handle is closed below; TOKEN_ELEVATION is plain
+    // data of the size passed.
+    unsafe {
+        let mut token = std::ptr::null_mut();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) == 0 {
+            return false;
+        }
+        let mut elevation: TOKEN_ELEVATION = std::mem::zeroed();
+        let mut len = 0u32;
+        let ok = GetTokenInformation(
+            token,
+            TokenElevation,
+            (&mut elevation as *mut TOKEN_ELEVATION).cast(),
+            std::mem::size_of::<TOKEN_ELEVATION>() as u32,
+            &mut len,
+        ) != 0;
+        CloseHandle(token);
+        ok && elevation.TokenIsElevated != 0
+    }
+}
+
+/// Start another DiskPilot with administrator rights. Windows shows its UAC
+/// prompt; call only after the person asked for it. Fails with
+/// `ERROR_CANCELLED` (1223) when they decline. The caller should exit once
+/// this succeeds.
+pub fn relaunch_elevated() -> std::io::Result<()> {
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let exe = std::env::current_exe()?;
+    let exe = wide(exe.as_os_str());
+    let verb = wide(OsStr::new("runas"));
+    // SAFETY: all strings are NUL-terminated and outlive the call.
+    let result = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            exe.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    // Values above 32 mean success.
+    if result as usize > 32 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
 /// Hidden or system files, which Explorer does not show by default.
 pub fn hidden(meta: &Metadata) -> bool {
     use windows_sys::Win32::Storage::FileSystem::{FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_SYSTEM};

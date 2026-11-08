@@ -23,9 +23,15 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use rayon::prelude::*;
 
 mod listing;
-#[cfg(target_os = "macos")]
+#[cfg(windows)]
+mod mft;
+#[cfg_attr(not(windows), allow(dead_code))]
+mod ntfs;
 #[doc(hidden)]
 pub use listing::FORCE_PORTABLE;
+#[cfg(windows)]
+#[doc(hidden)]
+pub use listing::LIST_BUFFER_BYTES;
 use listing::{Kind, Stat};
 
 use crate::classifier::rules::RuleKind;
@@ -58,6 +64,10 @@ pub struct ScanOptions {
     /// check at a time, which can take most of a scan for little data. The
     /// rest of the scan is published first; see [`scan_with_partial`].
     pub defer_children_of: Option<PathBuf>,
+    /// Read the NTFS Master File Table instead of listing every folder, when
+    /// DiskPilot runs with administrator rights on Windows. Falls back to the
+    /// normal scan otherwise (no rights, not NTFS, another platform).
+    pub fast: bool,
 }
 
 impl ScanOptions {
@@ -71,13 +81,17 @@ impl ScanOptions {
             heavy_dirs_limit: 200,
             inherit_ancestor_context: true,
             defer_children_of: None,
+            fast: false,
         }
     }
 
-    /// Measure other apps' containers after everything else.
+    /// Measure other apps' containers after everything else. Only macOS
+    /// has app containers; elsewhere this changes nothing.
     #[must_use]
     pub fn deferring_app_containers(mut self) -> Self {
-        self.defer_children_of = Some(self.home.join("Library").join("Containers"));
+        if cfg!(target_os = "macos") {
+            self.defer_children_of = Some(self.home.join("Library").join("Containers"));
+        }
         self
     }
 }
@@ -150,12 +164,25 @@ struct Agg {
 
 struct Deferred {
     path: PathBuf,
+    id: u64,
     own_bytes: u64,
     ctx: Option<Context>,
 }
 
+/// Where folder listings come from.
+enum Source {
+    /// The file system, one folder at a time.
+    Disk,
+    /// A volume's file table read up front (Windows, NTFS, administrator).
+    /// Folders are identified by record number, passed down as `id`.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    Table(ntfs::Tree),
+}
+
 struct Shared<'a> {
     opts: &'a ScanOptions,
+    /// Chosen once the scan starts; see [`fast_source`].
+    source: std::sync::OnceLock<Source>,
     classifier: Classifier,
     root_dev: u64,
     cancel: &'a AtomicBool,
@@ -178,6 +205,9 @@ struct Shared<'a> {
     kind_top: [Mutex<BinaryHeap<Reverse<FileCandidate>>>; FileKind::COUNT],
     kind_threshold: [AtomicU64; FileKind::COUNT],
     seen_inodes: Mutex<HashSet<(u64, u64)>>,
+    /// Folders where hard links are common and checked for (Windows, whose
+    /// listings do not report link counts). See [`hard_links_likely`].
+    link_areas: Vec<PathBuf>,
     locations: Mutex<Vec<LocationCandidate>>,
     current: Mutex<PathBuf>,
     /// Canonical folder whose subfolders are set aside, if any.
@@ -268,21 +298,39 @@ impl Shared<'_> {
     }
 
     /// Allocated size of a file, counting each hard-linked inode once.
-    fn file_bytes(&self, stat: &Stat) -> u64 {
+    /// `links_likely`: the file is in a folder where hard links are common
+    /// but the listing does not report link counts.
+    fn file_bytes(&self, stat: &Stat, path: &Path, links_likely: bool) -> u64 {
         // Everything scanned is on the root's volume, so the inode alone
         // identifies a file.
-        if stat.nlink > 1 {
+        let key = if stat.nlink > 1 {
+            Some(stat.ino)
+        } else if links_likely {
+            file_index(stat, path)
+        } else {
+            None
+        };
+        if let Some(key) = key {
             let mut seen = self.seen_inodes.lock().unwrap_or_else(|e| e.into_inner());
-            if !seen.insert((self.root_dev, stat.ino)) {
+            if !seen.insert((self.root_dev, key)) {
                 return 0;
             }
         }
         stat.alloc
     }
 
+    fn list(&self, path: &Path, id: u64) -> std::io::Result<listing::Listing> {
+        match self.source.get() {
+            Some(Source::Table(tree)) => tree.list(id),
+            _ => listing::list(path, self.root_dev),
+        }
+    }
+
+    /// `id` identifies the folder in a file table; unused for disk listings.
     fn scan_dir(
         &self,
         path: &Path,
+        id: u64,
         own_bytes: u64,
         inherited: Option<Context>,
         parent_names: Option<&HashSet<OsString>>,
@@ -298,7 +346,7 @@ impl Shared<'_> {
 
         self.bytes.fetch_add(own_bytes, Ordering::Relaxed);
 
-        let listing = match listing::list(path, self.root_dev) {
+        let listing = match self.list(path, id) {
             Ok(l) => l,
             Err(err) => {
                 self.record_error(path, &err);
@@ -365,7 +413,11 @@ impl Shared<'_> {
             files: 0,
             dirs: 1,
         };
-        let mut subdirs: Vec<(PathBuf, u64)> = Vec::new();
+        let mut subdirs: Vec<(PathBuf, u64, u64)> = Vec::new();
+        // A file table reports exact link counts.
+        let links_likely = cfg!(windows)
+            && !matches!(self.source.get(), Some(Source::Table(_)))
+            && hard_links_likely(path, &self.link_areas);
 
         for (name, stat) in entries {
             let child = path.join(&name);
@@ -378,11 +430,12 @@ impl Shared<'_> {
                         .unwrap_or_else(|e| e.into_inner())
                         .push(Deferred {
                             path: child,
+                            id: stat.ino,
                             own_bytes: stat.alloc,
                             ctx: ctx.clone(),
                         });
                 } else {
-                    subdirs.push((child, stat.alloc));
+                    subdirs.push((child, stat.ino, stat.alloc));
                 }
                 continue;
             }
@@ -390,7 +443,7 @@ impl Shared<'_> {
                 self.symlinks.fetch_add(1, Ordering::Relaxed);
                 stat.alloc
             } else {
-                self.file_bytes(&stat)
+                self.file_bytes(&stat, &child, links_likely)
             };
             agg.bytes += bytes;
             agg.files += 1;
@@ -464,7 +517,7 @@ impl Shared<'_> {
         let direct_bytes = agg.bytes;
         let children: Vec<Agg> = subdirs
             .par_iter()
-            .map(|(p, b)| self.scan_dir(p, *b, ctx.clone(), Some(&names)))
+            .map(|(p, id, b)| self.scan_dir(p, *id, *b, ctx.clone(), Some(&names)))
             .collect();
 
         let mut largest_child_dir = 0;
@@ -551,6 +604,57 @@ impl Shared<'_> {
     }
 }
 
+/// Identity of a file that may have other names, for counting it once.
+/// Windows listings carry the file id; only listings without one (FAT, some
+/// network shares) open the file.
+#[cfg(windows)]
+fn file_index(stat: &Stat, path: &Path) -> Option<u64> {
+    if stat.ino != 0 {
+        return Some(stat.ino);
+    }
+    platform::identity_at(path)
+        .filter(|id| id.links > 1)
+        .map(|id| id.index)
+}
+
+/// Unix listings report link counts, so nothing more is needed.
+#[cfg(not(windows))]
+fn file_index(_stat: &Stat, _path: &Path) -> Option<u64> {
+    None
+}
+
+/// Folders where Windows itself makes hard links: the Windows folder, where
+/// WinSxS shares its files with System32 and others, and pnpm's global
+/// store. Canonical, like the scanner's paths.
+fn link_areas() -> Vec<PathBuf> {
+    if !cfg!(windows) {
+        return Vec::new();
+    }
+    let mut areas = Vec::new();
+    if let Some(root) = std::env::var_os("SystemRoot") {
+        areas.push(PathBuf::from(root));
+    }
+    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+        areas.push(Path::new(&local).join("pnpm").join("store"));
+    }
+    areas
+        .into_iter()
+        .filter_map(|p| p.canonicalize().ok())
+        .collect()
+}
+
+/// Whether files in `dir` often have several names. Windows listings do not
+/// report link counts and opening every file to ask would slow every scan,
+/// so only these folders are checked: `areas` (see [`link_areas`]) and pnpm
+/// stores, which hard-link every package file into `node_modules/.pnpm`.
+fn hard_links_likely(dir: &Path, areas: &[PathBuf]) -> bool {
+    areas.iter().any(|a| dir.starts_with(a))
+        || dir.components().any(|c| {
+            let name = c.as_os_str();
+            name.eq_ignore_ascii_case(".pnpm") || name.eq_ignore_ascii_case(".pnpm-store")
+        })
+}
+
 /// Folder names that hold build output in a code project.
 const BUILD_OUTPUT_NAMES: &[&str] = &["build", "dist", "out"];
 
@@ -607,6 +711,33 @@ pub fn scan_with_partial(
     on_progress: &(dyn Fn(ScanProgress) + Sync),
     on_partial: &(dyn Fn(ScanOutcome) + Sync),
 ) -> Result<ScanOutcome, ScanError> {
+    scan_from(opts, cancel, on_progress, on_partial, &|root| {
+        fast_source(opts, root, cancel)
+    })
+}
+
+/// The file table of the root's volume, when [`ScanOptions::fast`] asks for
+/// it and it can be read. `None` means the normal scan.
+#[cfg_attr(not(windows), allow(unused_variables))]
+fn fast_source(opts: &ScanOptions, root: &Path, cancel: &AtomicBool) -> Option<(Source, u64)> {
+    #[cfg(windows)]
+    if opts.fast && platform::is_elevated() {
+        return mft::load(root, cancel)
+            .ok()
+            .map(|(tree, id)| (Source::Table(tree), id));
+    }
+    None
+}
+
+/// Run a scan with listings from `source` (called once, on the scan's
+/// threads, with the canonical root).
+fn scan_from(
+    opts: &ScanOptions,
+    cancel: &AtomicBool,
+    on_progress: &(dyn Fn(ScanProgress) + Sync),
+    on_partial: &(dyn Fn(ScanOutcome) + Sync),
+    source: &(dyn Fn(&Path) -> Option<(Source, u64)> + Sync),
+) -> Result<ScanOutcome, ScanError> {
     let started_at_ms = now_ms();
     let started = Instant::now();
     let root = resolve_root(&opts.root)?;
@@ -625,6 +756,7 @@ pub fn scan_with_partial(
 
     let shared = Shared {
         opts,
+        source: std::sync::OnceLock::new(),
         classifier,
         root_dev: crate::platform::device(&root_meta),
         cancel,
@@ -646,6 +778,7 @@ pub fn scan_with_partial(
         kind_top: std::array::from_fn(|_| Mutex::new(BinaryHeap::new())),
         kind_threshold: std::array::from_fn(|_| AtomicU64::new(0)),
         seen_inodes: Mutex::new(HashSet::new()),
+        link_areas: link_areas(),
         locations: Mutex::new(Vec::new()),
         current: Mutex::new(root.clone()),
         // Deferring only makes sense when the scan reaches the folder from
@@ -683,7 +816,11 @@ pub fn scan_with_partial(
                 }
             }
         });
-        pool.install(|| shared.scan_dir(&root, allocated_bytes(&root_meta), inherited, None));
+        pool.install(|| {
+            let (source, root_id) = source(&root).unwrap_or((Source::Disk, 0));
+            let _ = shared.source.set(source);
+            shared.scan_dir(&root, root_id, allocated_bytes(&root_meta), inherited, None)
+        });
 
         let deferred =
             std::mem::take(&mut *shared.deferred.lock().unwrap_or_else(|e| e.into_inner()));
@@ -703,7 +840,7 @@ pub fn scan_with_partial(
                 .clone();
             pool.install(|| {
                 deferred.into_par_iter().for_each(|d| {
-                    let agg = shared.scan_dir(&d.path, d.own_bytes, d.ctx, names.as_deref());
+                    let agg = shared.scan_dir(&d.path, d.id, d.own_bytes, d.ctx, names.as_deref());
                     if !shared.cancelled() {
                         shared.add_to_ancestors(&d.path, agg, &root);
                     }
@@ -933,4 +1070,107 @@ pub fn measure(path: &Path) -> u64 {
         }
     }
     total
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hard_links_are_checked_where_they_are_common() {
+        let areas = [PathBuf::from("/win/Windows")];
+        let likely = |p: &str| hard_links_likely(Path::new(p), &areas);
+        assert!(likely("/win/Windows/WinSxS/amd64_x"));
+        assert!(likely("/win/Windows"));
+        assert!(likely(
+            "/code/app/node_modules/.pnpm/react@19/node_modules/react"
+        ));
+        assert!(likely("/code/.pnpm-store/v3/files/00"));
+        assert!(likely("/code/app/node_modules/.PNPM/x"));
+        assert!(!likely("/win/WindowsApps"));
+        assert!(!likely("/code/app/node_modules/react"));
+        assert!(!likely("/code/app/.pnpm-debug"));
+    }
+}
+
+#[cfg(test)]
+mod table_tests {
+    use super::ntfs::tests::{tree, RecordBuilder as R, JAN_2020};
+    use super::*;
+
+    /// A scan fed by a file table: hard links once, junctions not
+    /// descended, DOS names ignored, sizes from the records.
+    #[test]
+    fn scan_from_a_file_table() {
+        let dir = tempfile::tempdir().unwrap();
+        let runs = [0x21, 0x01, 0x00, 0x10, 0x00];
+        let table = tree(&[
+            (5, R::dir().std_info(0x10, JAN_2020).name(5, 3, ".").build()),
+            (
+                16,
+                R::dir()
+                    .std_info(0x10, JAN_2020)
+                    .name(5, 1, "docs")
+                    .name(5, 2, "DOCS~1")
+                    .build(),
+            ),
+            (
+                17,
+                R::file()
+                    .std_info(0x20, JAN_2020)
+                    .name(16, 1, "a.bin")
+                    .name(5, 1, "a-link.bin")
+                    .data(0, 1 << 20, 1_000_000, &runs)
+                    .build(),
+            ),
+            (
+                18,
+                R::file()
+                    .std_info(0x20, JAN_2020)
+                    .name(16, 1, "b.txt")
+                    .resident_data(100)
+                    .build(),
+            ),
+            (
+                19,
+                R::dir()
+                    .std_info(0x410, JAN_2020)
+                    .name(5, 1, "junction")
+                    .reparse(0xA000_0003)
+                    .build(),
+            ),
+            (
+                20,
+                R::file()
+                    .std_info(0x20, JAN_2020)
+                    .name(19, 1, "behind-the-junction.bin")
+                    .data(0, 1 << 30, 1 << 30, &runs)
+                    .build(),
+            ),
+        ]);
+        let mut opts = ScanOptions::new("t", dir.path(), dir.path());
+        opts.inherit_ancestor_context = false;
+        let table = Mutex::new(Some(table));
+        let o = scan_from(&opts, &AtomicBool::new(false), &|_| {}, &|_| {}, &|_| {
+            table
+                .lock()
+                .unwrap()
+                .take()
+                .map(|t| (Source::Table(t), ntfs::ROOT_RECORD))
+        })
+        .unwrap();
+        let s = &o.summary;
+        // a.bin, a-link.bin, b.txt and the junction (counted as a link).
+        assert_eq!(s.file_count, 4);
+        assert_eq!(s.symlink_count, 1);
+        assert_eq!(s.dir_count, 2);
+        assert_eq!(s.total_bytes, (1 << 20) + 104);
+        assert_eq!(s.largest_files[0].bytes, 1 << 20);
+        assert_eq!(s.largest_files[0].logical_bytes, 1_000_000);
+        let root = PathBuf::from(&s.root);
+        assert!(o.index.contains_key(&root.join("docs")));
+        assert!(!o.index.contains_key(&root.join("junction")));
+        let cat_sum: u64 = s.categories.iter().map(|c| c.bytes).sum();
+        assert_eq!(cat_sum, s.total_bytes);
+    }
 }

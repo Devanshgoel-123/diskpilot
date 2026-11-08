@@ -141,6 +141,27 @@ fn hard_links_are_counted_once() {
     assert!(with_link < baseline + 100_000, "{baseline} -> {with_link}");
 }
 
+/// Windows listings do not report link counts; files in pnpm's
+/// `node_modules/.pnpm` (and the Windows folder) are checked by file id.
+#[cfg(windows)]
+#[test]
+fn hard_links_are_counted_once() {
+    let f = fixture();
+    let pnpm = f.home.join("code/web/node_modules/.pnpm");
+    let a = pnpm.join("lodash@4.17.21/node_modules/lodash/lodash.js");
+    write(&a, 500_000);
+    let b = pnpm.join("lodash-es@4.17.21/node_modules/lodash-es/lodash.js");
+    fs::create_dir_all(b.parent().unwrap()).unwrap();
+    let before = run(&f).summary;
+    let baseline = before.total_bytes;
+    fs::hard_link(&a, &b).unwrap();
+    let after = run(&f).summary;
+    let with_link = after.total_bytes;
+    assert!(with_link < baseline + 100_000, "{baseline} -> {with_link}");
+    // Both names are still counted as files.
+    assert_eq!(after.file_count, before.file_count + 1);
+}
+
 #[cfg(unix)]
 #[test]
 fn unreadable_folders_are_reported_not_fatal() {

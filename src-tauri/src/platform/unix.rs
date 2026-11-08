@@ -81,3 +81,17 @@ pub fn local_time(secs: i64) -> (i64, u32, u32) {
         u32::try_from(tm.tm_hour).unwrap_or(0),
     )
 }
+
+/// Whether DiskPilot runs with administrator rights (as root here).
+pub fn is_elevated() -> bool {
+    // SAFETY: no arguments, cannot fail.
+    unsafe { libc::geteuid() == 0 }
+}
+
+/// Starting DiskPilot again with administrator rights is a Windows feature.
+pub fn relaunch_elevated() -> std::io::Result<()> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "Only available on Windows",
+    ))
+}

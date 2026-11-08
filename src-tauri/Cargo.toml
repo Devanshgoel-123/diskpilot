@@ -57,6 +57,9 @@ windows-sys = { version = "0.61", features = [
   "Win32_System_Time",
   "Win32_Security",
   "Win32_System_Threading",
+  "Win32_System_Ioctl",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

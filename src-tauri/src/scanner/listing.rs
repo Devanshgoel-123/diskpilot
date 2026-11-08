@@ -1,15 +1,16 @@
 //! Directory listing with per-entry metadata, without following symlinks.
 //!
 //! On macOS one `getattrlistbulk` call returns a batch of entries together
-//! with their attributes, instead of one `lstat` per entry. Other platforms,
-//! and file systems that do not support it, use `read_dir` + `lstat`.
+//! with their attributes, instead of one `lstat` per entry. On Windows one
+//! `GetFileInformationByHandleEx` call does the same from a single directory
+//! handle. Other platforms, and file systems that support neither, use
+//! `read_dir` + `lstat`.
 
 use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use crate::platform;
-#[cfg(target_os = "macos")]
 use std::sync::atomic::AtomicBool;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,17 +74,50 @@ pub(crate) struct Listing {
     pub errors: Vec<(PathBuf, io::Error)>,
 }
 
+/// Reparse tags with this bit redirect to another name: symbolic links,
+/// junctions and volume mount points. Those are links and never descended.
+/// Other reparse points (cloud files, deduplicated and compressed system
+/// files, app aliases) are ordinary files and folders with a file-system
+/// filter, exactly as `std::fs` treats them.
+const NAME_SURROGATE: u32 = 0x2000_0000;
+const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+
+/// Kind of a Windows entry from its attributes and reparse tag.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn kind_of(attrs: u32, tag: u32) -> Kind {
+    if attrs & FILE_ATTRIBUTE_REPARSE_POINT != 0 && tag & NAME_SURROGATE != 0 {
+        Kind::Symlink
+    } else if attrs & FILE_ATTRIBUTE_DIRECTORY != 0 {
+        Kind::Dir
+    } else {
+        Kind::File
+    }
+}
+
+/// Milliseconds since the Unix epoch from a Windows FILETIME, as
+/// `Metadata::modified` would report it (`None` before 1970).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn filetime_ms(ft: i64) -> Option<i64> {
+    const EPOCH: i64 = 116_444_736_000_000_000;
+    (ft >= EPOCH).then(|| (ft - EPOCH) / 10_000)
+}
+
 /// Testing and benchmarking only: list with `read_dir` + `lstat` everywhere.
-#[cfg(target_os = "macos")]
 #[doc(hidden)]
 pub static FORCE_PORTABLE: AtomicBool = AtomicBool::new(false);
 
 /// List `dir`. Fails only if the folder cannot be opened at all.
 pub(crate) fn list(dir: &Path, root_dev: u64) -> io::Result<Listing> {
-    #[cfg(target_os = "macos")]
     if !FORCE_PORTABLE.load(std::sync::atomic::Ordering::Relaxed) {
+        #[cfg(target_os = "macos")]
         match bulk::list(dir) {
             Err(e) if bulk::unsupported(&e) => {}
+            other => return other,
+        }
+        #[cfg(windows)]
+        match win::list(dir) {
+            Err(e) if win::unsupported(&e) => {}
             other => return other,
         }
     }
@@ -105,7 +139,14 @@ pub(crate) fn list_portable(dir: &Path, root_dev: u64) -> io::Result<Listing> {
             }
         };
         let child = entry.path();
-        match std::fs::symlink_metadata(&child) {
+        // On Windows the entry's metadata comes from the directory listing
+        // itself (links not followed); `symlink_metadata` would open every
+        // file.
+        #[cfg(windows)]
+        let meta = entry.metadata();
+        #[cfg(not(windows))]
+        let meta = std::fs::symlink_metadata(&child);
+        match meta {
             Ok(meta) => listing
                 .entries
                 .push((entry.file_name(), Stat::from_metadata(&meta, root_dev))),
@@ -334,6 +375,397 @@ mod bulk {
         *off = end;
         // SAFETY: `bytes` holds size_of::<T>() bytes; T is plain old data.
         Some(unsafe { std::ptr::read_unaligned(bytes.as_ptr().cast()) })
+    }
+}
+
+/// Bytes of the per-thread buffer the Windows listing reads into. Testing
+/// and benchmarking may change it; see `scan_bench`.
+#[cfg(windows)]
+#[doc(hidden)]
+pub static LIST_BUFFER_BYTES: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(win::DEFAULT_BUF_BYTES);
+
+#[cfg(windows)]
+mod win {
+    use super::{filetime_ms, kind_of, Kind, Listing, Stat};
+    use std::cell::RefCell;
+    use std::ffi::OsString;
+    use std::io;
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    use std::path::Path;
+    use std::sync::atomic::Ordering;
+
+    use windows_sys::Win32::Foundation::{
+        CloseHandle, ERROR_INVALID_FUNCTION, ERROR_INVALID_LEVEL, ERROR_INVALID_PARAMETER,
+        ERROR_NOT_SUPPORTED, ERROR_NO_MORE_FILES, HANDLE, INVALID_HANDLE_VALUE,
+    };
+    use windows_sys::Win32::Storage::FileSystem::{
+        CreateFileW, FileFullDirectoryInfo, FileFullDirectoryRestartInfo, FileIdExtdDirectoryInfo,
+        FileIdExtdDirectoryRestartInfo, GetFileInformationByHandleEx, FILE_ATTRIBUTE_REPARSE_POINT,
+        FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_INFO_BY_HANDLE_CLASS,
+        FILE_LIST_DIRECTORY, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+    };
+
+    /// 64 KiB holds about 500 typical entries per call, so most folders
+    /// need one call. Larger buffers only help folders with thousands of
+    /// entries; `scan_bench` measures the difference.
+    pub(super) const DEFAULT_BUF_BYTES: usize = 64 * 1024;
+
+    thread_local! {
+        // A listing finishes before the scanner recurses, so one buffer per
+        // worker thread is enough. `u64` elements keep it 8-byte aligned,
+        // as the entries require.
+        static BUF: RefCell<Vec<u64>> = const { RefCell::new(Vec::new()) };
+    }
+
+    /// Both directory information classes were refused: list another way.
+    pub(super) fn unsupported(e: &io::Error) -> bool {
+        e.raw_os_error().is_some_and(|c| {
+            [
+                ERROR_INVALID_LEVEL,
+                ERROR_INVALID_PARAMETER,
+                ERROR_NOT_SUPPORTED,
+                ERROR_INVALID_FUNCTION,
+            ]
+            .contains(&(c as u32))
+        })
+    }
+
+    struct Handle(HANDLE);
+    impl Drop for Handle {
+        fn drop(&mut self) {
+            // SAFETY: a handle this module opened and nothing else closes.
+            unsafe { CloseHandle(self.0) };
+        }
+    }
+
+    /// The entry layout one information class returns.
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Class {
+        /// `FILE_ID_EXTD_DIR_INFO`: has the reparse tag and the file id.
+        IdExtd,
+        /// `FILE_FULL_DIR_INFO`: the reparse tag is in `EaSize`, no file id.
+        Full,
+    }
+
+    impl Class {
+        fn restart(self) -> FILE_INFO_BY_HANDLE_CLASS {
+            match self {
+                Class::IdExtd => FileIdExtdDirectoryRestartInfo,
+                Class::Full => FileFullDirectoryRestartInfo,
+            }
+        }
+        fn next(self) -> FILE_INFO_BY_HANDLE_CLASS {
+            match self {
+                Class::IdExtd => FileIdExtdDirectoryInfo,
+                Class::Full => FileFullDirectoryInfo,
+            }
+        }
+        fn name_offset(self) -> usize {
+            match self {
+                Class::IdExtd => 88,
+                Class::Full => 68,
+            }
+        }
+    }
+
+    /// A path Win32 accepts at any length: `\\?\` is added when the path is
+    /// long and does not have it yet.
+    pub(super) fn wide_path(dir: &Path) -> Vec<u16> {
+        // Folder paths must leave room for an 8.3 name below MAX_PATH.
+        const LIMIT: usize = 248;
+        let w: Vec<u16> = dir.as_os_str().encode_wide().collect();
+        let prefixed = w.starts_with(&[b'\\' as u16, b'\\' as u16, b'?' as u16, b'\\' as u16])
+            || w.starts_with(&[b'\\' as u16, b'\\' as u16, b'.' as u16, b'\\' as u16]);
+        let mut out = if w.len() < LIMIT || prefixed {
+            w
+        } else {
+            let abs = std::path::absolute(dir).unwrap_or_else(|_| dir.to_path_buf());
+            let abs: Vec<u16> = abs
+                .as_os_str()
+                .encode_wide()
+                .map(|c| if c == b'/' as u16 { b'\\' as u16 } else { c })
+                .collect();
+            let mut out: Vec<u16> = Vec::with_capacity(abs.len() + 8);
+            if abs.starts_with(&[b'\\' as u16, b'\\' as u16]) {
+                // \\server\share\x -> \\?\UNC\server\share\x
+                out.extend(r"\\?\UNC\".encode_utf16());
+                out.extend_from_slice(&abs[2..]);
+            } else {
+                out.extend(r"\\?\".encode_utf16());
+                out.extend_from_slice(&abs);
+            }
+            out
+        };
+        out.push(0);
+        out
+    }
+
+    fn read_u32(b: &[u8], off: usize) -> Option<u32> {
+        Some(u32::from_le_bytes(b.get(off..off + 4)?.try_into().ok()?))
+    }
+    fn read_u64(b: &[u8], off: usize) -> Option<u64> {
+        Some(u64::from_le_bytes(b.get(off..off + 8)?.try_into().ok()?))
+    }
+
+    /// Parse one entry. `None` if it is malformed; `Some(None)` for `.` and
+    /// `..`.
+    fn parse(class: Class, e: &[u8]) -> Option<Option<(OsString, Stat)>> {
+        let write_time = read_u64(e, 24)? as i64;
+        let eof = read_u64(e, 40)?;
+        let alloc = read_u64(e, 48)?;
+        let attrs = read_u32(e, 56)?;
+        let name_bytes = read_u32(e, 60)? as usize;
+        let tag = if attrs & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            match class {
+                Class::IdExtd => read_u32(e, 68)?,
+                Class::Full => read_u32(e, 64)?,
+            }
+        } else {
+            0
+        };
+        let ino = match class {
+            Class::IdExtd => read_u64(e, 72)?,
+            Class::Full => 0,
+        };
+        let start = class.name_offset();
+        let raw = e.get(start..start.checked_add(name_bytes)?)?;
+        let name: Vec<u16> = raw
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        if name == [b'.' as u16] || name == [b'.' as u16, b'.' as u16] {
+            return Some(None);
+        }
+        let kind = kind_of(attrs, tag);
+        let is_dir = kind == Kind::Dir;
+        Some(Some((
+            OsString::from_wide(&name),
+            Stat {
+                kind,
+                // A folder's own size is not counted on Windows, as in
+                // `platform::allocated_bytes`. For files this is the space
+                // used on this PC: zero for a cloud file that is online only.
+                alloc: if is_dir { 0 } else { alloc },
+                logical: if is_dir { 0 } else { eof },
+                modified_ms: filetime_ms(write_time),
+                // Directory listings do not report link counts; the
+                // scanner asks where hard links are common.
+                nlink: 1,
+                ino,
+                // Mount points are reparse points, so never descended.
+                other_volume: false,
+            },
+        )))
+    }
+
+    pub(super) fn list(dir: &Path) -> io::Result<Listing> {
+        let w = wide_path(dir);
+        // SAFETY: `w` is NUL-terminated and outlives the call; the handle is
+        // closed by `Handle`.
+        let h = unsafe {
+            CreateFileW(
+                w.as_ptr(),
+                FILE_LIST_DIRECTORY,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                std::ptr::null(),
+                OPEN_EXISTING,
+                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                std::ptr::null_mut(),
+            )
+        };
+        if h == INVALID_HANDLE_VALUE {
+            return Err(io::Error::last_os_error());
+        }
+        let h = Handle(h);
+        let mut listing = Listing {
+            entries: Vec::new(),
+            errors: Vec::new(),
+        };
+        let want = super::LIST_BUFFER_BYTES
+            .load(Ordering::Relaxed)
+            .clamp(4096, 16 << 20);
+        BUF.with_borrow_mut(|words| {
+            if words.len() * 8 != want {
+                *words = vec![0u64; want.div_ceil(8)];
+            }
+            let len = words.len() * 8;
+            let read = |class: FILE_INFO_BY_HANDLE_CLASS, words: &mut Vec<u64>| -> bool {
+                // SAFETY: the buffer is `len` bytes, 8-byte aligned.
+                unsafe {
+                    GetFileInformationByHandleEx(h.0, class, words.as_mut_ptr().cast(), len as u32)
+                        != 0
+                }
+            };
+            // The first call restarts the scan and tells which class works.
+            let mut class = Class::IdExtd;
+            if !read(class.restart(), words) {
+                let err = io::Error::last_os_error();
+                if err.raw_os_error() == Some(ERROR_NO_MORE_FILES as i32) {
+                    return Ok(());
+                }
+                if !unsupported(&err) {
+                    return Err(err);
+                }
+                class = Class::Full;
+                if !read(class.restart(), words) {
+                    let err = io::Error::last_os_error();
+                    if err.raw_os_error() == Some(ERROR_NO_MORE_FILES as i32) {
+                        return Ok(());
+                    }
+                    return Err(err);
+                }
+            }
+            loop {
+                // SAFETY: the call wrote at most `len` bytes into the buffer.
+                let buf: &[u8] = unsafe { std::slice::from_raw_parts(words.as_ptr().cast(), len) };
+                let mut off = 0usize;
+                while let Some(entry) = buf.get(off..) {
+                    let next = read_u32(entry, 0).unwrap_or(0) as usize;
+                    let entry = if next == 0 {
+                        entry
+                    } else {
+                        &entry[..next.min(entry.len())]
+                    };
+                    match parse(class, entry) {
+                        Some(Some(item)) => listing.entries.push(item),
+                        Some(None) => {}
+                        None => {
+                            listing.errors.push((
+                                dir.to_path_buf(),
+                                io::Error::new(io::ErrorKind::InvalidData, "malformed entry"),
+                            ));
+                            return Ok(());
+                        }
+                    }
+                    if next == 0 {
+                        break;
+                    }
+                    off += next;
+                }
+                if !read(class.next(), words) {
+                    let err = io::Error::last_os_error();
+                    if err.raw_os_error() != Some(ERROR_NO_MORE_FILES as i32) {
+                        listing.errors.push((dir.to_path_buf(), err));
+                    }
+                    return Ok(());
+                }
+            }
+        })?;
+        Ok(listing)
+    }
+}
+
+#[cfg(all(test, windows))]
+mod win_tests {
+    use super::*;
+    use std::os::windows::fs::MetadataExt;
+    use std::process::Command;
+
+    fn sorted(mut l: Listing) -> Vec<(OsString, Stat)> {
+        l.entries.sort_by(|a, b| a.0.cmp(&b.0));
+        l.entries
+    }
+
+    /// Fields both listings report the same way. Allocation differs on
+    /// purpose: the portable path estimates it from the length.
+    fn comparable(v: &[(OsString, Stat)]) -> Vec<(OsString, Kind, u64, Option<i64>)> {
+        v.iter()
+            .map(|(n, s)| (n.clone(), s.kind, s.logical, s.modified_ms))
+            .collect()
+    }
+
+    #[test]
+    fn fast_listing_matches_read_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let d = dir.path();
+        std::fs::write(d.join("empty"), b"").unwrap();
+        std::fs::write(d.join("big.bin"), vec![1u8; 300_000]).unwrap();
+        std::fs::write(d.join("naïve ✓ name"), b"x").unwrap();
+        std::fs::hard_link(d.join("big.bin"), d.join("link.bin")).unwrap();
+        std::fs::create_dir(d.join("sub")).unwrap();
+        std::fs::write(d.join("sub/f"), b"y").unwrap();
+        std::fs::create_dir(d.join("empty-dir")).unwrap();
+        // Symbolic links need a privilege CI runners have; skip if missing.
+        let have_symlink =
+            std::os::windows::fs::symlink_file(d.join("big.bin"), d.join("sym")).is_ok();
+        let junction = Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(d.join("junction"))
+            .arg(d.join("sub"))
+            .output()
+            .is_ok_and(|o| o.status.success());
+        // Many entries, so the fast reader needs more than one call.
+        std::fs::create_dir(d.join("many")).unwrap();
+        for i in 0..3000 {
+            std::fs::write(
+                d.join(format!("many/file-with-a-longish-name-{i:05}")),
+                b"z",
+            )
+            .unwrap();
+        }
+        // A folder whose path is longer than MAX_PATH.
+        let mut long = d.to_path_buf();
+        while long.as_os_str().len() < 300 {
+            long.push("a-folder-name-that-is-quite-long");
+        }
+        std::fs::create_dir_all(&long).unwrap();
+        std::fs::write(long.join("deep.txt"), b"deep").unwrap();
+
+        for dir in [d.to_path_buf(), d.join("many"), long.clone()] {
+            let fast = win::list(&dir).unwrap();
+            assert!(fast.errors.is_empty());
+            let portable = list_portable(&dir, 0).unwrap();
+            assert!(portable.errors.is_empty());
+            assert_eq!(
+                comparable(&sorted(fast)),
+                comparable(&sorted(portable)),
+                "{}",
+                dir.display()
+            );
+        }
+        assert_eq!(win::list(&d.join("empty-dir")).unwrap().entries.len(), 0);
+
+        let fast = sorted(win::list(d).unwrap());
+        let stat = |n: &str| fast.iter().find(|(x, _)| x == n).unwrap().1;
+        assert_eq!(stat("sub").kind, Kind::Dir);
+        assert_eq!(stat("big.bin").kind, Kind::File);
+        assert!(stat("big.bin").alloc >= 300_000);
+        if have_symlink {
+            assert_eq!(stat("sym").kind, Kind::Symlink);
+        }
+        if junction {
+            assert_eq!(stat("junction").kind, Kind::Symlink);
+        }
+        // File ids match what the file itself reports, and both names of a
+        // hard-linked file share one.
+        let id = crate::platform::identity_at(&d.join("big.bin")).unwrap();
+        assert_eq!(stat("big.bin").ino, id.index);
+        assert_eq!(stat("link.bin").ino, id.index);
+        assert_ne!(stat("empty").ino, id.index);
+        let meta = std::fs::symlink_metadata(d.join("big.bin")).unwrap();
+        assert_eq!(stat("big.bin").logical, meta.file_size());
+    }
+
+    #[test]
+    fn long_paths_get_the_prefix() {
+        let short = Path::new(r"C:\Users\x");
+        assert_eq!(
+            String::from_utf16_lossy(&win::wide_path(short)),
+            "C:\\Users\\x\0"
+        );
+        let long = format!(r"C:\{}", "a\\".repeat(200));
+        let w = String::from_utf16_lossy(&win::wide_path(Path::new(&long)));
+        assert!(w.starts_with(r"\\?\C:\a\a"), "{w}");
+        let unc = format!(r"\\server\share\{}", "b\\".repeat(200));
+        let w = String::from_utf16_lossy(&win::wide_path(Path::new(&unc)));
+        assert!(w.starts_with(r"\\?\UNC\server\share\b"), "{w}");
+    }
+
+    #[test]
+    fn missing_folder_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(list(&dir.path().join("nope"), 0).is_err());
     }
 }
 

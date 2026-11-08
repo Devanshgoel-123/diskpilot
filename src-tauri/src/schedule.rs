@@ -256,7 +256,7 @@ fn tick(app: &tauri::AppHandle) {
     };
     if rescan_due(&s, last_finished, scanning, now_ms) {
         // The same read-only scan as the Rescan button, of the same folder.
-        if let Err(e) = crate::commands::start_scan(app.clone(), state.clone(), root) {
+        if let Err(e) = crate::commands::start_scan(app.clone(), state.clone(), root, None) {
             eprintln!("diskpilot: scheduled rescan did not start: {e}");
         }
     }
