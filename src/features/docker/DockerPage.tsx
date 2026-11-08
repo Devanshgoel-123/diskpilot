@@ -394,6 +394,7 @@ export function DockerPage() {
           onDone={() => {
             void load();
             void refreshHistory();
+            void useApp.getState().refreshDisk();
             if (findings) void diagnose();
           }}
         />

@@ -96,6 +96,7 @@ export function CleanupDialog({
       onFinished(result);
       // Space cleared and streaks count every cleanup, from any page.
       void useApp.getState().refreshHistory();
+      void useApp.getState().refreshDisk();
     } catch (e) {
       setError(errorMessage(e));
     } finally {
