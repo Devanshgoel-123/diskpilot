@@ -38,6 +38,8 @@ pub mod trash;
 pub mod trash;
 pub mod tray;
 pub mod tray_icon;
+#[cfg(any(windows, test))]
+pub mod winshell;
 
 use tauri::Manager;
 

@@ -408,8 +408,9 @@ pub async fn get_item_details(state: State<'_, AppState>, path: String) -> AppRe
     .await
 }
 
-/// Reveal an item in Finder. Uses `open -R` with the path passed as a single
-/// argument (no shell), and only for paths inside the scanned folder.
+/// Reveal an item in Finder (File Explorer on Windows). Uses `open -R` with
+/// the path passed as a single argument (no shell), and only for paths
+/// inside the scanned folder.
 #[tauri::command]
 pub fn reveal_in_finder(state: State<'_, AppState>, path: String) -> AppResult<()> {
     let outcome = last_scan(&state)?;
@@ -417,18 +418,29 @@ pub fn reveal_in_finder(state: State<'_, AppState>, path: String) -> AppResult<(
     if path.symlink_metadata().is_err() {
         return Err(SafetyError::Missing(path.display().to_string()).into());
     }
-    let status = std::process::Command::new("/usr/bin/open")
-        .arg("-R")
-        .arg(&path)
-        .status()
-        .map_err(|e| AppError::io(&path, &e))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(AppError::Other(format!(
-            "Finder could not reveal {}",
-            path.display()
-        )))
+    #[cfg(windows)]
+    return crate::winshell::reveal(&path).map_err(|e| {
+        AppError::Other(format!(
+            "File Explorer could not show {}: {}",
+            path.display(),
+            e.message()
+        ))
+    });
+    #[cfg(not(windows))]
+    {
+        let status = std::process::Command::new("/usr/bin/open")
+            .arg("-R")
+            .arg(&path)
+            .status()
+            .map_err(|e| AppError::io(&path, &e))?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(AppError::Other(format!(
+                "Finder could not reveal {}",
+                path.display()
+            )))
+        }
     }
 }
 
@@ -490,11 +502,43 @@ pub async fn file_thumbnail(
     }
     blocking(move || {
         let path = previewable_file(&path)?;
+        #[cfg(windows)]
+        if path
+            .symlink_metadata()
+            .is_ok_and(|m| !crate::platform::is_local(&m))
+        {
+            return Err(AppError::Other(
+                "This file is online only. DiskPilot does not download files to preview them."
+                    .into(),
+            ));
+        }
+        let system = if cfg!(windows) { "Windows" } else { "macOS" };
         crate::preview::thumbnail_png(&path, size)
             .map(tauri::ipc::Response::new)
-            .ok_or_else(|| AppError::Other("macOS could not make a preview of this file".into()))
+            .ok_or_else(|| {
+                AppError::Other(format!("{system} could not make a preview of this file"))
+            })
     })
     .await
+}
+
+/// Whether `path` is `canonical`, the path with every link resolved.
+#[cfg(not(windows))]
+fn same_path(path: &Path, canonical: &Path) -> bool {
+    path == canonical
+}
+
+/// Whether `path` is `canonical`, the path with every link resolved. On
+/// Windows, `canonicalize` returns the extended form (`\\?\C:\...`) and
+/// the case stored on disk, which NTFS ignores.
+#[cfg(windows)]
+fn same_path(path: &Path, canonical: &Path) -> bool {
+    let c = canonical.to_string_lossy();
+    let c = match c.strip_prefix(r"\\?\UNC\") {
+        Some(rest) => format!(r"\\{rest}"),
+        None => c.strip_prefix(r"\\?\").unwrap_or(&c).to_string(),
+    };
+    path.to_string_lossy().to_lowercase() == c.to_lowercase()
 }
 
 /// The path, if it is still a regular file reached without any symbolic
@@ -507,7 +551,10 @@ fn previewable_file(raw: &str) -> AppResult<PathBuf> {
     if !meta.is_file() {
         return Err(AppError::Other("Only files can be previewed".into()));
     }
-    if path.canonicalize().ok().as_deref() != Some(path.as_path()) {
+    if !path
+        .canonicalize()
+        .is_ok_and(|real| same_path(&path, &real))
+    {
         return Err(AppError::Other(
             "This file moved since it was listed".into(),
         ));
