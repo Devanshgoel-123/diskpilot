@@ -38,6 +38,8 @@ pub mod trash;
 pub mod trash;
 pub mod tray;
 pub mod tray_icon;
+#[cfg(any(windows, test))]
+pub mod winshell;
 
 use tauri::Manager;
 
@@ -45,13 +47,23 @@ use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // Windows: opening DiskPilot again (Start menu, a second login item)
+    // brings back the running copy's window instead of a second tray icon.
+    // macOS does this itself.
+    #[cfg(windows)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        tray::show_main_window(app);
+    }));
+    builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
         // "Open at login" starts DiskPilot in the menu bar, without a window.
+        // On Windows the plugin adds a Run registry value with the same
+        // argument, so it starts in the notification area.
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![schedule::STARTED_AT_LOGIN]),
@@ -113,6 +125,7 @@ pub fn run() {
             commands::get_item_details,
             commands::reveal_in_finder,
             commands::open_owner_app,
+            commands::uninstall_app,
             commands::file_thumbnail,
             commands::get_scan_history,
             commands::get_app_badges,
@@ -151,7 +164,8 @@ pub fn run() {
             commands::docker_diagnostics,
         ])
         // The menu bar item keeps running when the window is closed; it, the
-        // Dock icon and Quit bring the window back or end the app.
+        // Dock icon and Quit bring the window back or end the app. On Windows
+        // the notification area icon does the same.
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {

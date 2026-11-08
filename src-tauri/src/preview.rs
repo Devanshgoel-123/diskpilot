@@ -1,7 +1,10 @@
-//! Previews of files the user is reviewing, made by macOS Quick Look.
+//! Previews of files the user is reviewing, made by macOS Quick Look or the
+//! Windows shell's thumbnail handlers.
 //!
 //! Read-only: generating a thumbnail never changes the file. Callers must
 //! check the path is one DiskPilot listed (see `commands::file_thumbnail`).
+//! On Windows a cloud file whose data is not on this PC gets no preview:
+//! drawing one would download it.
 
 use std::path::Path;
 
@@ -68,12 +71,25 @@ pub fn thumbnail_png(path: &Path, px: f64) -> Option<Vec<u8>> {
     rx.recv_timeout(Duration::from_secs(10)).ok().flatten()
 }
 
-#[cfg(not(target_os = "macos"))]
+/// A PNG thumbnail of the file, fitted in `px` points at 2x scale, or the
+/// file's icon when the shell has no thumbnail for its type. `None` for a
+/// cloud file that is not on this PC.
+#[cfg(windows)]
+pub fn thumbnail_png(path: &Path, px: f64) -> Option<Vec<u8>> {
+    let meta = path.symlink_metadata().ok()?;
+    if !crate::platform::is_local(&meta) {
+        return None;
+    }
+    let px = (px.clamp(16.0, MAX_THUMBNAIL_PX) * 2.0).round() as u32;
+    crate::winshell::shell_image_png(path.as_os_str(), px, crate::winshell::SIIGBF_RESIZETOFIT)
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn thumbnail_png(_path: &Path, _px: f64) -> Option<Vec<u8>> {
     None
 }
 
-#[cfg(all(test, target_os = "macos"))]
+#[cfg(all(test, any(target_os = "macos", windows)))]
 mod tests {
     use super::*;
 

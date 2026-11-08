@@ -1,8 +1,9 @@
 name: Release
 
-# Builds the universal macOS app from the tagged source on GitHub's runners
-# and publishes it as a GitHub release with a SHA-256 checksum and a signed
-# build provenance attestation. Release notes come from docs/releases/<tag>.md.
+# Builds the universal macOS app and the Windows installers (x64 and arm64)
+# from the tagged source on GitHub's runners and publishes them as a GitHub
+# release with SHA-256 checksums and signed build provenance attestations.
+# Release notes come from docs/releases/<tag>.md.
 #
 # The build job can only read the repository. Publishing runs in a separate
 # job with no checkout and no build scripts, so a compromised dependency
@@ -208,9 +209,119 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  windows:
+    name: Build (Windows ${{ matrix.arch }})
+    if: github.repository == 'Devanshgoel-123/diskpilot'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            arch: x64
+            platform: windows-x86_64
+          - target: aarch64-pc-windows-msvc
+            arch: arm64
+            platform: windows-aarch64
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+      - name: Check the versions match the tag
+        run: python scripts/check_release_versions.py "$TAG"
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: 1.99.1
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.target }}
+      - run: pnpm install --frozen-lockfile
+      # The installer is unsigned until a code signing certificate is set up
+      # (docs/RELEASING.md). Then WINDOWS_SIGN_COMMAND holds Tauri's
+      # bundle.windows.signCommand, for example
+      #   trusted-signing-cli -e <endpoint> -a <account> -c <profile> %1
+      # and every binary and the installer are signed with it. Windows
+      # SmartScreen warns about unsigned installers.
+      # With the updater key, Tauri also signs the installer for the updater
+      # (DiskPilot_..._setup.exe.sig), which the app verifies before installing.
+      - name: Build the installer
+        env:
+          TARGET: ${{ matrix.target }}
+          WINDOWS_SIGN_COMMAND: ${{ secrets.WINDOWS_SIGN_COMMAND }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "UPDATER=1" >> "$GITHUB_ENV"
+          else
+            echo "No updater key: building without an update signature."
+          fi
+          if [ -z "$WINDOWS_SIGN_COMMAND" ]; then
+            echo "No Windows signing configured: the installer is unsigned."
+          fi
+          python - "$RUNNER_TEMP/build.json" <<'PYEOF'
+          import json, os, sys
+          conf = {"bundle": {}}
+          if os.environ.get("TAURI_SIGNING_PRIVATE_KEY"):
+              conf["bundle"]["createUpdaterArtifacts"] = True
+          if os.environ.get("WINDOWS_SIGN_COMMAND"):
+              conf["bundle"]["windows"] = {"signCommand": os.environ["WINDOWS_SIGN_COMMAND"]}
+          json.dump(conf, open(sys.argv[1], "w"))
+          PYEOF
+          pnpm tauri build --ci --target "$TARGET" --bundles nsis --config "$RUNNER_TEMP/build.json"
+      - name: Check the update signature
+        if: env.UPDATER == '1'
+        run: |
+          exe=$(ls src-tauri/target/${{ matrix.target }}/release/bundle/nsis/DiskPilot_*-setup.exe)
+          test -s "$exe.sig"
+          python scripts/check_update_key.py src-tauri/tauri.conf.json "$exe.sig"
+      - name: Prepare assets
+        env:
+          ARCH: ${{ matrix.arch }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          mkdir -p out
+          name="DiskPilot-Setup-$ARCH.exe"
+          exe=$(ls src-tauri/target/${{ matrix.target }}/release/bundle/nsis/DiskPilot_*-setup.exe)
+          cp "$exe" "out/$name"
+          if [ "${UPDATER:-}" = "1" ]; then
+            cp "$exe.sig" "out/$name.sig"
+            # This platform's entry for latest.json; the publish job merges it.
+            python - "$TAG" "$GITHUB_REPOSITORY" "$name" "$exe.sig" "$PLATFORM" > "out/$PLATFORM.json" <<'PYEOF'
+          import json, sys
+          tag, repo, name, sig_path, platform = sys.argv[1:6]
+          print(json.dumps({platform: {
+              "signature": open(sig_path).read().strip(),
+              "url": f"https://github.com/{repo}/releases/download/{tag}/{name}",
+          }}))
+          PYEOF
+          fi
+          cd out
+          sha256sum "$name" > "$name.sha256"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-windows-${{ matrix.arch }}
+          path: out/
+          if-no-files-found: error
+          retention-days: 7
+
   publish:
     name: Attest and publish
-    needs: macos
+    needs: [macos, windows]
     if: github.repository == 'Devanshgoel-123/diskpilot'
     runs-on: ubuntu-latest
     permissions:
@@ -225,15 +336,55 @@ jobs:
         with:
           name: release
           path: out
-      - name: Check the checksum
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: release-windows-*
+          path: out
+          merge-multiple: true
+      - name: Check the checksums
         working-directory: out
         run: sha256sum -c DiskPilot*.sha256
+      # One update manifest for every platform: the Windows entries join the
+      # macOS ones. Without an updater key there is no manifest at all.
+      - name: Add Windows to the update manifest
+        working-directory: out
+        run: |
+          if [ ! -f latest.json ]; then
+            rm -f windows-*.json
+            exit 0
+          fi
+          python3 - <<'PYEOF'
+          import glob, json, os
+          manifest = json.load(open("latest.json"))
+          for part in sorted(glob.glob("windows-*.json")):
+              manifest["platforms"].update(json.load(open(part)))
+              os.remove(part)
+          missing = {"windows-x86_64", "windows-aarch64"} - manifest["platforms"].keys()
+          if missing:
+              raise SystemExit(f"::error::No update signature for {sorted(missing)}")
+          json.dump(manifest, open("latest.json", "w"), indent=2)
+          PYEOF
+      - name: Add the Windows downloads to the release notes
+        working-directory: out
+        run: |
+          {
+            echo
+            echo "SHA-256 of the Windows installers:"
+            echo
+            echo '```'
+            cat DiskPilot-Setup-*.exe.sha256
+            echo '```'
+            echo
+            echo "Check one in PowerShell with \`Get-FileHash DiskPilot-Setup-x64.exe\`."
+          } >> notes.md
       # A signed record, kept by GitHub outside the release, of which workflow
       # run and commit built this DMG. Check it with:
       #   gh attestation verify DiskPilot.dmg -R Devanshgoel-123/diskpilot
       - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
-          subject-path: out/DiskPilot.dmg
+          subject-path: |
+            out/DiskPilot.dmg
+            out/DiskPilot-Setup-*.exe
       # A published DMG is never replaced. To rebuild a release, delete it
       # first, deliberately, and the new build gets a new attestation.
       - name: Publish release
@@ -242,8 +393,10 @@ jobs:
         working-directory: out
         run: |
           files="DiskPilot.dmg DiskPilot.dmg.sha256"
+          files="$files $(ls DiskPilot-Setup-*.exe DiskPilot-Setup-*.exe.sha256 | tr '\n' ' ')"
           if [ -f latest.json ]; then
             files="$files DiskPilot.app.tar.gz DiskPilot.app.tar.gz.sha256 latest.json"
+            files="$files $(ls DiskPilot-Setup-*.exe.sig | tr '\n' ' ')"
           fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             if gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qx DiskPilot.dmg; then

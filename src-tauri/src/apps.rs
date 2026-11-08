@@ -1,22 +1,35 @@
 //! Which installed application a folder belongs to, and that application's
 //! own icon.
 //!
-//! Icons are rendered from the apps installed on this Mac through
-//! `NSWorkspace`, so DiskPilot ships no third-party logos. Resolution is pure
-//! path matching against an index of installed app bundles: a path received
-//! from the UI is never read, only compared.
+//! Icons are rendered from the apps installed on this computer (through
+//! `NSWorkspace` on macOS, the shell on Windows), so DiskPilot ships no
+//! third-party logos. Resolution is pure path matching against an index of
+//! installed apps: a path received from the UI is never read, only compared.
+//! On Windows the index is built from the registry (see `apps_windows.rs`).
 
 use std::collections::HashMap;
-use std::path::{Component, Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+#[cfg(not(windows))]
+use std::path::Component;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use serde::Serialize;
+
+#[cfg(any(windows, test))]
+#[path = "apps_windows.rs"]
+pub mod win;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppInfo {
     pub name: String,
+    /// The bundle id on macOS. On Windows, the program's Uninstall key name
+    /// or a Store app's package family name.
     pub bundle_id: String,
+    /// The app bundle on macOS. On Windows, the install folder, or the
+    /// registry entry's path when the program registered no folder.
     pub path: PathBuf,
+    #[cfg(windows)]
+    pub win: win::WinApp,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -29,6 +42,7 @@ pub struct AppBadge {
 
 /// Folders under `~/Library` whose first child is named after an app's
 /// bundle id or name.
+#[cfg_attr(windows, allow(dead_code))]
 const LIBRARY_DIRS: &[&str] = &[
     "Application Support",
     "Caches",
@@ -45,6 +59,7 @@ const LIBRARY_DIRS: &[&str] = &[
 
 /// Folders whose name does not match the app that owns them, as
 /// (path relative to home, lowercase, bundle id).
+#[cfg_attr(windows, allow(dead_code))]
 const ALIASES: &[(&str, &str)] = &[
     (
         "library/application support/google/chrome",
@@ -89,10 +104,13 @@ const ALIASES: &[(&str, &str)] = &[
 pub struct AppIndex {
     apps: Vec<AppInfo>,
     by_key: HashMap<String, usize>,
+    /// Whether the list of Store apps could be read (Windows).
+    #[cfg(windows)]
+    store_known: bool,
 }
 
 /// Drop invisible direction marks some apps put in their names.
-fn clean_name(name: &str) -> String {
+pub(crate) fn clean_name(name: &str) -> String {
     name.chars()
         .filter(|c| !matches!(c, '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'))
         .collect::<String>()
@@ -100,6 +118,7 @@ fn clean_name(name: &str) -> String {
         .to_string()
 }
 
+#[cfg(not(windows))]
 fn plist_string(dict: &plist::Dictionary, key: &str) -> Option<String> {
     dict.get(key)?.as_string().map(str::to_string)
 }
@@ -107,14 +126,18 @@ fn plist_string(dict: &plist::Dictionary, key: &str) -> Option<String> {
 impl AppIndex {
     pub fn add(&mut self, app: AppInfo) {
         let i = self.apps.len();
-        for key in [
+        #[allow(unused_mut)]
+        let mut keys = vec![
             app.bundle_id.to_lowercase(),
             app.name.to_lowercase(),
             app.path
                 .file_stem()
                 .map(|s| s.to_string_lossy().to_lowercase())
                 .unwrap_or_default(),
-        ] {
+        ];
+        #[cfg(windows)]
+        keys.extend(win::extra_keys(&app));
+        for key in keys {
             if !key.is_empty() {
                 self.by_key.entry(key).or_insert(i);
             }
@@ -122,6 +145,7 @@ impl AppIndex {
         self.apps.push(app);
     }
 
+    #[cfg(not(windows))]
     fn read_bundle(path: &Path) -> Option<AppInfo> {
         let value = plist::Value::from_file(path.join("Contents/Info.plist")).ok()?;
         let dict = value.as_dictionary()?;
@@ -142,7 +166,14 @@ impl AppIndex {
         })
     }
 
+    /// Index the installed programs and Store apps.
+    #[cfg(windows)]
+    pub fn build(home: &Path) -> Self {
+        win::build_index(home)
+    }
+
     /// Index the standard application folders, one level of subfolders deep.
+    #[cfg(not(windows))]
     pub fn build(home: &Path) -> Self {
         let mut index = Self::default();
         let roots = [
@@ -180,6 +211,7 @@ impl AppIndex {
         index
     }
 
+    #[cfg(not(windows))]
     fn by_bundle_prefix(&self, key: &str) -> Option<&AppInfo> {
         let key = key.to_lowercase();
         self.apps
@@ -190,6 +222,7 @@ impl AppIndex {
 
     /// Whether an installed app shares the vendor part (`com.vendor`) of a
     /// bundle id. Used to avoid calling a vendor's helper data a leftover.
+    #[cfg(not(windows))]
     fn shares_vendor(&self, bundle_like: &str) -> bool {
         let vendor: Vec<&str> = bundle_like.split('.').take(2).collect();
         if vendor.len() < 2 {
@@ -206,6 +239,13 @@ impl AppIndex {
     }
 
     /// The installed app a path belongs to, if any.
+    #[cfg(windows)]
+    pub fn resolve(&self, home: &Path, path: &Path) -> Option<&AppInfo> {
+        self.resolve_windows(home, path)
+    }
+
+    /// The installed app a path belongs to, if any.
+    #[cfg(not(windows))]
     pub fn resolve(&self, home: &Path, path: &Path) -> Option<&AppInfo> {
         // Inside an app bundle that is in the index.
         if let Some(app) = self.apps.iter().find(|a| path.starts_with(&a.path)) {
@@ -255,9 +295,22 @@ pub fn installed_names(home: &Path) -> Vec<String> {
     index(home).apps.iter().map(|a| a.name.clone()).collect()
 }
 
-fn index(home: &Path) -> &'static AppIndex {
-    static INDEX: OnceLock<AppIndex> = OnceLock::new();
-    INDEX.get_or_init(|| AppIndex::build(home))
+static INDEX: Mutex<Option<Arc<AppIndex>>> = Mutex::new(None);
+
+/// The index of installed apps, built on first use.
+fn index(home: &Path) -> Arc<AppIndex> {
+    let mut slot = INDEX.lock().unwrap_or_else(|e| e.into_inner());
+    slot.get_or_insert_with(|| Arc::new(AppIndex::build(home)))
+        .clone()
+}
+
+/// Rebuild the index, so programs installed or uninstalled since are seen.
+/// Reading the registry takes milliseconds.
+#[cfg(windows)]
+fn refresh_index(home: &Path) -> Arc<AppIndex> {
+    let fresh = Arc::new(AppIndex::build(home));
+    *INDEX.lock().unwrap_or_else(|e| e.into_inner()) = Some(fresh.clone());
+    fresh
 }
 
 /// Render an app's icon as PNG data, `px` pixels square.
@@ -288,6 +341,14 @@ pub fn icon_png(_app: &Path, _px: f64) -> Option<Vec<u8>> {
     None
 }
 
+/// An installed app's icon, 64 pixels square.
+fn app_icon_png(app: &AppInfo) -> Option<Vec<u8>> {
+    #[cfg(windows)]
+    return win::icon_png(app, 64);
+    #[cfg(not(windows))]
+    icon_png(&app.path, 64.0)
+}
+
 /// Maximum number of paths resolved per request.
 pub const MAX_PATHS: usize = 500;
 
@@ -308,7 +369,7 @@ pub fn badges(home: &Path, paths: &[String]) -> HashMap<String, AppBadge> {
                 .entry(app.path.clone())
                 .or_insert_with(|| {
                     use base64::Engine;
-                    icon_png(&app.path, 64.0).map(|png| {
+                    app_icon_png(app).map(|png| {
                         format!(
                             "data:image/png;base64,{}",
                             base64::engine::general_purpose::STANDARD.encode(png)
@@ -333,7 +394,7 @@ pub fn badges(home: &Path, paths: &[String]) -> HashMap<String, AppBadge> {
 /// Replace a bundle identifier at the end of a title ("Application caches ·
 /// com.tinyspeck.slackmacgap") with the installed app's name ("Slack").
 pub fn name_apps_in_titles(home: &Path, recs: &mut [crate::model::Recommendation]) {
-    name_apps_with(index(home), home, recs);
+    name_apps_with(&index(home), home, recs);
 }
 
 fn name_apps_with(index: &AppIndex, home: &Path, recs: &mut [crate::model::Recommendation]) {
@@ -372,6 +433,38 @@ pub struct AppFootprint {
     pub data_bytes: u64,
     pub data_modified_ms: Option<i64>,
     pub locations: Vec<AppDataLocation>,
+    /// The publisher, on Windows; `None` on macOS.
+    pub publisher: Option<String>,
+    /// The installed version, on Windows; `None` on macOS.
+    pub version: Option<String>,
+    /// Windows: the exact command Uninstall starts (the program's own
+    /// uninstaller), shown before it runs. `None` when Uninstall opens
+    /// Settings > Apps instead (Store apps, unusual entries), and on macOS.
+    pub uninstall_command: Option<String>,
+}
+
+/// What Uninstall did on Windows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UninstallOutcome {
+    /// The program's own uninstaller started; it asks its own questions.
+    Uninstaller,
+    /// Settings > Apps > Installed apps opened.
+    Settings,
+}
+
+/// Start an installed program's own uninstaller (Windows), after the person
+/// confirmed. `id` is the `bundleId` from [`app_storage`]; the command is
+/// read from the registry again, never taken from the window. DiskPilot
+/// never deletes a program's folder itself.
+pub fn uninstall(id: &str) -> Result<UninstallOutcome, String> {
+    #[cfg(windows)]
+    return win::uninstall(id);
+    #[cfg(not(windows))]
+    {
+        let _ = id;
+        Err("DiskPilot does not uninstall apps on this system.".into())
+    }
 }
 
 /// Data in `~/Library` named for an app that is not installed.
@@ -395,12 +488,14 @@ pub struct AppStorageReport {
 }
 
 /// Library folders whose bundle-named children only installed apps create.
+#[cfg_attr(windows, allow(dead_code))]
 const LEFTOVER_DIRS: &[&str] = &["Containers", "Group Containers"];
 
 /// Leftovers smaller than this are not listed.
-const MIN_LEFTOVER_BYTES: u64 = 1_000_000;
+pub(crate) const MIN_LEFTOVER_BYTES: u64 = 1_000_000;
 
 /// A reverse-DNS name such as `com.vendor.app`, not owned by Apple.
+#[cfg_attr(windows, allow(dead_code))]
 fn bundle_like(name: &str) -> Option<String> {
     let mut key = name;
     for suffix in [".ShipIt", ".savedState", ".plist", ".binarycookies"] {
@@ -418,7 +513,7 @@ fn bundle_like(name: &str) -> Option<String> {
         .then(|| key.to_string())
 }
 
-fn size_of(path: &Path, index: &crate::scanner::DirIndex) -> Option<u64> {
+pub(crate) fn size_of(path: &Path, index: &crate::scanner::DirIndex) -> Option<u64> {
     let meta = path.symlink_metadata().ok()?;
     if meta.is_dir() {
         index.get(path).map(|s| s.bytes)
@@ -433,7 +528,7 @@ fn size_of(path: &Path, index: &crate::scanner::DirIndex) -> Option<u64> {
     }
 }
 
-fn bundle_bytes(path: &Path) -> Option<u64> {
+pub(crate) fn bundle_bytes(path: &Path) -> Option<u64> {
     type Measured = (Option<std::time::SystemTime>, u64);
     static CACHE: OnceLock<Mutex<HashMap<PathBuf, Measured>>> = OnceLock::new();
     if path.starts_with("/System") {
@@ -454,9 +549,57 @@ fn bundle_bytes(path: &Path) -> Option<u64> {
     Some(bytes)
 }
 
+/// One app's row: its data folders, largest first, and their latest change.
+fn footprint(
+    app: &AppInfo,
+    mut locations: Vec<AppDataLocation>,
+    app_bytes: Option<u64>,
+) -> AppFootprint {
+    locations.sort_by_key(|l| std::cmp::Reverse(l.bytes));
+    let data_modified_ms = locations
+        .iter()
+        .filter_map(|l| {
+            Path::new(&l.path)
+                .symlink_metadata()
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(crate::scanner::to_ms)
+        })
+        .max();
+    #[cfg(windows)]
+    let (publisher, version, uninstall_command) = (
+        app.win.publisher.clone(),
+        app.win.version.clone(),
+        app.win.uninstaller.as_ref().and_then(|u| u.command()),
+    );
+    #[cfg(not(windows))]
+    let (publisher, version, uninstall_command) = (None, None, None);
+    AppFootprint {
+        name: app.name.clone(),
+        bundle_id: app.bundle_id.clone(),
+        app_path: app.path.display().to_string(),
+        app_bytes,
+        data_bytes: locations.iter().map(|l| l.bytes).sum(),
+        data_modified_ms,
+        locations,
+        publisher,
+        version,
+        uninstall_command,
+    }
+}
+
 /// Storage per installed application: its bundle plus its folders in
 /// `~/Library`, and data left behind by apps that are no longer installed.
 /// Data sizes come from the scan index; nothing is modified.
+#[cfg(windows)]
+pub fn app_storage(home: &Path, scan: Option<&crate::scanner::DirIndex>) -> AppStorageReport {
+    win::app_storage(home, scan)
+}
+
+/// Storage per installed application: its bundle plus its folders in
+/// `~/Library`, and data left behind by apps that are no longer installed.
+/// Data sizes come from the scan index; nothing is modified.
+#[cfg(not(windows))]
 pub fn app_storage(home: &Path, scan: Option<&crate::scanner::DirIndex>) -> AppStorageReport {
     use rayon::prelude::*;
 
@@ -550,27 +693,11 @@ pub fn app_storage(home: &Path, scan: Option<&crate::scanner::DirIndex>) -> AppS
         .apps
         .par_iter()
         .map(|app| {
-            let mut locations = per_app.get(&app.path).cloned().unwrap_or_default();
-            locations.sort_by_key(|l| std::cmp::Reverse(l.bytes));
-            let data_modified_ms = locations
-                .iter()
-                .filter_map(|l| {
-                    Path::new(&l.path)
-                        .symlink_metadata()
-                        .ok()
-                        .and_then(|m| m.modified().ok())
-                        .and_then(crate::scanner::to_ms)
-                })
-                .max();
-            AppFootprint {
-                name: app.name.clone(),
-                bundle_id: app.bundle_id.clone(),
-                app_path: app.path.display().to_string(),
-                app_bytes: bundle_bytes(&app.path),
-                data_bytes: locations.iter().map(|l| l.bytes).sum(),
-                data_modified_ms,
-                locations,
-            }
+            footprint(
+                app,
+                per_app.get(&app.path).cloned().unwrap_or_default(),
+                bundle_bytes(&app.path),
+            )
         })
         // System apps without data of their own are not interesting here.
         .filter(|a| a.app_bytes.is_some() || a.data_bytes > 0)
@@ -588,14 +715,20 @@ pub fn app_storage(home: &Path, scan: Option<&crate::scanner::DirIndex>) -> AppS
 mod tests {
     use super::*;
 
+    // macOS paths and bundle ids; Windows has its own tests in apps_windows.rs.
+    #[cfg(not(windows))]
     fn app(name: &str, id: &str, path: &str) -> AppInfo {
         AppInfo {
             name: name.into(),
             bundle_id: id.into(),
             path: PathBuf::from(path),
+            #[cfg(windows)]
+            win: Default::default(),
         }
     }
 
+    // macOS paths and bundle ids; Windows has its own tests in apps_windows.rs.
+    #[cfg(not(windows))]
     fn sample() -> AppIndex {
         let mut i = AppIndex::default();
         i.add(app(
@@ -626,6 +759,8 @@ mod tests {
         i
     }
 
+    // macOS paths and bundle ids; Windows has its own tests in apps_windows.rs.
+    #[cfg(not(windows))]
     #[test]
     fn resolves_library_folders_by_name_bundle_id_and_alias() {
         let i = sample();
@@ -666,6 +801,8 @@ mod tests {
         );
     }
 
+    // macOS paths and bundle ids; Windows has its own tests in apps_windows.rs.
+    #[cfg(not(windows))]
     #[test]
     fn helpers_resolve_to_their_app_and_vendor_data_is_not_a_leftover() {
         let i = sample();
@@ -697,6 +834,8 @@ mod tests {
         assert!(bundle_like("node.js").is_none());
     }
 
+    // macOS paths and bundle ids; Windows has its own tests in apps_windows.rs.
+    #[cfg(not(windows))]
     #[test]
     fn app_storage_attributes_library_folders_and_finds_leftovers() {
         let dir = crate::test_support::sandbox();
@@ -730,6 +869,8 @@ mod tests {
         assert!(unscanned.leftovers.is_empty());
     }
 
+    // macOS paths and bundle ids; Windows has its own tests in apps_windows.rs.
+    #[cfg(not(windows))]
     #[test]
     fn names_installed_apps_in_titles() {
         let i = sample();
@@ -761,6 +902,8 @@ mod tests {
         assert_eq!(clean_name("\u{200e}WhatsApp"), "WhatsApp");
     }
 
+    // macOS paths and bundle ids; Windows has its own tests in apps_windows.rs.
+    #[cfg(not(windows))]
     #[test]
     fn unrelated_paths_and_uninstalled_apps_do_not_resolve() {
         let i = sample();
