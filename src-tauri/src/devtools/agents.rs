@@ -227,6 +227,7 @@ mod tests {
     use super::super::tests::{ctx, write};
     use super::*;
 
+    #[cfg(unix)]
     #[test]
     fn current_version_comes_from_the_launcher_symlink() {
         let dir = crate::test_support::sandbox();

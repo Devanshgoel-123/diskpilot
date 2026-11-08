@@ -1054,7 +1054,7 @@ pub fn analyze(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
     )
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::super::tests::{ctx, write};
     use super::*;

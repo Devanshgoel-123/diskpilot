@@ -1210,8 +1210,10 @@ fn unique_id(prefix: &str, now: i64) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use super::previewable_file;
 
+    #[cfg(unix)]
     #[test]
     fn previews_only_regular_files_reached_without_links() {
         let dir = crate::test_support::sandbox();

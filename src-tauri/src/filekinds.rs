@@ -239,6 +239,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn a_file_swapped_for_a_link_or_folder_is_refused() {
         let dir = crate::test_support::sandbox();

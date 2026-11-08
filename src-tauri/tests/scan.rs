@@ -115,6 +115,7 @@ fn largest_files_are_sorted_and_not_assumed_disposable() {
     assert_eq!(mystery.classification.category, Category::Unknown);
 }
 
+#[cfg(unix)]
 #[test]
 fn symlinks_are_not_followed() {
     let f = fixture();
@@ -127,6 +128,7 @@ fn symlinks_are_not_followed() {
     assert!(!o.summary.largest_files.iter().any(|f| f.name == "huge.bin"));
 }
 
+#[cfg(unix)]
 #[test]
 fn hard_links_are_counted_once() {
     let f = fixture();
@@ -139,6 +141,7 @@ fn hard_links_are_counted_once() {
     assert!(with_link < baseline + 100_000, "{baseline} -> {with_link}");
 }
 
+#[cfg(unix)]
 #[test]
 fn unreadable_folders_are_reported_not_fatal() {
     use std::os::unix::fs::PermissionsExt;
@@ -242,6 +245,7 @@ fn heavy_directories_are_where_files_live() {
     assert!(!heavy.contains(&f.home.to_str().unwrap()));
 }
 
+#[cfg(unix)]
 #[test]
 fn measure_matches_the_scanner_and_ignores_symlinks() {
     let f = fixture();

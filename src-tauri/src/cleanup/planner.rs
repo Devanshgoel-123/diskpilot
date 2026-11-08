@@ -233,6 +233,7 @@ mod tests {
         assert_eq!(plan.rejected.len(), 1);
     }
 
+    #[cfg(unix)]
     #[test]
     fn rejects_protected_and_symlinked_targets() {
         let (_d, home) = fixture();

@@ -320,7 +320,7 @@ fn report(ctx: &Ctx, env: &GoEnv) -> (ToolReport, Vec<Recommendation>) {
     )
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::super::tests::{ctx, write};
     use super::*;

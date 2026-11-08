@@ -262,6 +262,7 @@ mod tests {
         ));
     }
 
+    #[cfg(unix)]
     #[test]
     fn authorize_rejects_symlinks_and_symlinked_parents() {
         let dir = crate::test_support::sandbox();
