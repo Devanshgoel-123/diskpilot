@@ -180,6 +180,9 @@ struct Shared<'a> {
     kind_top: [Mutex<BinaryHeap<Reverse<FileCandidate>>>; FileKind::COUNT],
     kind_threshold: [AtomicU64; FileKind::COUNT],
     seen_inodes: Mutex<HashSet<(u64, u64)>>,
+    /// Folders where hard links are common and checked for (Windows, whose
+    /// listings do not report link counts). See [`hard_links_likely`].
+    link_areas: Vec<PathBuf>,
     locations: Mutex<Vec<LocationCandidate>>,
     current: Mutex<PathBuf>,
     /// Canonical folder whose subfolders are set aside, if any.
@@ -270,12 +273,21 @@ impl Shared<'_> {
     }
 
     /// Allocated size of a file, counting each hard-linked inode once.
-    fn file_bytes(&self, stat: &Stat) -> u64 {
+    /// `links_likely`: the file is in a folder where hard links are common
+    /// but the listing does not report link counts.
+    fn file_bytes(&self, stat: &Stat, path: &Path, links_likely: bool) -> u64 {
         // Everything scanned is on the root's volume, so the inode alone
         // identifies a file.
-        if stat.nlink > 1 {
+        let key = if stat.nlink > 1 {
+            Some(stat.ino)
+        } else if links_likely {
+            file_index(stat, path)
+        } else {
+            None
+        };
+        if let Some(key) = key {
             let mut seen = self.seen_inodes.lock().unwrap_or_else(|e| e.into_inner());
-            if !seen.insert((self.root_dev, stat.ino)) {
+            if !seen.insert((self.root_dev, key)) {
                 return 0;
             }
         }
@@ -368,6 +380,7 @@ impl Shared<'_> {
             dirs: 1,
         };
         let mut subdirs: Vec<(PathBuf, u64)> = Vec::new();
+        let links_likely = cfg!(windows) && hard_links_likely(path, &self.link_areas);
 
         for (name, stat) in entries {
             let child = path.join(&name);
@@ -392,7 +405,7 @@ impl Shared<'_> {
                 self.symlinks.fetch_add(1, Ordering::Relaxed);
                 stat.alloc
             } else {
-                self.file_bytes(&stat)
+                self.file_bytes(&stat, &child, links_likely)
             };
             agg.bytes += bytes;
             agg.files += 1;
@@ -553,6 +566,57 @@ impl Shared<'_> {
     }
 }
 
+/// Identity of a file that may have other names, for counting it once.
+/// Windows listings carry the file id; only listings without one (FAT, some
+/// network shares) open the file.
+#[cfg(windows)]
+fn file_index(stat: &Stat, path: &Path) -> Option<u64> {
+    if stat.ino != 0 {
+        return Some(stat.ino);
+    }
+    platform::identity_at(path)
+        .filter(|id| id.links > 1)
+        .map(|id| id.index)
+}
+
+/// Unix listings report link counts, so nothing more is needed.
+#[cfg(not(windows))]
+fn file_index(_stat: &Stat, _path: &Path) -> Option<u64> {
+    None
+}
+
+/// Folders where Windows itself makes hard links: the Windows folder, where
+/// WinSxS shares its files with System32 and others, and pnpm's global
+/// store. Canonical, like the scanner's paths.
+fn link_areas() -> Vec<PathBuf> {
+    if !cfg!(windows) {
+        return Vec::new();
+    }
+    let mut areas = Vec::new();
+    if let Some(root) = std::env::var_os("SystemRoot") {
+        areas.push(PathBuf::from(root));
+    }
+    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+        areas.push(Path::new(&local).join("pnpm").join("store"));
+    }
+    areas
+        .into_iter()
+        .filter_map(|p| p.canonicalize().ok())
+        .collect()
+}
+
+/// Whether files in `dir` often have several names. Windows listings do not
+/// report link counts and opening every file to ask would slow every scan,
+/// so only these folders are checked: `areas` (see [`link_areas`]) and pnpm
+/// stores, which hard-link every package file into `node_modules/.pnpm`.
+fn hard_links_likely(dir: &Path, areas: &[PathBuf]) -> bool {
+    areas.iter().any(|a| dir.starts_with(a))
+        || dir.components().any(|c| {
+            let name = c.as_os_str();
+            name.eq_ignore_ascii_case(".pnpm") || name.eq_ignore_ascii_case(".pnpm-store")
+        })
+}
+
 /// Folder names that hold build output in a code project.
 const BUILD_OUTPUT_NAMES: &[&str] = &["build", "dist", "out"];
 
@@ -648,6 +712,7 @@ pub fn scan_with_partial(
         kind_top: std::array::from_fn(|_| Mutex::new(BinaryHeap::new())),
         kind_threshold: std::array::from_fn(|_| AtomicU64::new(0)),
         seen_inodes: Mutex::new(HashSet::new()),
+        link_areas: link_areas(),
         locations: Mutex::new(Vec::new()),
         current: Mutex::new(root.clone()),
         // Deferring only makes sense when the scan reaches the folder from
@@ -935,4 +1000,25 @@ pub fn measure(path: &Path) -> u64 {
         }
     }
     total
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hard_links_are_checked_where_they_are_common() {
+        let areas = [PathBuf::from("/win/Windows")];
+        let likely = |p: &str| hard_links_likely(Path::new(p), &areas);
+        assert!(likely("/win/Windows/WinSxS/amd64_x"));
+        assert!(likely("/win/Windows"));
+        assert!(likely(
+            "/code/app/node_modules/.pnpm/react@19/node_modules/react"
+        ));
+        assert!(likely("/code/.pnpm-store/v3/files/00"));
+        assert!(likely("/code/app/node_modules/.PNPM/x"));
+        assert!(!likely("/win/WindowsApps"));
+        assert!(!likely("/code/app/node_modules/react"));
+        assert!(!likely("/code/app/.pnpm-debug"));
+    }
 }
