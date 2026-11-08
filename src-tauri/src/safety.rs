@@ -225,7 +225,7 @@ fn check_unix_ancestors(path: &Path, allowed_root: &Path) -> Result<(), SafetyEr
 
 /// The Windows side of the gate, written as text processing on paths so it
 /// is tested on every platform. Names compare ignoring case, `\\?\` and
-/// `\\?\UNC\` prefixes are removed, and both separators are accepted.
+/// `\\?\UNC\` prefixes are ignored, and both separators are accepted.
 pub mod windows {
     use super::SafetyError;
     use crate::classifier::windows_paths::{eq_ignore_case, part_matches, WinPath};
@@ -341,7 +341,7 @@ pub mod windows {
 
     /// Validate and normalize a path from the interface: an absolute drive
     /// (`C:\...`) or network (`\\server\share\...`) path, with `\\?\`
-    /// prefixes removed, no `.` or `..`, no alternate data streams, no
+    /// prefixes kept, no `.` or `..`, no alternate data streams, no
     /// device paths and no names ending in a dot or space (which Windows
     /// would silently strip).
     pub fn normalize(raw: &str) -> Result<String, SafetyError> {
@@ -378,11 +378,20 @@ pub mod windows {
                 return Err(SafetyError::NotCanonical(raw.to_string()));
             }
         }
-        let mut out = String::with_capacity(raw.len());
-        if unc {
+        // A `\\?\` path stays one, so long paths keep working; every check
+        // here ignores the prefix.
+        let verbatim = raw.starts_with("\\\\?\\");
+        let mut out = String::with_capacity(raw.len() + 8);
+        if unc && verbatim {
+            out.push_str("\\\\?\\UNC\\");
+            out.push_str(&p.parts[1..].join("\\"));
+        } else if unc {
             out.push_str("\\\\");
             out.push_str(&p.parts[1..].join("\\"));
         } else {
+            if verbatim {
+                out.push_str("\\\\?\\");
+            }
             out.push_str(p.parts[0]);
             out.push('\\');
             out.push_str(&p.parts[1..].join("\\"));
@@ -487,7 +496,8 @@ pub mod windows {
     }
 }
 
-#[cfg(test)]
+/// The macOS gate.
+#[cfg(all(test, not(windows)))]
 mod tests {
     use super::*;
 
@@ -629,12 +639,15 @@ mod windows_tests {
     fn normalizes_drive_unc_and_verbatim_paths() {
         assert_eq!(normalize(r"C:\Users\Test\").unwrap(), r"C:\Users\Test");
         assert_eq!(normalize("c:/users//test").unwrap(), r"c:\users\test");
-        assert_eq!(normalize(r"\\?\C:\Users\Test").unwrap(), r"C:\Users\Test");
+        assert_eq!(
+            normalize(r"\\?\C:\Users\Test\").unwrap(),
+            r"\\?\C:\Users\Test"
+        );
         assert_eq!(normalize(r"C:\").unwrap(), r"C:\");
         assert_eq!(normalize(r"\\server\share\x").unwrap(), r"\\server\share\x");
         assert_eq!(
             normalize(r"\\?\UNC\server\share\x").unwrap(),
-            r"\\server\share\x"
+            r"\\?\UNC\server\share\x"
         );
     }
 
@@ -757,7 +770,7 @@ mod windows_gate_tests {
             home
         ));
         assert_eq!(
-            parse_user_path(r"\\?\C:\Users\Test\x").unwrap(),
+            parse_user_path(r"C:/Users\Test\x\").unwrap(),
             PathBuf::from(r"C:\Users\Test\x")
         );
         assert!(ensure_within(
