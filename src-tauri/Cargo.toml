@@ -58,6 +58,22 @@ windows-sys = { version = "0.61", features = [
   "Win32_Security",
   "Win32_System_Threading",
 ] }
+# Shell integration: thumbnails, icons, File Explorer, installed programs.
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_System_Com",
+  "Win32_System_Registry",
+  "Win32_UI_Shell",
+  "Win32_UI_Shell_Common",
+  "Win32_UI_WindowsAndMessaging",
+] }
+png = "0.18"
+# The assistant's API key lives in Windows Credential Manager.
+keyring = { version = "3", features = ["windows-native"] }
+# A second launch (Start menu, login item) brings back the running copy's
+# window instead of adding a second tray icon.
+tauri-plugin-single-instance = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
