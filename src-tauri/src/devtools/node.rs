@@ -253,6 +253,7 @@ mod tests {
         assert!(!matches_alias("v220.0.0", "22"));
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn reports_caches_and_default_runtime() {
         let dir = crate::test_support::sandbox();
@@ -277,6 +278,37 @@ mod tests {
                 .count(),
             1
         );
+        assert!(report
+            .sections
+            .iter()
+            .any(|s| s.title == "Package manager caches"));
+    }
+
+    /// nvm-windows keeps versions in its root, named by settings.txt, and
+    /// npm's cache is in %LOCALAPPDATA%.
+    #[cfg(windows)]
+    #[test]
+    fn reports_windows_caches_and_nvm_versions() {
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        write(&home.join("AppData/Local/npm-cache/_cacache/a"), 1000);
+        let nvm = home.join("AppData/Roaming/nvm");
+        write(&nvm.join("v20.1.0/node.exe"), 100);
+        write(&nvm.join("v22.11.0/node.exe"), 100);
+        std::fs::write(
+            nvm.join("settings.txt"),
+            format!("root: {}\r\n", nvm.display()),
+        )
+        .unwrap();
+
+        let (report, _) = analyze(&ctx(&home));
+        assert!(report.detected);
+        let versions = report
+            .sections
+            .iter()
+            .find(|s| s.title.contains("nvm"))
+            .unwrap();
+        assert_eq!(versions.items.len(), 2);
         assert!(report
             .sections
             .iter()

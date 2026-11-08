@@ -1282,8 +1282,12 @@ mod tests {
         // The deleted project's sessions and the checkpoints, nothing else.
         assert_eq!(recs.len(), 2);
         assert!(recs.iter().all(|r| r.tier == Tier::ReviewFirst));
-        assert!(recs.iter().any(|r| r.path.ends_with("projects/gone")));
-        assert!(recs.iter().any(|r| r.path.ends_with("file-history")));
+        assert!(recs
+            .iter()
+            .any(|r| Path::new(&r.path).ends_with("projects/gone")));
+        assert!(recs
+            .iter()
+            .any(|r| Path::new(&r.path).ends_with("file-history")));
         assert!(!recs.iter().any(|r| r.path.ends_with("history.jsonl")));
     }
 
