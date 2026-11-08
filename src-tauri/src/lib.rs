@@ -29,6 +29,7 @@ pub mod schedule;
 pub mod secrets;
 pub mod snapshot;
 pub mod state;
+pub mod system_extras;
 #[cfg(test)]
 pub mod test_support;
 #[cfg(unix)]
@@ -167,6 +168,7 @@ pub fn run() {
             commands::wsl_disks,
             commands::wsl_compact_preview,
             commands::wsl_compact_execute,
+            commands::get_system_extras,
         ])
         // The menu bar item keeps running when the window is closed; it, the
         // Dock icon and Quit bring the window back or end the app. On Windows

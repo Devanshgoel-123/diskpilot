@@ -521,6 +521,14 @@ pub async fn uninstall_app(id: String) -> AppResult<crate::apps::UninstallOutcom
     blocking(move || crate::apps::uninstall(&id).map_err(AppError::Other)).await
 }
 
+/// Windows system areas (hibernation and page files, Windows.old, update
+/// caches, WinSxS, crash dumps) with their sizes and the Windows tool that
+/// reclaims each. Read-only. Empty on macOS.
+#[tauri::command]
+pub async fn get_system_extras() -> AppResult<Vec<crate::system_extras::SystemExtra>> {
+    blocking(|| Ok(crate::system_extras::system_extras())).await
+}
+
 /// A Quick Look thumbnail (PNG bytes) of a file DiskPilot listed, so people
 /// can see a photo, video or document before deciding to remove it.
 ///
