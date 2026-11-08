@@ -59,3 +59,13 @@ Without an Apple Developer ID the app is signed ad hoc, and macOS asks people to
 | `APPLE_API_KEY_P8`           | The contents of the downloaded `AuthKey_<id>.p8` file                                                             |
 
 With these secrets present the build is signed, notarized and stapled, and the workflow verifies that Gatekeeper accepts it. Set all six or none: if only some are set, or one is empty, the release fails instead of quietly shipping an ad hoc build. Never commit any of these values.
+
+## Windows
+
+The Release workflow also builds the Windows installers, `DiskPilot-Setup-x64.exe` and `DiskPilot-Setup-arm64.exe` (NSIS, installed for the current user, so no administrator rights are needed; the WebView2 bootstrapper is embedded for PCs without WebView2). Each comes with a SHA-256 checksum, a build provenance attestation and, with the updater key, a `.sig` file. The publish job adds `windows-x86_64` and `windows-aarch64` entries to the same `latest.json`, signed with the same updater key, so installed copies update themselves like the Mac app.
+
+The installers are unsigned for now, so Windows SmartScreen warns on first run and Smart App Control may block them. To sign them, get a code signing certificate (for example Azure Artifact Signing), install its signing tool on the runner, and add the repository secret `WINDOWS_SIGN_COMMAND` with Tauri's `bundle.windows.signCommand`, for example `trusted-signing-cli -e <endpoint> -a <account> -c <profile> %1`. The workflow passes it to the build when it is set; Tauri then signs the app, the uninstaller and the installer. Use the same certificate for every release, so SmartScreen reputation carries over.
+
+Pushes to `feat/windows*` branches also build both installers in CI (`installer-windows` in `ci.yml`) and attach them to the run as artifacts, to try on a PC before a release.
+
+Toast notifications need DiskPilot's AppUserModelID, which the installer registers on its Start menu shortcut. A copy run with `pnpm tauri dev` or straight from `target` may show no notifications.
