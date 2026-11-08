@@ -1,4 +1,4 @@
-import { Loader2, ShieldCheck } from "lucide-react";
+import { Loader2, ShieldCheck, Zap } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { api, errorMessage } from "@/lib/api";
+import { isDriveRoot } from "@/lib/drives";
+import { isWindows } from "@/lib/platform";
+import { useApp } from "@/lib/store";
 
 /**
  * Windows: explains the fast whole-drive scan, which reads the drive's file
@@ -68,5 +71,24 @@ export function FastScanDialog({ onClose }: { onClose: () => void }) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Windows: a quiet "Faster whole-drive scan" button, shown when the next scan
+ * covers a whole drive and DiskPilot is not administrator. Nothing otherwise.
+ */
+export function FastScanOffer({ size = "default" }: { size?: "default" | "lg" }) {
+  const { drives, scanRoot, elevated, scanning } = useApp();
+  const [open, setOpen] = useState(false);
+  if (!isWindows() || elevated || scanning || !isDriveRoot(scanRoot, drives)) return null;
+  return (
+    <>
+      <Button variant="ghost" size={size} onClick={() => setOpen(true)}>
+        <Zap />
+        Faster whole-drive scan
+      </Button>
+      {open ? <FastScanDialog onClose={() => setOpen(false)} /> : null}
+    </>
   );
 }

@@ -1,5 +1,4 @@
 import { Loader2, RefreshCw, ScanSearch, Square, Zap } from "lucide-react";
-import { useState } from "react";
 
 import { DrivePicker } from "@/components/shared/DrivePicker";
 import { Button } from "@/components/ui/button";
@@ -10,7 +9,7 @@ import { samePath } from "@/lib/paths";
 import { isWindows } from "@/lib/platform";
 import { useApp } from "@/lib/store";
 
-import { FastScanDialog } from "./FastScanDialog";
+import { FastScanOffer } from "./FastScanDialog";
 
 /** Global scan button / live progress, shown in every page header. */
 export function ScanControl() {
@@ -29,7 +28,6 @@ export function ScanControl() {
     startScan,
     cancelScan,
   } = useApp();
-  const [offerFast, setOfferFast] = useState(false);
   if (!desktop) return null;
 
   const target = tildify(scanRoot ?? env?.homeDir ?? "~", env?.homeDir);
@@ -86,13 +84,7 @@ export function ScanControl() {
   return (
     <>
       {picker}
-      {wholeDrive && !elevated && picker ? (
-        <Button variant="ghost" onClick={() => setOfferFast(true)}>
-          <Zap />
-          Faster whole-drive scan
-        </Button>
-      ) : null}
-      {offerFast ? <FastScanDialog onClose={() => setOfferFast(false)} /> : null}
+      {picker ? <FastScanOffer /> : null}
       {fast ? (
         <span className="flex items-center gap-1 text-2xs text-subtle-foreground">
           <Zap className="size-3" aria-hidden />
