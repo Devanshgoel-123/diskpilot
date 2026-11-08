@@ -14,6 +14,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
 import { ALL_CATEGORIES, CATEGORY_META } from "@/lib/categories";
 import { formatBytes, formatCount, formatRelative, tildify } from "@/lib/format";
+import { joinPath, relativeParts } from "@/lib/paths";
+import { words } from "@/lib/platform";
 import { useApp } from "@/lib/store";
 import type { Category, DirectoryEntry, DirectoryListing, Recommendation } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -73,11 +75,12 @@ function Breadcrumbs({
   onNavigate: (path: string) => void;
 }) {
   const root = listing.scanRoot;
-  const rel = listing.path.slice(root.length).split("/").filter(Boolean);
+  // Names below the scan root; works with `/Users/me` as well as `C:\` or `D:\Data`.
+  const rel = relativeParts(listing.path, root) ?? [];
   const crumbs = [{ label: tildify(root, home), path: root }];
   let acc = root;
   for (const part of rel) {
-    acc = `${acc}/${part}`;
+    acc = joinPath(acc, part);
     crumbs.push({ label: part, path: acc });
   }
   return (
@@ -188,7 +191,7 @@ export function ExplorerPage() {
       <PageHeader
         title="Storage"
         actions={<StorageTabs />}
-        description="Folder sizes from the last scan. Open a folder with a double-click or Return."
+        description={`Folder sizes from the last scan. Open a folder with a double-click or ${words().enterKey}.`}
       />
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">

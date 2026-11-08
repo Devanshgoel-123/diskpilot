@@ -153,6 +153,15 @@ pub fn get_disk_info(state: State<'_, AppState>) -> AppResult<DiskInfo> {
     disk::disk_info(&state.home).map_err(|e| AppError::io(&state.home, &e))
 }
 
+/// Drives the user can choose to scan. On macOS only the home volume, so the
+/// interface shows no drive picker.
+#[tauri::command]
+pub async fn list_drives(state: State<'_, AppState>) -> AppResult<Vec<crate::model::DriveInfo>> {
+    let home = state.home.clone();
+    // Asking a sleeping removable drive for its size can take a moment.
+    blocking(move || Ok(disk::list_drives(&home))).await
+}
+
 // ---- Scanning ------------------------------------------------------------
 
 /// Start a background scan. Returns the scan id immediately; progress and

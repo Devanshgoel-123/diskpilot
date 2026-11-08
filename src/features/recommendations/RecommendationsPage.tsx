@@ -14,6 +14,7 @@ import { useApp } from "@/lib/store";
 import { TIER_META, TIER_ORDER } from "@/lib/tiers";
 import type { MarkerKind, Tier } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { words } from "@/lib/platform";
 
 import { CleanupDialog } from "./CleanupDialog";
 import { RecommendationRow } from "./RecommendationRow";
@@ -170,7 +171,8 @@ export function RecommendationsPage() {
           <div className="flex items-center justify-between gap-3">
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <ShieldCheck className="size-3.5 text-good" aria-hidden />
-              Trash first. Every path is re-checked by the safety layer before anything happens.
+              {words().trash} first. Every path is re-checked by the safety layer before anything
+              happens.
             </p>
             <div className="flex items-center gap-2">
               {filter !== "all" || activeKind ? (

@@ -27,6 +27,9 @@ import { formatBytes, formatCount, formatRelative, tildify } from "@/lib/format"
 import { useApp } from "@/lib/store";
 import type { ItemState, ToolReport } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { joinPath } from "@/lib/paths";
+import { isWindows, words } from "@/lib/platform";
+import { WindowsSections } from "@/features/windows/sections";
 
 import { TranscriptSecrets } from "./TranscriptSecrets";
 
@@ -75,6 +78,16 @@ const TOOL_APP_PATH: Record<string, string> = {
   xcode: "Library/Developer/Xcode",
 };
 
+/** The same on Windows, relative to the user folder. */
+const TOOL_APP_PATH_WINDOWS: Record<string, string> = {
+  cursor: ".cursor",
+  vscode: ".vscode",
+  windsurf: ".windsurf",
+  "claude-code": ".claude",
+  "claude-desktop": "AppData\\Roaming\\Claude",
+  codex: ".codex",
+};
+
 const STATE_META: Record<ItemState, { label: string; color: string }> = {
   current: { label: "In use", color: "var(--tier-safe)" },
   stale: { label: "Inactive", color: "var(--tier-review)" },
@@ -108,7 +121,8 @@ function ToolCard({
   const home = useApp((s) => s.env?.homeDir);
   const [open, setOpen] = useState(false);
   const Icon = TOOL_ICON[tool.id] ?? Wrench;
-  const appPath = TOOL_APP_PATH[tool.id] && home ? `${home}/${TOOL_APP_PATH[tool.id]}` : null;
+  const appRel = (isWindows() ? TOOL_APP_PATH_WINDOWS : TOOL_APP_PATH)[tool.id];
+  const appPath = appRel && home ? joinPath(home, appRel) : null;
   const color = TOOL_COLOR[tool.id] ?? "var(--accent)";
   const items = tool.sections.flatMap((s) => s.items);
   const actionable = items.filter((i) => i.recommendationId && reviewable.has(i.recommendationId));
@@ -352,9 +366,11 @@ export function DeveloperToolsPage() {
 
               <TranscriptSecrets />
 
+              <WindowsSections page="developer" />
+
               {missing.length ? (
                 <p className="text-xs text-subtle-foreground">
-                  Not found on this Mac: {missing.map((t) => t.name).join(", ")}.
+                  Not found on this {words().computer}: {missing.map((t) => t.name).join(", ")}.
                 </p>
               ) : null}
               <p className="text-2xs leading-relaxed text-subtle-foreground">

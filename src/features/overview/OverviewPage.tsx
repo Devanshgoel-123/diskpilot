@@ -9,11 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Section } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { pickStartHere, topConsumers } from "@/lib/analysis";
+import { driveAsDisk, driveFor, driveName, isDriveRoot } from "@/lib/drives";
 import { formatBytes, formatCount, tildify } from "@/lib/format";
+import { isWindows, words } from "@/lib/platform";
 import { useApp } from "@/lib/store";
+import { WindowsSections } from "@/features/windows/sections";
 
 import { AssistantPrompt } from "./AssistantPrompt";
 import { CategoryList } from "./CategoryList";
+import { DriveList } from "./DriveList";
 import { LocationList } from "./LocationList";
 import { PrivateFoldersNotice } from "./PrivateFoldersNotice";
 import { TrashWaitingNotice } from "./TrashWaitingNotice";
@@ -50,8 +54,19 @@ export function OverviewPage() {
     startScan,
     navigate,
     recommendations,
+    drives,
   } = useApp();
   const home = env?.homeDir;
+  const w = words();
+  // Windows: the strip shows the drive that holds what was (or will be) scanned.
+  const drive = isWindows() ? driveFor(summary?.root ?? scanRoot ?? home, drives) : null;
+  const shownDisk = drive ? driveAsDisk(drive) : disk;
+  const scanTarget =
+    isWindows() && scanRoot
+      ? drive && isDriveRoot(scanRoot, drives)
+        ? driveName(drive)
+        : tildify(scanRoot, home)
+      : w.homeFolder;
 
   const consumers = useMemo(
     () => (summary ? topConsumers(summary.detectedLocations, 7) : []),
@@ -69,9 +84,10 @@ export function OverviewPage() {
           <PrivateFoldersNotice />
           <TrashWaitingNotice />
           <ClearedStatsLine />
-          {disk ? (
+          {shownDisk ? (
             <StorageStrip
-              disk={disk}
+              disk={shownDisk}
+              title={drive ? driveName(drive) : undefined}
               summary={summary}
               recommendations={recommendations}
               onReview={() => navigate("recommendations")}
@@ -83,6 +99,9 @@ export function OverviewPage() {
               <Skeleton className="h-3 w-2/3" />
             </div>
           )}
+
+          <DriveList />
+          <WindowsSections page="overview" />
 
           {summary && scanning && partial ? (
             <p className="flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
@@ -104,13 +123,16 @@ export function OverviewPage() {
                   <>
                     DiskPilot reads file sizes in{" "}
                     <span className="font-mono">{tildify(scanRoot ?? home ?? "~", home)}</span> and
-                    changes nothing. Symbolic links are not followed and other volumes are skipped.
+                    changes nothing.{" "}
+                    {isWindows()
+                      ? "Links and junctions are not followed and other drives are skipped."
+                      : "Symbolic links are not followed and other volumes are skipped."}
                   </>
                 }
                 action={
                   <div className="flex items-center gap-2">
                     <Button size="lg" onClick={() => void startScan()}>
-                      Scan home folder
+                      Scan {scanTarget}
                     </Button>
                     <Button variant="ghost" size="lg" onClick={() => navigate("settings")}>
                       Choose another folder
@@ -139,7 +161,7 @@ export function OverviewPage() {
               </Section>
               <p className="flex items-center gap-2 text-xs text-muted-foreground lg:col-span-5">
                 <FolderSearch className="size-3.5" aria-hidden />
-                Read-only. You can keep using your Mac while DiskPilot scans.
+                Read-only. You can keep using your {w.computer} while DiskPilot scans.
               </p>
             </div>
           ) : null}

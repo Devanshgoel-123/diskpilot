@@ -9,6 +9,7 @@ import { MODEL_LABELS } from "@/lib/models";
 import { ASSISTANT_PROVIDERS, useApp } from "@/lib/store";
 import type { AssistantProvider, ModelInfo, ProviderStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { isWindows, words } from "@/lib/platform";
 
 import { Section, Setting } from "./parts";
 
@@ -163,7 +164,7 @@ export function AssistantSettings() {
       await api.assistantSetKey(provider, key);
       setKey("");
       await refreshAssistantStatus();
-      setMessage({ ok: true, text: "Saved to the macOS Keychain. Checking the key…" });
+      setMessage({ ok: true, text: `Saved to ${words().keyStore}. Checking the key…` });
       await check(provider);
     } catch (e) {
       setMessage({ ok: false, text: errorMessage(e) });
@@ -175,7 +176,12 @@ export function AssistantSettings() {
   const remove = async () => {
     try {
       await api.assistantClearKey(provider);
-      setMessage({ ok: true, text: "Key removed from the Keychain." });
+      setMessage({
+        ok: true,
+        text: isWindows()
+          ? "Key removed from Windows Credential Manager."
+          : "Key removed from the Keychain.",
+      });
       await refreshAssistantStatus();
     } catch (e) {
       setMessage({ ok: false, text: errorMessage(e) });
@@ -202,8 +208,8 @@ export function AssistantSettings() {
   const keyDescription = status?.configured
     ? status.keySource === "environment"
       ? `Using ${status.envVar} from the environment.`
-      : "A key is stored in the macOS Keychain. DiskPilot never displays it."
-    : "Stored in the macOS Keychain and used only for assistant requests.";
+      : `A key is stored in ${words().keyStore}. DiskPilot never displays it.`
+    : `Stored in ${words().keyStore} and used only for assistant requests.`;
 
   return (
     <Section title="Assistant (optional)" id={ASSISTANT_SETTINGS_ID}>
@@ -338,7 +344,7 @@ export function AssistantSettings() {
           />
           <Setting
             label="What is sent"
-            description={`Your question, and the storage data the assistant reads to answer it: folder and file names, paths (with your home folder shown as ~), sizes and categories. File contents are never read or sent. Requests go directly from this Mac to ${status?.host ?? `${label}'s API`}, and your key is sent only there. The assistant has read-only tools and cannot change anything.`}
+            description={`Your question, and the storage data the assistant reads to answer it: folder and file names, paths (with your ${words().homeFolder} shown as ~), sizes and categories. File contents are never read or sent. Requests go directly from this Mac to ${status?.host ?? `${label}'s API`}, and your key is sent only there. The assistant has read-only tools and cannot change anything.`}
             control={null}
           />
         </>

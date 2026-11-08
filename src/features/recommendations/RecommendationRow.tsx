@@ -16,6 +16,7 @@ import { useApp } from "@/lib/store";
 import { TIER_META } from "@/lib/tiers";
 import type { Recommendation } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { words } from "@/lib/platform";
 
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -123,7 +124,7 @@ export function RecommendationRow({
                 <span className="block text-subtle-foreground">
                   DiskPilot can:{" "}
                   {rec.methods
-                    .map((m) => (m === "trash" ? "move to Trash" : "delete permanently"))
+                    .map((m) => (m === "trash" ? `move to ${words().trash}` : "delete permanently"))
                     .join(" or ")}
                 </span>
               ) : (
@@ -178,7 +179,7 @@ export function RecommendationRow({
             ) : null}
             <Button variant="ghost" size="sm" onClick={() => void api.revealInFinder(rec.path)}>
               <FolderOpen />
-              Reveal in Finder
+              {words().revealInFileManager}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => openInExplorer(rec.path)}>
               <FolderTree />

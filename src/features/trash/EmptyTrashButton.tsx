@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 
 import { formatBytes } from "@/lib/format";
+import { words } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
 import { TrashGlyph } from "./TrashGlyph";
@@ -28,7 +29,9 @@ export function EmptyTrashButton({ className }: { className?: string }) {
       type="button"
       onClick={openDialog}
       aria-label={
-        known && !empty ? `Empty Trash, ${formatBytes(summary.totalBytes)}` : "Empty Trash"
+        known && !empty
+          ? `${words().emptyTrash}, ${formatBytes(summary.totalBytes)}`
+          : words().emptyTrash
       }
       className={cn(
         "group inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-border-strong bg-panel pl-2.5 text-[13px] font-medium text-foreground",
@@ -40,7 +43,7 @@ export function EmptyTrashButton({ className }: { className?: string }) {
       )}
     >
       <TrashGlyph className="text-muted-foreground transition-colors duration-[160ms] group-hover:text-critical" />
-      <span>Empty Trash</span>
+      <span>{words().emptyTrash}</span>
       <span
         className={cn(
           "tabular ml-0.5 rounded-[4px] px-1.5 py-px text-2xs transition-colors duration-[160ms]",

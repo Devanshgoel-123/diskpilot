@@ -29,6 +29,7 @@ import type {
   SecretsReport,
   DirectoryListing,
   DiskInfo,
+  DriveInfo,
   ModelInfo,
   DuplicateProgress,
   DuplicateReport,
@@ -48,6 +49,8 @@ export const inDesktopApp = (): boolean => isTauri();
 export const api = {
   getEnvironment: () => invoke<AppEnvironment>("get_environment"),
   getDiskInfo: () => invoke<DiskInfo>("get_disk_info"),
+  /** Drives to scan: every fixed and removable drive on Windows, the home volume on macOS. */
+  listDrives: () => invoke<DriveInfo[]>("list_drives"),
   startScan: (root?: string) => invoke<string>("start_scan", { root: root ?? null }),
   cancelScan: () => invoke<boolean>("cancel_scan"),
   isScanRunning: () => invoke<boolean>("is_scan_running"),
@@ -57,9 +60,10 @@ export const api = {
   listDirectory: (path?: string) =>
     invoke<DirectoryListing>("list_directory", { path: path ?? null }),
   getItemDetails: (path: string) => invoke<ItemDetails>("get_item_details", { path }),
+  /** Shows the item in Finder or File Explorer. */
   revealInFinder: (path: string) => invoke<null>("reveal_in_finder", { path }),
   openOwnerApp: (ruleId: string) => invoke<null>("open_owner_app", { ruleId }),
-  /** PNG bytes of a Quick Look thumbnail; files inside the last scan only. */
+  /** PNG bytes of a system thumbnail (Quick Look on macOS); files inside the last scan only. */
   fileThumbnail: (path: string, size: number) =>
     invoke<ArrayBuffer>("file_thumbnail", { path, size }),
   getAppStorage: () => invoke<AppStorageReport>("get_app_storage"),
@@ -144,7 +148,7 @@ export function onDuplicatesProgress(cb: (p: DuplicateProgress) => void): Promis
   return listen<DuplicateProgress>("duplicates://progress", (e) => cb(e.payload));
 }
 
-/** Menu bar shortcuts: a page id, or "trash" for the Empty Trash window. */
+/** Menu bar (tray) shortcuts: a page id, or "trash" for the Empty Trash window. */
 export function onTrayNavigate(cb: (target: string) => void): Promise<UnlistenFn> {
   return listen<string>("tray://navigate", (e) => cb(e.payload));
 }

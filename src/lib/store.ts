@@ -8,6 +8,7 @@ import {
   onScanPartial,
   onScanProgress,
 } from "./api";
+import { applyPlatformClass, currentOs, isWindows, setOs, type Os } from "./platform";
 import { applyTheme, loadTheme, saveTheme, type ThemePreference } from "./theme";
 import { clearThumbnails } from "./thumbnails";
 import type {
@@ -19,6 +20,7 @@ import type {
   DevToolsReport,
   Recommendation,
   DiskInfo,
+  DriveInfo,
   ModelInfo,
   ScanProgress,
   ScanRecord,
@@ -95,7 +97,11 @@ interface AppState {
   ready: boolean;
   desktop: boolean;
   env: AppEnvironment | null;
+  /** The OS the engine runs on; wording comes from `words()` in platform.ts. */
+  os: Os;
   disk: DiskInfo | null;
+  /** Drives to choose from. Empty on macOS, which scans the home volume only. */
+  drives: DriveInfo[];
   summary: ScanSummary | null;
   history: ScanRecord[];
   recommendations: Recommendation[];
@@ -128,7 +134,7 @@ interface AppState {
   page: PageId;
   explorerPath: string | null;
   storageView: StorageView;
-  /** Folder to scan; `null` means the home folder. */
+  /** Folder or drive to scan; `null` means the home folder. */
   scanRoot: string | null;
   theme: ThemePreference;
 
@@ -136,6 +142,10 @@ interface AppState {
   startScan: () => Promise<void>;
   cancelScan: () => Promise<void>;
   refreshDisk: () => Promise<void>;
+  /** Re-read the drive list and capacities (Windows only). */
+  refreshDrives: () => Promise<void>;
+  /** Scan `root` (a drive or folder) now; `null` is the home folder. */
+  scanFolder: (root: string | null) => Promise<void>;
   refreshHistory: () => Promise<void>;
   refreshRecommendations: () => Promise<void>;
   /** Delete the saved scan and clear the results on screen. */
@@ -188,7 +198,9 @@ export const useApp = create<AppState>((set, get) => ({
   ready: false,
   desktop: false,
   env: null,
+  os: currentOs(),
   disk: null,
+  drives: [],
   summary: null,
   history: [],
   recommendations: [],
@@ -267,6 +279,7 @@ export const useApp = create<AppState>((set, get) => ({
           void get().analyzeDevTools();
         }
         void get().refreshDisk();
+        void get().refreshDrives();
         void get().refreshHistory();
       });
     }
@@ -281,7 +294,9 @@ export const useApp = create<AppState>((set, get) => ({
         api.getRecommendations(),
         api.getCleanupHistory(50),
       ]);
-      set({ env, disk, summary, scanning, history, recommendations, cleanups, ready: true });
+      const os = setOs(env.os);
+      set({ env, os, disk, summary, scanning, history, recommendations, cleanups, ready: true });
+      void get().refreshDrives();
       // Results saved from the last launch: re-run the tool checks, which
       // read current versions and installers rather than saved data.
       if (summary) void get().analyzeDevTools();
@@ -316,6 +331,21 @@ export const useApp = create<AppState>((set, get) => ({
     } catch (e) {
       set({ error: errorMessage(e) });
     }
+  },
+
+  refreshDrives: async () => {
+    if (!isWindows()) return;
+    try {
+      set({ drives: await api.listDrives() });
+    } catch {
+      /* the picker stays hidden; scanning the user folder still works */
+    }
+  },
+
+  scanFolder: async (root) => {
+    if (get().scanning) return;
+    get().setScanRoot(root);
+    await get().startScan();
   },
 
   refreshHistory: async () => {
@@ -476,3 +506,6 @@ export const useApp = create<AppState>((set, get) => ({
 useApp.subscribe((s, prev) => {
   if (s.summary?.startedAtMs !== prev.summary?.startedAtMs) clearThumbnails();
 });
+
+// Font stack and window chrome follow the platform from the first paint.
+applyPlatformClass();

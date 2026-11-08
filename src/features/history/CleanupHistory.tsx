@@ -7,6 +7,7 @@ import { formatBytes, formatDate, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { ActionStatus, CleanupRecord, ItemStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { words } from "@/lib/platform";
 
 const STATUS_LABEL: Record<ActionStatus, string> = {
   succeeded: "Succeeded",
@@ -41,7 +42,9 @@ function Row({ record, home }: { record: CleanupRecord; home: string | undefined
         <div className="tabular text-right text-xs">
           {record.bytesFreed > 0 ? <p>{formatBytes(record.bytesFreed)} freed</p> : null}
           {record.bytesTrashed > 0 ? (
-            <p className="text-muted-foreground">{formatBytes(record.bytesTrashed)} to Trash</p>
+            <p className="text-muted-foreground">
+              {formatBytes(record.bytesTrashed)} to {words().trash}
+            </p>
           ) : null}
           {record.bytesFreed === 0 && record.bytesTrashed === 0 ? <p>—</p> : null}
         </div>

@@ -97,6 +97,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_environment,
             commands::get_disk_info,
+            commands::list_drives,
             commands::get_schedule,
             commands::set_schedule,
             commands::send_test_reminder,

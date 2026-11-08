@@ -7,6 +7,8 @@ import { api } from "@/lib/api";
 import { formatBytes, formatRelative, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import { cachedThumbnail, loadThumbnail } from "@/lib/thumbnails";
+import { basename, parentOf } from "@/lib/paths";
+import { words } from "@/lib/platform";
 
 export interface PreviewFile {
   path: string;
@@ -18,13 +20,8 @@ export interface PreviewFile {
 
 const LARGE = 512;
 
-function nameOf(path: string) {
-  return path.slice(path.lastIndexOf("/") + 1);
-}
-function folderOf(path: string) {
-  const i = path.lastIndexOf("/");
-  return i > 0 ? path.slice(0, i) : "/";
-}
+const nameOf = basename;
+const folderOf = parentOf;
 
 /**
  * A large preview of one file at a time, like Quick Look in Finder: Space or
@@ -99,7 +96,7 @@ export function FilePreview({
               ) : url === null ? (
                 <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
                   <File className="size-10 text-subtle-foreground" aria-hidden />
-                  macOS has no preview for this kind of file.
+                  {words().os} has no preview for this kind of file.
                 </div>
               ) : (
                 <Loader2
@@ -144,7 +141,7 @@ export function FilePreview({
               ) : null}
               <Button variant="ghost" size="sm" onClick={() => void api.revealInFinder(file.path)}>
                 <FolderOpen className="size-3.5" aria-hidden />
-                Show in Finder
+                {words().showInFileManager}
               </Button>
             </div>
           </>

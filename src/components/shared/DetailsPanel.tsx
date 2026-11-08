@@ -7,6 +7,8 @@ import { api, errorMessage } from "@/lib/api";
 import { formatBytes, formatCount, formatDate, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { ItemDetails } from "@/lib/types";
+import { basename } from "@/lib/paths";
+import { words } from "@/lib/platform";
 
 import { ClassificationCard } from "./ClassificationCard";
 
@@ -55,7 +57,7 @@ function DetailsBody({ path, onClose }: { path: string; onClose: () => void }) {
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         <p className="selectable text-[13px] font-medium break-all">
-          {details?.name ?? path.split("/").pop()}
+          {details?.name ?? basename(path)}
         </p>
         <p className="selectable mt-0.5 font-mono text-2xs break-all text-subtle-foreground">
           {tildify(path, home)}
@@ -100,7 +102,7 @@ function DetailsBody({ path, onClose }: { path: string; onClose: () => void }) {
       <div className="border-t border-border p-3">
         <Button variant="secondary" className="w-full" onClick={reveal}>
           <FolderOpen />
-          Reveal in Finder
+          {words().revealInFileManager}
         </Button>
       </div>
     </aside>

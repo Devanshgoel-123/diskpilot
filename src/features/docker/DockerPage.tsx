@@ -24,6 +24,7 @@ import { formatBytes, formatCount } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { DiagnosticFinding, DockerAction, DockerOverview, FindingLevel } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { isWindows } from "@/lib/platform";
 
 import { DockerActionDialog } from "./DockerActionDialog";
 import { BuildCacheTable, ContainersTable, ImagesTable, VolumesTable } from "./DockerTables";
@@ -183,7 +184,9 @@ export function DockerPage() {
                   }
                   description={
                     status?.state === "notInstalled"
-                      ? "DiskPilot looks for the docker CLI in the usual Docker Desktop, Homebrew, OrbStack and Colima locations."
+                      ? isWindows()
+                        ? "DiskPilot looks for the docker CLI where Docker Desktop installs it."
+                        : "DiskPilot looks for the docker CLI in the usual Docker Desktop, Homebrew, OrbStack and Colima locations."
                       : (status?.message ?? "Start Docker Desktop, then refresh.")
                   }
                   action={

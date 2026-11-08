@@ -65,7 +65,7 @@ export function App() {
     if (inDesktopApp()) startUpdateChecks();
   }, []);
 
-  // Shortcuts from the menu bar item.
+  // Shortcuts from the menu bar (tray) item.
   useEffect(() => {
     if (!inDesktopApp()) return;
     const un = onTrayNavigate((target) => {
