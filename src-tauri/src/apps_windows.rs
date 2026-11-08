@@ -1089,4 +1089,88 @@ mod tests {
             );
         }
     }
+
+    #[cfg(windows)]
+    fn app(name: &str, dir: Option<&str>) -> crate::apps::AppInfo {
+        crate::apps::AppInfo {
+            name: name.into(),
+            bundle_id: format!("{{{name}}}"),
+            path: dir.map_or_else(|| PathBuf::from(name), PathBuf::from),
+            win: WinApp {
+                install_dir: dir.map(PathBuf::from),
+                ..Default::default()
+            },
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolves_install_folders_and_appdata_by_name() {
+        let mut index = crate::apps::AppIndex::default();
+        index.add(app("Google Chrome", None));
+        index.add(app("Telegram Desktop", None));
+        index.add(app("Discord", Some(r"C:\Users\me\AppData\Local\Discord")));
+        index.add(app("7-Zip 23.01 (x64)", Some(r"C:\Program Files\7-Zip")));
+        index.add(app("Microsoft Teams", None));
+        let home = Path::new(r"C:\Users\me");
+        let name = |p: &str| index.resolve(home, Path::new(p)).map(|a| a.name.clone());
+        assert_eq!(
+            name(r"C:\Program Files\7-Zip\7z.exe").as_deref(),
+            Some("7-Zip 23.01 (x64)")
+        );
+        assert_eq!(
+            name(r"C:\Users\me\AppData\Local\Discord\app-1.0").as_deref(),
+            Some("Discord")
+        );
+        assert_eq!(
+            name(r"C:\Users\me\AppData\Local\Google\Chrome\User Data").as_deref(),
+            Some("Google Chrome")
+        );
+        assert_eq!(
+            name(r"C:\Users\me\AppData\Roaming\Telegram Desktop\tdata").as_deref(),
+            Some("Telegram Desktop")
+        );
+        assert_eq!(
+            name(r"C:\Users\me\AppData\Roaming\Microsoft\Teams").as_deref(),
+            Some("Microsoft Teams")
+        );
+        assert_eq!(
+            name(r"C:\Users\me\AppData\Roaming\7-zip").as_deref(),
+            Some("7-Zip 23.01 (x64)")
+        );
+        for p in [
+            r"C:\Users\me\AppData\Local\Temp\x",
+            r"C:\Users\me\Documents\Discord",
+            r"C:\Program Files\7-Zipper",
+            r"C:\Users\me\AppData\Local\Unknown",
+        ] {
+            assert_eq!(name(p), None, "{p}");
+        }
+    }
+
+    /// Reads this PC's real registry: the runner has many programs installed.
+    #[cfg(windows)]
+    #[test]
+    fn lists_the_programs_installed_on_this_pc() {
+        let home = dirs::home_dir().unwrap();
+        let index = build_index(&home);
+        assert!(!index.apps.is_empty(), "no installed programs found");
+        for a in index.apps.iter().take(15) {
+            eprintln!(
+                "{} | {} | {:?} | {:?} | {:?}",
+                a.name,
+                a.bundle_id,
+                a.win.install_dir,
+                a.win.uninstaller.as_ref().and_then(|u| u.command()),
+                a.win.store
+            );
+        }
+        let with_icon = index
+            .apps
+            .iter()
+            .filter(|a| icon_png(a, 32).is_some())
+            .count();
+        eprintln!("{} programs, {with_icon} with an icon", index.apps.len());
+        assert!(with_icon > 0);
+    }
 }
