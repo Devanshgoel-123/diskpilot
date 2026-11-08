@@ -9,7 +9,6 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use crate::platform;
-#[cfg(target_os = "macos")]
 use std::sync::atomic::AtomicBool;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,7 +73,8 @@ pub(crate) struct Listing {
 }
 
 /// Testing and benchmarking only: list with `read_dir` + `lstat` everywhere.
-#[cfg(target_os = "macos")]
+/// Defined on every platform so the benchmark examples build; only macOS has
+/// another listing method to turn off.
 #[doc(hidden)]
 pub static FORCE_PORTABLE: AtomicBool = AtomicBool::new(false);
 
