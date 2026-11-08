@@ -168,10 +168,8 @@ pub fn resolve_app_data(rel: &str, roaming: &Path, local: &Path) -> Option<PathB
     let rel = rel.replace('\\', "/");
     let (base, rest) = if let Some(rest) = rel.strip_prefix("AppData/Roaming") {
         (roaming, rest)
-    } else if let Some(rest) = rel.strip_prefix("AppData/Local") {
-        (local, rest)
     } else {
-        return None;
+        (local, rel.strip_prefix("AppData/Local")?)
     };
     if !(rest.is_empty() || rest.starts_with('/')) {
         return None;
