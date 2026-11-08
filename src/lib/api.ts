@@ -31,6 +31,7 @@ import type {
   SecretsReport,
   DirectoryListing,
   DiskInfo,
+  SystemExtra,
   DriveInfo,
   ModelInfo,
   DuplicateProgress,
@@ -56,6 +57,8 @@ export const inDesktopApp = (): boolean => isTauri();
 export const api = {
   getEnvironment: () => invoke<AppEnvironment>("get_environment"),
   getDiskInfo: () => invoke<DiskInfo>("get_disk_info"),
+  /** Windows system areas with the tool that reclaims each; empty on macOS. */
+  getSystemExtras: () => invoke<SystemExtra[]>("get_system_extras"),
   /** Drives to scan: every fixed and removable drive on Windows, the home volume on macOS. */
   listDrives: () => invoke<DriveInfo[]>("list_drives"),
   /**

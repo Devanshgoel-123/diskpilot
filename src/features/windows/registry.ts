@@ -1,5 +1,6 @@
 import type * as React from "react";
 
+import { SystemExtrasSection } from "./extras/SystemExtras";
 import { VirtualDisksSection, VirtualDisksSummary } from "./wsl/VirtualDisks";
 
 /**
@@ -18,7 +19,7 @@ export const WINDOWS_SECTIONS: Record<
   "overview" | "developer" | "applications",
   React.ComponentType[]
 > = {
-  overview: [VirtualDisksSummary],
+  overview: [VirtualDisksSummary, SystemExtrasSection],
   developer: [VirtualDisksSection],
   applications: [],
 };

@@ -21,6 +21,9 @@
           "url": "https://github.com/Devanshgoel-123/diskpilot*"
         },
         {
+          "url": "ms-settings:*"
+        },
+        {
           "url": "https://console.anthropic.com/settings/keys"
         },
         {

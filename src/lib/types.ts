@@ -781,3 +781,27 @@ export interface Schedule {
   reminder: boolean;
   lastReminderMs: number | null;
 }
+
+/** How completely a Windows system area could be measured without administrator rights. */
+export type Measured = "complete" | "partial" | "unavailable";
+
+/**
+ * A Windows system area DiskPilot reports but never removes (the hibernation
+ * file, Windows.old, the update cache, WinSxS…), with the Windows tool or
+ * command that reclaims it. From `get_system_extras`; empty on macOS.
+ */
+export interface SystemExtra {
+  id: string;
+  label: string;
+  paths: string[];
+  /** A lower bound when `measured` is "partial"; 0 when "unavailable". */
+  bytes: number;
+  measured: Measured;
+  explanation: string;
+  sizeNote: string | null;
+  howToReclaim: string;
+  command: string | null;
+  checkCommand: string | null;
+  settingsUri: string | null;
+  needsAdmin: boolean;
+}
