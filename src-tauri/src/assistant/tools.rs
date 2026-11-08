@@ -535,7 +535,8 @@ mod tests {
     #[test]
     fn paths_are_shown_relative_to_home() {
         let home = Path::new("/Users/test");
-        assert_eq!(tilde("/Users/test/Library", home), "~/Library");
+        let sep = std::path::MAIN_SEPARATOR;
+        assert_eq!(tilde("/Users/test/Library", home), format!("~{sep}Library"));
         assert_eq!(tilde("/Users/test", home), "~");
         assert_eq!(tilde("/Users/tester/x", home), "/Users/tester/x");
     }
