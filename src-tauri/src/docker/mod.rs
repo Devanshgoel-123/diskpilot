@@ -229,6 +229,49 @@ pub fn overview(cli: &DockerCli, status: DockerStatus) -> Result<DockerOverview,
     build_overview(status, &df, &summary)
 }
 
+/// Space Docker uses, from `docker system df` alone: quicker than the full
+/// [`overview`] when only the totals are needed.
+pub fn usage(cli: &DockerCli) -> Result<DockerUsage, DockerError> {
+    let summary = cli.run(
+        &["system", "df", "--format", "{{json .}}"],
+        Duration::from_secs(60),
+    )?;
+    parse_usage(&summary)
+}
+
+impl DockerUsage {
+    /// Images, containers, volumes and build cache together.
+    pub fn total_bytes(&self) -> u64 {
+        self.images.size_bytes
+            + self.containers.size_bytes
+            + self.volumes.size_bytes
+            + self.build_cache.size_bytes
+    }
+}
+
+/// Parse `docker system df --format '{{json .}}'` (one JSON object per line).
+pub fn parse_usage(df_summary: &str) -> Result<DockerUsage, DockerError> {
+    let mut usage = DockerUsage::default();
+    for line in df_summary.lines().filter(|l| !l.trim().is_empty()) {
+        let row: RawDfSummaryLine =
+            serde_json::from_str(line).map_err(|e| DockerError::Parse(e.to_string()))?;
+        let parsed = UsageRow {
+            total_count: parse_count(&row.total_count).unwrap_or(0),
+            active: parse_count(&row.active).unwrap_or(0),
+            size_bytes: parse_size(&row.size).unwrap_or(0),
+            reclaimable_bytes: parse_size(&row.reclaimable).unwrap_or(0),
+        };
+        match row.kind.as_str() {
+            "Images" => usage.images = parsed,
+            "Containers" => usage.containers = parsed,
+            "Local Volumes" => usage.volumes = parsed,
+            "Build Cache" => usage.build_cache = parsed,
+            _ => {}
+        }
+    }
+    Ok(usage)
+}
+
 /// Pure assembly from raw CLI output (tested without Docker).
 pub fn build_overview(
     status: DockerStatus,
@@ -324,24 +367,7 @@ pub fn build_overview(
         })
         .collect();
 
-    let mut usage = DockerUsage::default();
-    for line in df_summary.lines().filter(|l| !l.trim().is_empty()) {
-        let row: RawDfSummaryLine =
-            serde_json::from_str(line).map_err(|e| DockerError::Parse(e.to_string()))?;
-        let parsed = UsageRow {
-            total_count: parse_count(&row.total_count).unwrap_or(0),
-            active: parse_count(&row.active).unwrap_or(0),
-            size_bytes: parse_size(&row.size).unwrap_or(0),
-            reclaimable_bytes: parse_size(&row.reclaimable).unwrap_or(0),
-        };
-        match row.kind.as_str() {
-            "Images" => usage.images = parsed,
-            "Containers" => usage.containers = parsed,
-            "Local Volumes" => usage.volumes = parsed,
-            "Build Cache" => usage.build_cache = parsed,
-            _ => {}
-        }
-    }
+    let usage = parse_usage(df_summary)?;
 
     let mut images = images;
     images.sort_by_key(|i| std::cmp::Reverse(i.unique_bytes));
