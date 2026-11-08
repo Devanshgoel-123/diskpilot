@@ -548,7 +548,7 @@ mod win {
                 // used on this PC: zero for a cloud file that is online only.
                 alloc: if is_dir { 0 } else { alloc },
                 logical: if is_dir { 0 } else { eof },
-                modified_ms: filetime_ms(write_time as i64),
+                modified_ms: filetime_ms(write_time),
                 // Directory listings do not report link counts; the
                 // scanner asks where hard links are common.
                 nlink: 1,
@@ -620,8 +620,7 @@ mod win {
                 // SAFETY: the call wrote at most `len` bytes into the buffer.
                 let buf: &[u8] = unsafe { std::slice::from_raw_parts(words.as_ptr().cast(), len) };
                 let mut off = 0usize;
-                loop {
-                    let Some(entry) = buf.get(off..) else { break };
+                while let Some(entry) = buf.get(off..) {
                     let next = read_u32(entry, 0).unwrap_or(0) as usize;
                     let entry = if next == 0 {
                         entry
