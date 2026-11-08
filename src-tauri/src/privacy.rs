@@ -91,12 +91,12 @@ const PRIVATE_BUNDLES: &[(&str, &str)] = &[
 
 /// The private area containing `path`: its folder and a short name.
 pub fn private_area(path: &Path, home: &Path) -> Option<(PathBuf, &'static str)> {
-    let areas = if cfg!(windows) {
-        WINDOWS_PRIVATE_AREAS
-    } else {
-        PRIVATE_AREAS
-    };
-    private_area_in(areas, path, home)
+    if cfg!(windows) {
+        if let Some(area) = private_area_in(WINDOWS_PRIVATE_AREAS, path, home) {
+            return Some(area);
+        }
+    }
+    private_area_in(PRIVATE_AREAS, path, home)
 }
 
 fn private_area_in(
@@ -241,6 +241,6 @@ mod tests {
         )
         .unwrap();
         assert_eq!(label, "Mail");
-        assert!(private_area(Path::new(r"C:\Users\a\Library\Mail"), home).is_none());
+        assert!(private_area(Path::new(r"C:\Users\a\AppData\Local\Temp"), home).is_none());
     }
 }
