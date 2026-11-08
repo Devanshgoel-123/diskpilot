@@ -1,5 +1,7 @@
 import type * as React from "react";
 
+import { VirtualDisksSection, VirtualDisksSummary } from "./wsl/VirtualDisks";
+
 /**
  * Windows-only sections, by page. Each Windows feature adds its component to
  * the list for the page it belongs on; `<WindowsSections page=… />` renders
@@ -16,8 +18,8 @@ export const WINDOWS_SECTIONS: Record<
   "overview" | "developer" | "applications",
   React.ComponentType[]
 > = {
-  overview: [],
-  developer: [],
+  overview: [VirtualDisksSummary],
+  developer: [VirtualDisksSection],
   applications: [],
 };
 
