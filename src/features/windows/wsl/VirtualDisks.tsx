@@ -60,7 +60,7 @@ function DiskRow({
           </p>
         ) : null}
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-1">
+      <div className="flex w-44 shrink-0 flex-col items-end gap-1">
         <Button variant="secondary" size="sm" onClick={() => onCompact("compact")}>
           Compact…
         </Button>
