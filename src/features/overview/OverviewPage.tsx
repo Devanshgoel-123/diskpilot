@@ -14,6 +14,7 @@ import { formatBytes, formatCount, tildify } from "@/lib/format";
 import { isWindows, words } from "@/lib/platform";
 import { useApp } from "@/lib/store";
 import { WindowsSections } from "@/features/windows/sections";
+import { FastScanOffer } from "@/components/layout/FastScanDialog";
 
 import { AssistantPrompt } from "./AssistantPrompt";
 import { CategoryList } from "./CategoryList";
@@ -55,6 +56,7 @@ export function OverviewPage() {
     navigate,
     recommendations,
     drives,
+    fastScan,
   } = useApp();
   const home = env?.homeDir;
   const w = words();
@@ -137,6 +139,7 @@ export function OverviewPage() {
                     <Button variant="ghost" size="lg" onClick={() => navigate("settings")}>
                       Choose another folder
                     </Button>
+                    <FastScanOffer size="lg" />
                   </div>
                 }
               />
@@ -149,9 +152,11 @@ export function OverviewPage() {
                 className="lg:col-span-3"
                 title="Scanning"
                 description={
-                  progress
-                    ? `${formatCount(progress.filesScanned)} files, ${formatBytes(progress.bytesScanned)} so far`
-                    : "Starting"
+                  fastScan && !progress?.filesScanned
+                    ? "Reading the drive's file table…"
+                    : progress
+                      ? `${formatCount(progress.filesScanned)} files, ${formatBytes(progress.bytesScanned)} so far`
+                      : "Starting"
                 }
               >
                 <RowsSkeleton rows={4} />

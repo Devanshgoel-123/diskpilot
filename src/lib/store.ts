@@ -8,6 +8,7 @@ import {
   onScanPartial,
   onScanProgress,
 } from "./api";
+import { isDriveRoot } from "./drives";
 import { applyPlatformClass, currentOs, isWindows, setOs, type Os } from "./platform";
 import { applyTheme, loadTheme, saveTheme, type ThemePreference } from "./theme";
 import { clearThumbnails } from "./thumbnails";
@@ -125,6 +126,10 @@ interface AppState {
   asking: boolean;
 
   scanning: boolean;
+  /** Windows: DiskPilot runs as administrator, so whole-drive scans read the file table. */
+  elevated: boolean;
+  /** The running scan reads the drive's file table directly (Windows fast scan). */
+  fastScan: boolean;
   /** Results on screen are from the running scan, without app containers. */
   partial: boolean;
   progress: ScanProgress | null;
@@ -235,6 +240,8 @@ export const useApp = create<AppState>((set, get) => ({
   chat: [],
   asking: false,
   scanning: false,
+  elevated: false,
+  fastScan: false,
   partial: false,
   progress: null,
   lastStatus: null,
@@ -275,6 +282,7 @@ export const useApp = create<AppState>((set, get) => ({
         const hadPartial = get().partial;
         set({
           scanning: false,
+          fastScan: false,
           partial: false,
           lastStatus: { status: done.status, error: done.error },
         });
@@ -316,6 +324,12 @@ export const useApp = create<AppState>((set, get) => ({
       const os = setOs(env.os);
       set({ env, os, disk, summary, scanning, history, recommendations, cleanups, ready: true });
       void get().refreshDrives();
+      if (isWindows()) {
+        void api
+          .isElevated()
+          .then((elevated) => set({ elevated }))
+          .catch(() => undefined);
+      }
       // Results saved from the last launch: re-run the tool checks, which
       // read current versions and installers rather than saved data.
       if (summary) void get().analyzeDevTools();
@@ -328,9 +342,12 @@ export const useApp = create<AppState>((set, get) => ({
 
   startScan: async () => {
     set({ error: null, lastStatus: null, progress: null, partial: false });
+    const { scanRoot, drives, elevated } = get();
+    // As administrator, a whole drive is read from its file table.
+    const fast = isWindows() && elevated && isDriveRoot(scanRoot, drives);
     try {
-      await api.startScan(get().scanRoot ?? undefined);
-      set({ scanning: true });
+      await api.startScan(scanRoot ?? undefined, fast);
+      set({ scanning: true, fastScan: fast });
     } catch (e) {
       set({ error: errorMessage(e) });
     }
