@@ -676,10 +676,16 @@ mod tests {
     fn refuses_protected_paths_even_if_planned() {
         let dir = crate::test_support::sandbox();
         let home = dir.path().canonicalize().unwrap();
-        fs::create_dir_all(home.join("Library/Caches")).unwrap();
+        // A folder the gate protects as a whole on each platform.
+        let caches = home.join(if cfg!(windows) {
+            "AppData/Local"
+        } else {
+            "Library/Caches"
+        });
+        fs::create_dir_all(&caches).unwrap();
         let ops = FakeTrash::default();
         let record = execute(
-            &plan(CleanupMethod::Trash, &[&home.join("Library/Caches"), &home]),
+            &plan(CleanupMethod::Trash, &[&caches, &home]),
             &home,
             &home,
             &ops,
