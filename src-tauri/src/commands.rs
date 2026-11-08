@@ -438,20 +438,71 @@ pub fn reveal_in_finder(state: State<'_, AppState>, path: String) -> AppResult<(
 pub fn open_owner_app(rule_id: String) -> AppResult<()> {
     let app = crate::recommend::policies::owner_app(&rule_id)
         .ok_or_else(|| AppError::Other("DiskPilot does not open an app for this item.".into()))?;
-    for id in app.bundle_ids {
-        let opened = std::process::Command::new("/usr/bin/open")
-            .args(["-b", id])
-            .stderr(std::process::Stdio::null())
-            .status()
-            .is_ok_and(|s| s.success());
-        if opened {
+    #[cfg(windows)]
+    {
+        if app.windows.iter().any(open_windows_app) {
             return Ok(());
         }
+        Err(AppError::Other(format!(
+            "{} is not installed on this PC, or Windows could not open it.",
+            app.name
+        )))
     }
-    Err(AppError::Other(format!(
-        "{} is not installed on this Mac, or macOS could not open it.",
-        app.name
-    )))
+    #[cfg(not(windows))]
+    {
+        for id in app.bundle_ids {
+            let opened = std::process::Command::new("/usr/bin/open")
+                .args(["-b", id])
+                .stderr(std::process::Stdio::null())
+                .status()
+                .is_ok_and(|s| s.success());
+            if opened {
+                return Ok(());
+            }
+        }
+        Err(AppError::Other(format!(
+            "{} is not installed on this Mac, or macOS could not open it.",
+            app.name
+        )))
+    }
+}
+
+/// Start one of the fixed app locations in the cleanup policies. Nothing in
+/// the command comes from the interface.
+#[cfg(windows)]
+fn open_windows_app(launch: &crate::recommend::policies::WindowsLaunch) -> bool {
+    use crate::recommend::policies::WindowsLaunch;
+    match launch {
+        WindowsLaunch::StoreApp { family, app_id } => {
+            let installed = std::env::var_os("LOCALAPPDATA")
+                .map(|local| Path::new(&local).join("Packages").join(family))
+                .is_some_and(|p| p.is_dir());
+            installed
+                && std::process::Command::new("explorer.exe")
+                    .arg(format!("shell:AppsFolder\\{family}!{app_id}"))
+                    .spawn()
+                    .is_ok()
+        }
+        WindowsLaunch::RoamingExe(parts) => {
+            let Some(exe) = std::env::var_os("APPDATA").map(|roaming| {
+                let mut p = std::path::PathBuf::from(roaming);
+                p.extend(*parts);
+                p
+            }) else {
+                return false;
+            };
+            exe.symlink_metadata().is_ok_and(|m| m.is_file())
+                && std::process::Command::new(&exe).spawn().is_ok()
+        }
+    }
+}
+
+/// Windows system areas (hibernation and page files, Windows.old, update
+/// caches, WinSxS, crash dumps) with their sizes and the Windows tool that
+/// reclaims each. Read-only. Empty on macOS.
+#[tauri::command]
+pub async fn get_system_extras() -> AppResult<Vec<crate::system_extras::SystemExtra>> {
+    blocking(|| Ok(crate::system_extras::system_extras())).await
 }
 
 /// A Quick Look thumbnail (PNG bytes) of a file DiskPilot listed, so people
