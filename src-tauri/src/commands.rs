@@ -156,12 +156,15 @@ pub fn get_disk_info(state: State<'_, AppState>) -> AppResult<DiskInfo> {
 // ---- Scanning ------------------------------------------------------------
 
 /// Start a background scan. Returns the scan id immediately; progress and
-/// completion arrive as events.
+/// completion arrive as events. `fast` reads the NTFS file table when
+/// DiskPilot runs as administrator on Windows (see [`is_elevated`]); it is
+/// ignored otherwise and the normal scan runs.
 #[tauri::command]
 pub fn start_scan(
     app: AppHandle,
     state: State<'_, AppState>,
     root: Option<String>,
+    fast: Option<bool>,
 ) -> AppResult<String> {
     let root = match root {
         Some(raw) => safety::parse_user_path(&raw)?,
@@ -178,12 +181,40 @@ pub fn start_scan(
         slot.running = Some(cancel.clone());
     }
     let id = format!("scan-{}", now_ms());
-    let opts = ScanOptions::new(id.clone(), root, state.home.clone()).deferring_app_containers();
+    let mut opts =
+        ScanOptions::new(id.clone(), root, state.home.clone()).deferring_app_containers();
+    opts.fast = fast.unwrap_or(false);
     std::thread::Builder::new()
         .name("diskpilot-scan".into())
         .spawn(move || run_scan(app, opts, cancel))
         .map_err(|e| AppError::Other(format!("Could not start scan thread: {e}")))?;
     Ok(id)
+}
+
+/// Whether DiskPilot runs with administrator rights, which the fast scan
+/// needs on Windows.
+#[tauri::command]
+pub fn is_elevated() -> bool {
+    crate::platform::is_elevated()
+}
+
+/// Start DiskPilot again with administrator rights, after the person
+/// confirmed. Windows shows its UAC prompt; this instance exits once the new
+/// one starts. Fails if they decline or on other platforms.
+#[tauri::command]
+pub fn relaunch_elevated(app: AppHandle) -> AppResult<()> {
+    match crate::platform::relaunch_elevated() {
+        Ok(()) => {
+            app.exit(0);
+            Ok(())
+        }
+        Err(e) if e.raw_os_error() == Some(1223) => Err(AppError::Other(
+            "Administrator rights were not granted.".to_string(),
+        )),
+        Err(e) => Err(AppError::Other(format!(
+            "Could not restart DiskPilot as administrator: {e}"
+        ))),
+    }
 }
 
 fn run_scan(app: AppHandle, opts: ScanOptions, cancel: Arc<AtomicBool>) {

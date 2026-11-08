@@ -101,6 +101,8 @@ pub fn run() {
             commands::set_schedule,
             commands::send_test_reminder,
             commands::start_scan,
+            commands::is_elevated,
+            commands::relaunch_elevated,
             commands::cancel_scan,
             commands::is_scan_running,
             commands::get_scan_summary,
