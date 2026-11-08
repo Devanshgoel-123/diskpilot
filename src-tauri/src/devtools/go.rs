@@ -1,8 +1,8 @@
 //! Go: module cache, build cache, downloaded toolchains and installed programs.
 //!
 //! Locations come from `go env`, so a custom GOPATH, GOMODCACHE or GOCACHE
-//! set with `go env -w` is found too. Without a `go` binary, Go's macOS
-//! defaults are checked instead.
+//! set with `go env -w` is found too. Without a `go` binary, Go's own
+//! defaults for the platform are checked instead.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -32,11 +32,23 @@ const MANAGED_GO: &[(&str, &str)] = &[
     (".asdf/installs/golang", "go/bin/go"),
 ];
 
-fn go_binaries(home: &Path) -> Vec<PathBuf> {
+/// The official installer on Windows (under `%ProgramFiles%`), then Scoop.
+const SYSTEM_GO_WINDOWS: &[&str] = &[
+    "%ProgramFiles%/Go/bin/go.exe",
+    "scoop/apps/go/current/bin/go.exe",
+];
+
+fn go_binaries(ctx: &Ctx) -> Vec<PathBuf> {
+    if cfg!(windows) {
+        return SYSTEM_GO_WINDOWS
+            .iter()
+            .map(|p| super::win_location(ctx, p))
+            .collect();
+    }
     SYSTEM_GO
         .iter()
         .map(PathBuf::from)
-        .chain(managed_go(home))
+        .chain(managed_go(ctx.home))
         .collect()
 }
 
@@ -75,22 +87,31 @@ struct RawGoEnv {
 }
 
 impl GoEnv {
-    fn defaults(home: &Path) -> Self {
+    fn defaults(ctx: &Ctx) -> Self {
         Self {
             version: None,
-            gopath: home.join("go"),
-            modcache: home.join("go/pkg/mod"),
-            cache: Some(home.join("Library/Caches/go-build")),
+            gopath: ctx.home_path("go"),
+            modcache: ctx.home_path("go/pkg/mod"),
+            cache: Some(ctx.home_path(if cfg!(windows) {
+                "AppData/Local/go-build"
+            } else {
+                "Library/Caches/go-build"
+            })),
         }
     }
 
     /// Parse `go env -json` output. Paths that are not absolute are refused.
     fn parse(json: &str) -> Option<Self> {
+        Self::parse_with(json, if cfg!(windows) { ';' } else { ':' })
+    }
+
+    /// [`Self::parse`] with GOPATH's list separator (`;` on Windows).
+    fn parse_with(json: &str, list_separator: char) -> Option<Self> {
         let raw: RawGoEnv = serde_json::from_str(json).ok()?;
         let absolute = |p: &str| Some(PathBuf::from(p)).filter(|p| p.is_absolute());
         Some(Self {
             version: raw.goversion.filter(|v| !v.is_empty()),
-            gopath: absolute(raw.gopath.split(':').next()?)?,
+            gopath: absolute(raw.gopath.split(list_separator).next()?)?,
             modcache: absolute(&raw.gomodcache)?,
             cache: absolute(&raw.gocache),
         })
@@ -117,7 +138,7 @@ impl GoEnv {
 }
 
 pub fn analyze(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
-    let env = GoEnv::query(&go_binaries(ctx.home)).unwrap_or_else(|| GoEnv::defaults(ctx.home));
+    let env = GoEnv::query(&go_binaries(ctx)).unwrap_or_else(|| GoEnv::defaults(ctx));
     report(ctx, &env)
 }
 
@@ -320,6 +341,39 @@ fn report(ctx: &Ctx, env: &GoEnv) -> (ToolReport, Vec<Recommendation>) {
     )
 }
 
+#[cfg(test)]
+mod windows_tests {
+    use super::*;
+
+    #[test]
+    fn reads_windows_go_env() {
+        let json = r#"{"GOVERSION":"go1.23.2","GOPATH":"C:\\Users\\a\\go;D:\\old","GOMODCACHE":"C:\\Users\\a\\go\\pkg\\mod","GOCACHE":"C:\\Users\\a\\AppData\\Local\\go-build"}"#;
+        let env = GoEnv::parse_with(json, ';');
+        // Windows drive paths are only absolute on Windows.
+        if cfg!(windows) {
+            let env = env.unwrap();
+            assert_eq!(env.gopath, PathBuf::from("C:\\Users\\a\\go"));
+            assert_eq!(
+                env.cache,
+                Some(PathBuf::from("C:\\Users\\a\\AppData\\Local\\go-build"))
+            );
+        } else {
+            assert!(env.is_none());
+        }
+    }
+
+    #[test]
+    fn windows_defaults_are_under_the_profile() {
+        let home = Path::new("/h");
+        let c = super::super::tests::ctx(home);
+        let d = GoEnv::defaults(&c);
+        assert!(d.modcache.ends_with("pkg/mod") || d.modcache.ends_with("pkg\\mod"));
+        if cfg!(windows) {
+            assert!(d.cache.unwrap().ends_with("AppData\\Local\\go-build"));
+        }
+    }
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::super::tests::{ctx, write};
@@ -420,7 +474,7 @@ echo '{{"GOVERSION": "{version}", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "G
     fn reports_caches_and_downloaded_toolchains() {
         let dir = crate::test_support::sandbox();
         let home = dir.path().canonicalize().unwrap();
-        let env = GoEnv::defaults(&home);
+        let env = GoEnv::defaults(&ctx(&home));
         let toolchain = env
             .modcache
             .join("golang.org/toolchain@v0.0.1-go1.26.0.darwin-arm64");
@@ -469,7 +523,7 @@ echo '{{"GOVERSION": "{version}", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "G
         let home = dir.path().canonicalize().unwrap();
         let env = GoEnv {
             modcache: home.join(".cache/gomod"),
-            ..GoEnv::defaults(&home)
+            ..GoEnv::defaults(&ctx(&home))
         };
         write(&env.modcache.join("golang.org/x/text@v0.1.0/doc.go"), 10);
         let mut index = DirIndex::new();
@@ -521,7 +575,7 @@ echo '{{"GOVERSION": "{version}", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "G
         let env = GoEnv {
             version: Some("go1.27.3".into()),
             cache: Some(shared.clone()),
-            ..GoEnv::defaults(&home)
+            ..GoEnv::defaults(&ctx(&home))
         };
         go_build_cache(&shared);
         write(&shared.join("pip/http/x"), 10);
@@ -551,7 +605,7 @@ echo '{{"GOVERSION": "{version}", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "G
     fn a_small_build_cache_is_listed_but_not_recommended() {
         let dir = crate::test_support::sandbox();
         let home = dir.path().canonicalize().unwrap();
-        let env = GoEnv::defaults(&home);
+        let env = GoEnv::defaults(&ctx(&home));
         write(&env.cache.clone().unwrap().join("00/a-d"), 10);
         let (report, recs) = report(&ctx(&home), &env);
         let cache = &report.sections[0].items[0];
@@ -565,7 +619,7 @@ echo '{{"GOVERSION": "{version}", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "G
     fn nothing_is_detected_without_go_or_its_folders() {
         let dir = crate::test_support::sandbox();
         let home = dir.path().canonicalize().unwrap();
-        let (report, recs) = report(&ctx(&home), &GoEnv::defaults(&home));
+        let (report, recs) = report(&ctx(&home), &GoEnv::defaults(&ctx(&home)));
         assert!(!report.detected);
         assert!(report.sections.is_empty());
         assert!(recs.is_empty());
@@ -577,7 +631,7 @@ echo '{{"GOVERSION": "{version}", "GOPATH": "/g", "GOMODCACHE": "/g/pkg/mod", "G
         let home = dir.path().canonicalize().unwrap();
         let env = GoEnv {
             version: Some("go1.27.3".into()),
-            ..GoEnv::defaults(&home)
+            ..GoEnv::defaults(&ctx(&home))
         };
         let (report, _) = report(&ctx(&home), &env);
         assert!(report.detected);
