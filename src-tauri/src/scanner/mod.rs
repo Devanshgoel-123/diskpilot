@@ -23,6 +23,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use rayon::prelude::*;
 
 mod listing;
+#[allow(dead_code)]
+mod ntfs;
 #[doc(hidden)]
 pub use listing::FORCE_PORTABLE;
 use listing::{Kind, Stat};

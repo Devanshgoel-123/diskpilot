@@ -74,6 +74,35 @@ pub(crate) struct Listing {
     pub errors: Vec<(PathBuf, io::Error)>,
 }
 
+/// Reparse tags with this bit redirect to another name: symbolic links,
+/// junctions and volume mount points. Those are links and never descended.
+/// Other reparse points (cloud files, deduplicated and compressed system
+/// files, app aliases) are ordinary files and folders with a file-system
+/// filter, exactly as `std::fs` treats them.
+const NAME_SURROGATE: u32 = 0x2000_0000;
+const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+
+/// Kind of a Windows entry from its attributes and reparse tag.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn kind_of(attrs: u32, tag: u32) -> Kind {
+    if attrs & FILE_ATTRIBUTE_REPARSE_POINT != 0 && tag & NAME_SURROGATE != 0 {
+        Kind::Symlink
+    } else if attrs & FILE_ATTRIBUTE_DIRECTORY != 0 {
+        Kind::Dir
+    } else {
+        Kind::File
+    }
+}
+
+/// Milliseconds since the Unix epoch from a Windows FILETIME, as
+/// `Metadata::modified` would report it (`None` before 1970).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn filetime_ms(ft: i64) -> Option<i64> {
+    const EPOCH: i64 = 116_444_736_000_000_000;
+    (ft >= EPOCH).then(|| (ft - EPOCH) / 10_000)
+}
+
 /// Testing and benchmarking only: list with `read_dir` + `lstat` everywhere.
 #[doc(hidden)]
 pub static FORCE_PORTABLE: AtomicBool = AtomicBool::new(false);
@@ -358,7 +387,7 @@ pub static LIST_BUFFER_BYTES: std::sync::atomic::AtomicUsize =
 
 #[cfg(windows)]
 mod win {
-    use super::{Kind, Listing, Stat};
+    use super::{filetime_ms, kind_of, Kind, Listing, Stat};
     use std::cell::RefCell;
     use std::ffi::OsString;
     use std::io;
@@ -372,10 +401,9 @@ mod win {
     };
     use windows_sys::Win32::Storage::FileSystem::{
         CreateFileW, FileFullDirectoryInfo, FileFullDirectoryRestartInfo, FileIdExtdDirectoryInfo,
-        FileIdExtdDirectoryRestartInfo, GetFileInformationByHandleEx, FILE_ATTRIBUTE_DIRECTORY,
-        FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
-        FILE_INFO_BY_HANDLE_CLASS, FILE_LIST_DIRECTORY, FILE_SHARE_DELETE, FILE_SHARE_READ,
-        FILE_SHARE_WRITE, OPEN_EXISTING,
+        FileIdExtdDirectoryRestartInfo, GetFileInformationByHandleEx, FILE_ATTRIBUTE_REPARSE_POINT,
+        FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_INFO_BY_HANDLE_CLASS,
+        FILE_LIST_DIRECTORY, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
     };
 
     /// 64 KiB holds about 500 typical entries per call, so most folders
@@ -389,13 +417,6 @@ mod win {
         // as the entries require.
         static BUF: RefCell<Vec<u64>> = const { RefCell::new(Vec::new()) };
     }
-
-    /// Reparse tags with this bit redirect to another name: symbolic links,
-    /// junctions and volume mount points. Those are links and never
-    /// descended. Other reparse points (cloud files, deduplicated and
-    /// compressed system files, app aliases) are ordinary files and folders
-    /// with a file-system filter, exactly as `std::fs` treats them.
-    const NAME_SURROGATE: u32 = 0x2000_0000;
 
     /// Both directory information classes were refused: list another way.
     pub(super) fn unsupported(e: &io::Error) -> bool {
@@ -485,24 +506,6 @@ mod win {
     }
     fn read_u64(b: &[u8], off: usize) -> Option<u64> {
         Some(u64::from_le_bytes(b.get(off..off + 8)?.try_into().ok()?))
-    }
-
-    /// Milliseconds since the Unix epoch from a FILETIME, as
-    /// `Metadata::modified` would report it (`None` before 1970).
-    pub(super) fn filetime_ms(ft: i64) -> Option<i64> {
-        const EPOCH: i64 = 116_444_736_000_000_000;
-        (ft >= EPOCH).then(|| (ft - EPOCH) / 10_000)
-    }
-
-    /// Kind of an entry from its attributes and reparse tag.
-    pub(crate) fn kind_of(attrs: u32, tag: u32) -> Kind {
-        if attrs & FILE_ATTRIBUTE_REPARSE_POINT != 0 && tag & NAME_SURROGATE != 0 {
-            Kind::Symlink
-        } else if attrs & FILE_ATTRIBUTE_DIRECTORY != 0 {
-            Kind::Dir
-        } else {
-            Kind::File
-        }
     }
 
     /// Parse one entry. `None` if it is malformed; `Some(None)` for `.` and
