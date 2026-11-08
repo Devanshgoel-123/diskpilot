@@ -26,7 +26,14 @@ fn fixture() -> Fixture {
     // which the classifier (correctly) treats as system cache.
     let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
     let home = dir.path().canonicalize().unwrap().join("home");
-    write(&home.join("Library/Caches/com.example/blob.bin"), 200_000);
+    // App caches: ~/Library/Caches on macOS, the profile's temporary
+    // folder on Windows.
+    let caches = if cfg!(windows) {
+        "AppData/Local/Temp"
+    } else {
+        "Library/Caches"
+    };
+    write(&home.join(caches).join("com.example/blob.bin"), 200_000);
     write(
         &home.join("Library/Developer/Xcode/DerivedData/App-x/Build/out.o"),
         300_000,
@@ -99,7 +106,13 @@ fn classifies_developer_artifacts() {
         .collect();
     assert!(rules.contains(&"node.node-modules"));
     assert!(rules.contains(&"node.next-build"));
-    assert!(rules.contains(&"xcode.derived-data"));
+    // Windows has no Xcode folders; the DerivedData folder is still
+    // recognized by name.
+    assert!(rules.contains(&if cfg!(windows) {
+        "xcode.local-derived-data"
+    } else {
+        "xcode.derived-data"
+    }));
     // The dist/ inside node_modules is part of node_modules, not separate.
     assert!(!rules.contains(&"node.dist"));
 }
