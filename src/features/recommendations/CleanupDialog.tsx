@@ -1,7 +1,8 @@
 import { AlertTriangle, CheckCircle2, Loader2, Trash2, XCircle } from "lucide-react";
-import { type CSSProperties, useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 
 import { TierBadge } from "@/components/shared/TierBadge";
+import { WindowedList } from "@/components/shared/WindowedList";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,13 +12,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { api, errorMessage } from "@/lib/api";
-import { formatBytes, tildify } from "@/lib/format";
+import { api, errorMessage, onCleanupProgress } from "@/lib/api";
+import { formatBytes, formatCount, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import { TrashGlyph } from "@/features/trash/TrashGlyph";
 import { useTrash } from "@/features/trash/trashStore";
-import type { CleanupMethod, CleanupPlan, CleanupRecord } from "@/lib/types";
+import { useCountUp } from "@/features/trash/useCountUp";
+import type { CleanupMethod, CleanupPlan, CleanupProgress, CleanupRecord } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+import "./cleanup.css";
 
 const METHODS: { id: CleanupMethod; title: string; text: string }[] = [
   {
@@ -59,6 +63,7 @@ export function CleanupDialog({
   const [confirmed, setConfirmed] = useState(false);
   const [running, setRunning] = useState(false);
   const [record, setRecord] = useState<CleanupRecord | null>(null);
+  const [progress, setProgress] = useState<CleanupProgress | null>(null);
 
   useEffect(() => {
     if (!open || record) return;
@@ -89,8 +94,13 @@ export function CleanupDialog({
     if (!plan) return;
     setRunning(true);
     setError(null);
+    setProgress(null);
+    const planId = plan.id;
+    const unlisten = await onCleanupProgress((p) => {
+      if (p.planId === planId) setProgress(p);
+    }).catch(() => null);
     try {
-      const result = await api.executeCleanupPlan(plan.id);
+      const result = await api.executeCleanupPlan(planId);
       setRecord(result);
       onFinished(result);
       // Space cleared and streaks count every cleanup, from any page.
@@ -99,6 +109,7 @@ export function CleanupDialog({
     } catch (e) {
       setError(errorMessage(e));
     } finally {
+      unlisten?.();
       setRunning(false);
     }
   };
@@ -174,7 +185,9 @@ export function CleanupDialog({
                 </ul>
               ) : null}
 
-              {loading ? (
+              {running && plan ? (
+                <Working plan={plan} progress={progress} />
+              ) : loading ? (
                 <p className="flex items-center gap-2 py-6 text-xs text-muted-foreground">
                   <Loader2 className="size-3.5 animate-spin" aria-hidden /> Preparing preview…
                 </p>
@@ -186,22 +199,31 @@ export function CleanupDialog({
                     </span>
                     <span className="tabular text-foreground">{formatBytes(plan.totalBytes)}</span>
                   </p>
-                  <ul className="divide-y divide-border rounded-lg border border-border">
-                    {plan.items.map((i) => (
-                      <li key={i.path} className="flex items-center gap-3 px-3 py-2">
+                  <WindowedList
+                    items={plan.items}
+                    rowHeight={52}
+                    maxHeight={416}
+                    label="Items in this cleanup"
+                    getKey={(i) => i.path}
+                    className="rounded-lg border border-border"
+                    renderRow={(i) => (
+                      <div className="flex h-full items-center gap-3 border-b border-border px-3">
                         <div className="min-w-0 flex-1">
                           <p className="flex items-center gap-2 truncate text-xs">
                             <span className="truncate">{i.title}</span>
                             <TierBadge tier={i.tier} />
                           </p>
-                          <p className="selectable mt-0.5 font-mono text-2xs break-all text-subtle-foreground">
+                          <p
+                            className="selectable mt-0.5 truncate font-mono text-2xs text-subtle-foreground"
+                            title={i.path}
+                          >
                             {tildify(i.path, home)}
                           </p>
                         </div>
                         <span className="tabular shrink-0 text-xs">{formatBytes(i.bytes)}</span>
-                      </li>
-                    ))}
-                  </ul>
+                      </div>
+                    )}
+                  />
                   {plan.rejected.length ? (
                     <div className="mt-3">
                       <p className="mb-1 text-xs text-muted-foreground">
@@ -244,7 +266,11 @@ export function CleanupDialog({
                   )}
                 >
                   {running ? <Loader2 className="animate-spin" /> : <Trash2 />}
-                  {running ? "Working…" : destructiveLabel}
+                  {running
+                    ? progress
+                      ? `${formatCount(progress.itemsDone)} of ${formatCount(progress.itemsTotal)}…`
+                      : "Starting…"
+                    : destructiveLabel}
                 </Button>
               </div>
             </DialogFooter>
@@ -252,6 +278,52 @@ export function CleanupDialog({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Live progress while the engine works through the plan. */
+function Working({ plan, progress }: { plan: CleanupPlan; progress: CleanupProgress | null }) {
+  const total = plan.items.length;
+  const done = progress?.itemsDone ?? 0;
+  const bytes = useCountUp(progress?.bytesDone ?? 0, 420);
+  const fraction = total ? done / total : 0;
+  const verb = plan.method === "trash" ? "Moving to the Trash" : "Deleting";
+  return (
+    <div className="cl-working py-4" aria-live="polite">
+      <p className="flex items-baseline gap-2">
+        <span className="tabular text-[28px] leading-8 font-semibold tracking-[-0.02em]">
+          {formatBytes(bytes)}
+        </span>
+        <span className="tabular text-xs text-muted-foreground">
+          of {formatBytes(plan.totalBytes)} {plan.method === "trash" ? "moved" : "freed"}
+        </span>
+      </p>
+      <div
+        role="progressbar"
+        aria-label={verb}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(fraction * 100)}
+        className="cl-track mt-3 h-1.5 overflow-hidden rounded-full bg-track"
+      >
+        <div
+          className="cl-bar h-full rounded-full bg-accent"
+          style={{ transform: `scaleX(${fraction})` }}
+        />
+      </div>
+      <p className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span className="min-w-0 truncate">
+          {progress?.current ? `${verb}: ${progress.current}` : `${verb}…`}
+        </span>
+        <span className="tabular shrink-0">
+          {formatCount(done)} of {formatCount(total)}
+        </span>
+      </p>
+      <p className="mt-4 text-2xs text-subtle-foreground">
+        Each batch is checked again just before it is touched. Keep DiskPilot open until it
+        finishes.
+      </p>
+    </div>
   );
 }
 
@@ -265,6 +337,14 @@ function ResultView({
   onClose: () => void;
 }) {
   const ok = record.items.filter((i) => i.status === "succeeded").length;
+  // Anything not done comes first, so it is seen without scrolling.
+  const items = useMemo(
+    () => [
+      ...record.items.filter((i) => i.status !== "succeeded"),
+      ...record.items.filter((i) => i.status === "succeeded"),
+    ],
+    [record],
+  );
   return (
     <>
       <DialogHeader>
@@ -281,7 +361,7 @@ function ResultView({
               : "Cleanup failed"}
         </DialogTitle>
         <DialogDescription>
-          {ok} of {record.items.length} items done.{" "}
+          {formatCount(ok)} of {formatCount(record.items.length)} items done.{" "}
           {record.bytesTrashed > 0
             ? `${formatBytes(record.bytesTrashed)} moved to the Trash. Empty the Trash to free the space.`
             : null}
@@ -289,24 +369,35 @@ function ResultView({
           elsewhere reflect the last scan until you rescan.
         </DialogDescription>
       </DialogHeader>
-      <ul className="min-h-0 flex-1 divide-y divide-border overflow-y-auto px-5 py-2">
-        {record.items.map((i) => (
-          <li key={i.target} className="py-2">
-            <p className="flex items-center gap-2 text-xs">
-              {i.status === "succeeded" ? (
-                <CheckCircle2 className="size-3.5 shrink-0 text-good" aria-hidden />
-              ) : (
-                <XCircle className="size-3.5 shrink-0 text-critical" aria-hidden />
-              )}
-              <span className="selectable truncate font-mono text-2xs">
-                {tildify(i.target, home)}
-              </span>
-              <span className="tabular ml-auto shrink-0">{formatBytes(i.bytes)}</span>
-            </p>
-            {i.error ? <p className="mt-0.5 pl-5 text-2xs text-critical">{i.error}</p> : null}
-          </li>
-        ))}
-      </ul>
+      <div className="min-h-0 flex-1 px-5 py-2">
+        <WindowedList
+          items={items}
+          rowHeight={44}
+          maxHeight={420}
+          label="Cleanup results"
+          getKey={(i) => i.target}
+          renderRow={(i) => (
+            <div className="flex h-full flex-col justify-center border-b border-border">
+              <p className="flex items-center gap-2 text-xs">
+                {i.status === "succeeded" ? (
+                  <CheckCircle2 className="size-3.5 shrink-0 text-good" aria-hidden />
+                ) : (
+                  <XCircle className="size-3.5 shrink-0 text-critical" aria-hidden />
+                )}
+                <span className="selectable truncate font-mono text-2xs" title={i.target}>
+                  {tildify(i.target, home)}
+                </span>
+                <span className="tabular ml-auto shrink-0">{formatBytes(i.bytes)}</span>
+              </p>
+              {i.error ? (
+                <p className="mt-0.5 truncate pl-5 text-2xs text-critical" title={i.error}>
+                  {i.error}
+                </p>
+              ) : null}
+            </div>
+          )}
+        />
+      </div>
       <DialogFooter>
         {record.bytesTrashed > 0 ? (
           <Button

@@ -1,6 +1,8 @@
 //! Executes a confirmed cleanup plan.
 //!
-//! Each item is re-authorized immediately before it is touched. Permanent
+//! Items are handled in batches of [`BATCH`]: each batch is re-authorized
+//! immediately before it is touched, then moved to the Trash with one Finder
+//! request (one request per item took about a second each). Permanent
 //! deletion uses `std::fs::remove_dir_all`, which does not follow symbolic
 //! links. Failures are recorded per item and never abort the remaining items.
 
@@ -8,7 +10,10 @@ use std::fs;
 use std::io;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+
+use serde::Serialize;
 
 use crate::error::describe_io_error;
 use crate::model::{
@@ -22,6 +27,28 @@ use crate::scanner::now_ms;
 pub trait FileOps: Sync {
     fn trash(&self, path: &Path) -> io::Result<()>;
     fn delete(&self, path: &Path) -> io::Result<()>;
+    /// Moves several items to the Trash, with one result per path in order.
+    fn trash_many(&self, paths: &[PathBuf]) -> Vec<io::Result<()>> {
+        paths.iter().map(|p| self.trash(p)).collect()
+    }
+}
+
+/// How many items are checked and moved to the Trash together.
+pub const BATCH: usize = 100;
+
+/// The Tauri event that reports a running cleanup.
+pub const EVENT_CLEANUP_PROGRESS: &str = "cleanup://progress";
+
+/// How far a cleanup has got, sent while it runs.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupProgress {
+    pub plan_id: String,
+    pub items_done: usize,
+    pub items_total: usize,
+    pub bytes_done: u64,
+    /// The last item handled, by name.
+    pub current: Option<String>,
 }
 
 pub struct RealFileOps;
@@ -34,18 +61,7 @@ pub struct RealFileOps;
 fn move_to_trash(path: &Path) -> io::Result<()> {
     match trash::delete(path) {
         Ok(()) => Ok(()),
-        Err(e) if finder_refused(&e.to_string()) => {
-            #[cfg(target_os = "macos")]
-            {
-                use trash::macos::{DeleteMethod, TrashContextExtMacos};
-                let mut ctx = trash::TrashContext::default();
-                ctx.set_delete_method(DeleteMethod::NsFileManager);
-                ctx.delete(path)
-                    .map_err(|e| io::Error::other(e.to_string()))
-            }
-            #[cfg(not(target_os = "macos"))]
-            Err(io::Error::other(e.to_string()))
-        }
+        Err(e) if finder_refused(&e.to_string()) => file_manager_trash(path),
         Err(e) => Err(io::Error::other(e.to_string())),
     }
 }
@@ -61,9 +77,50 @@ fn finder_refused(message: &str) -> bool {
         || message.contains("(-600)")
 }
 
+/// The system file manager's Trash, used when Finder may not be asked.
+fn file_manager_trash(path: &Path) -> io::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use trash::macos::{DeleteMethod, TrashContextExtMacos};
+        let mut ctx = trash::TrashContext::default();
+        ctx.set_delete_method(DeleteMethod::NsFileManager);
+        ctx.delete(path)
+            .map_err(|e| io::Error::other(e.to_string()))
+    }
+    #[cfg(not(target_os = "macos"))]
+    trash::delete(path).map_err(|e| io::Error::other(e.to_string()))
+}
+
 impl FileOps for RealFileOps {
     fn trash(&self, path: &Path) -> io::Result<()> {
         move_to_trash(path)
+    }
+
+    /// One Finder request for the whole batch. If Finder refuses, the system
+    /// file manager moves each item. If the batch fails for another reason,
+    /// Finder stops at the item it could not move, so each item still here
+    /// is tried on its own and gets its own result; one the batch already
+    /// moved is no longer where it was.
+    fn trash_many(&self, paths: &[PathBuf]) -> Vec<io::Result<()>> {
+        if paths.len() < 2 {
+            return paths.iter().map(|p| self.trash(p)).collect();
+        }
+        match trash::delete_all(paths) {
+            Ok(()) => paths.iter().map(|_| Ok(())).collect(),
+            Err(e) if finder_refused(&e.to_string()) => {
+                paths.iter().map(|p| file_manager_trash(p)).collect()
+            }
+            Err(_) => paths
+                .iter()
+                .map(|p| {
+                    if p.symlink_metadata().is_err() {
+                        Ok(())
+                    } else {
+                        move_to_trash(p)
+                    }
+                })
+                .collect(),
+        }
     }
 
     fn delete(&self, path: &Path) -> io::Result<()> {
@@ -199,79 +256,138 @@ fn writable(dir: &Path) -> bool {
     unsafe { libc::access(c_path.as_ptr(), libc::W_OK | libc::X_OK) == 0 }
 }
 
+/// The most often progress is reported while deleting one item at a time.
+pub const PROGRESS_EVERY: Duration = Duration::from_millis(80);
+
+/// The authorized path of an item, or why it must be left alone.
+fn check(item: &crate::model::PlanItem, scan_root: &Path, home: &Path) -> Result<PathBuf, String> {
+    let path = safety::authorize_destructive(&item.path, scan_root, home)
+        .and_then(|p| safety::ensure_within(&p, home).map(|_| p))
+        .map_err(|e| e.to_string())?;
+    // A file that became a folder since the review is not what the person chose.
+    if item.was_file && !path.symlink_metadata().is_ok_and(|m| m.is_file()) {
+        return Err("It changed since you reviewed it. Scan again.".into());
+    }
+    // An extra copy of a duplicate goes only while the copy that stays is
+    // still there with the same bytes.
+    if let Some(keep) = &item.keep_copy {
+        if !crate::duplicates::same_contents(&path, Path::new(keep)).unwrap_or(false) {
+            return Err(format!(
+                "The copy you are keeping ({keep}) has changed or is gone. Search for duplicates again."
+            ));
+        }
+    }
+    Ok(path)
+}
+
+fn pending(plan: &CleanupPlan, item: &crate::model::PlanItem) -> CleanupItemResult {
+    CleanupItemResult {
+        target: item.path.clone(),
+        operation: format!("{}: {}", plan.method.describe(), item.path),
+        bytes: 0,
+        status: ItemStatus::Failed,
+        error: None,
+    }
+}
+
+fn skipped(plan: &CleanupPlan, item: &crate::model::PlanItem, reason: String) -> CleanupItemResult {
+    CleanupItemResult {
+        status: ItemStatus::Skipped,
+        error: Some(reason),
+        ..pending(plan, item)
+    }
+}
+
 pub fn execute(
     plan: &CleanupPlan,
     scan_root: &Path,
     home: &Path,
     ops: &dyn FileOps,
 ) -> CleanupRecord {
-    let started = now_ms();
-    let mut results = Vec::with_capacity(plan.items.len());
+    execute_with_progress(plan, scan_root, home, ops, &|_| {})
+}
 
-    for item in &plan.items {
-        let operation = format!("{}: {}", plan.method.describe(), item.path);
-        let authorized = safety::authorize_destructive(&item.path, scan_root, home)
-            .and_then(|p| safety::ensure_within(&p, home).map(|_| p));
-        let path = match authorized {
-            Ok(p) => p,
-            Err(e) => {
-                results.push(CleanupItemResult {
-                    target: item.path.clone(),
-                    operation,
-                    bytes: 0,
-                    status: ItemStatus::Skipped,
-                    error: Some(e.to_string()),
-                });
+/// [`execute`], reporting progress after each batch (and at most every
+/// [`PROGRESS_EVERY`] while deleting).
+pub fn execute_with_progress(
+    plan: &CleanupPlan,
+    scan_root: &Path,
+    home: &Path,
+    ops: &dyn FileOps,
+    progress: &dyn Fn(CleanupProgress),
+) -> CleanupRecord {
+    let started = now_ms();
+    let total = plan.items.len();
+    let mut results = Vec::with_capacity(total);
+    let mut bytes_done = 0u64;
+    let mut last_report = Instant::now();
+
+    for batch in plan.items.chunks(BATCH) {
+        // Check every item of the batch just before acting on it.
+        let mut checked: Vec<(CleanupItemResult, Option<PathBuf>)> = batch
+            .iter()
+            .map(|item| match check(item, scan_root, home) {
+                Ok(path) => (pending(plan, item), Some(path)),
+                Err(reason) => (skipped(plan, item, reason), None),
+            })
+            .collect();
+
+        let ready: Vec<PathBuf> = checked.iter().filter_map(|(_, p)| p.clone()).collect();
+        let mut outcomes = match plan.method {
+            CleanupMethod::Trash => ops.trash_many(&ready),
+            CleanupMethod::Delete => ready
+                .iter()
+                .enumerate()
+                .map(|(i, p)| {
+                    let r = ops.delete(p);
+                    if last_report.elapsed() >= PROGRESS_EVERY {
+                        last_report = Instant::now();
+                        progress(CleanupProgress {
+                            plan_id: plan.id.clone(),
+                            items_done: results.len() + i + 1,
+                            items_total: total,
+                            bytes_done,
+                            current: p.file_name().map(|n| n.to_string_lossy().into_owned()),
+                        });
+                    }
+                    r
+                })
+                .collect(),
+        }
+        .into_iter();
+
+        for ((result, path), item) in checked.iter_mut().zip(batch) {
+            if path.is_none() {
                 continue;
             }
-        };
-        // A file that became a folder since the review is not what the
-        // person chose.
-        if item.was_file && !path.symlink_metadata().is_ok_and(|m| m.is_file()) {
-            results.push(CleanupItemResult {
-                target: item.path.clone(),
-                operation,
-                bytes: 0,
-                status: ItemStatus::Skipped,
-                error: Some("It changed since you reviewed it. Scan again.".into()),
-            });
-            continue;
-        }
-        // An extra copy of a duplicate goes only while the copy that stays
-        // is still there with the same bytes.
-        if let Some(keep) = &item.keep_copy {
-            if !crate::duplicates::same_contents(&path, Path::new(keep)).unwrap_or(false) {
-                results.push(CleanupItemResult {
-                    target: item.path.clone(),
-                    operation,
-                    bytes: 0,
-                    status: ItemStatus::Skipped,
-                    error: Some(format!(
-                        "The copy you are keeping ({keep}) has changed or is gone. Search for duplicates again."
-                    )),
-                });
-                continue;
+            match outcomes.next() {
+                Some(Ok(())) => {
+                    result.status = ItemStatus::Succeeded;
+                    result.bytes = item.bytes;
+                    bytes_done += item.bytes;
+                }
+                Some(Err(e)) => {
+                    result.status = ItemStatus::Failed;
+                    result.error = Some(describe_io_error(&e));
+                }
+                None => {
+                    result.status = ItemStatus::Failed;
+                    result.error = Some("DiskPilot lost track of this item.".into());
+                }
             }
         }
-        let outcome = match plan.method {
-            CleanupMethod::Trash => ops.trash(&path),
-            CleanupMethod::Delete => ops.delete(&path),
-        };
-        results.push(match outcome {
-            Ok(()) => CleanupItemResult {
-                target: item.path.clone(),
-                operation,
-                bytes: item.bytes,
-                status: ItemStatus::Succeeded,
-                error: None,
-            },
-            Err(e) => CleanupItemResult {
-                target: item.path.clone(),
-                operation,
-                bytes: 0,
-                status: ItemStatus::Failed,
-                error: Some(describe_io_error(&e)),
-            },
+        let current = batch
+            .last()
+            .and_then(|i| Path::new(&i.path).file_name())
+            .map(|n| n.to_string_lossy().into_owned());
+        results.extend(checked.into_iter().map(|(r, _)| r));
+        last_report = Instant::now();
+        progress(CleanupProgress {
+            plan_id: plan.id.clone(),
+            items_done: results.len(),
+            items_total: total,
+            bytes_done,
+            current,
         });
     }
 
@@ -336,6 +452,89 @@ mod tests {
     /// Records trash calls instead of touching the real Trash.
     #[derive(Default)]
     struct FakeTrash(Mutex<Vec<std::path::PathBuf>>);
+
+    /// Records how items were grouped, and fails the paths it is told to.
+    #[derive(Default)]
+    struct BatchTrash {
+        batches: Mutex<Vec<usize>>,
+        fail: Vec<std::path::PathBuf>,
+    }
+
+    impl FileOps for BatchTrash {
+        fn trash(&self, _: &Path) -> io::Result<()> {
+            unreachable!("batches only")
+        }
+        fn delete(&self, _: &Path) -> io::Result<()> {
+            unreachable!("trash only")
+        }
+        fn trash_many(&self, paths: &[std::path::PathBuf]) -> Vec<io::Result<()>> {
+            self.batches.lock().unwrap().push(paths.len());
+            paths
+                .iter()
+                .map(|p| {
+                    if self.fail.contains(p) {
+                        Err(io::Error::other("locked"))
+                    } else {
+                        Ok(())
+                    }
+                })
+                .collect()
+        }
+    }
+
+    #[test]
+    fn trashes_in_batches_and_reports_progress() {
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        let files: Vec<_> = (0..(BATCH * 2 + 5))
+            .map(|i| {
+                let p = home.join(format!("f{i}.jpg"));
+                fs::write(&p, "x").unwrap();
+                p
+            })
+            .collect();
+        let missing = home.join("gone.jpg");
+        let mut paths: Vec<&Path> = files.iter().map(|p| p.as_path()).collect();
+        paths.insert(3, &missing);
+        let ops = BatchTrash {
+            fail: vec![files[7].clone()],
+            ..Default::default()
+        };
+        let seen = Mutex::new(Vec::new());
+        let record = execute_with_progress(
+            &plan(CleanupMethod::Trash, &paths),
+            &home,
+            &home,
+            &ops,
+            &|p| seen.lock().unwrap().push(p),
+        );
+
+        // Three requests for 206 items, not 206; the missing one is never sent.
+        assert_eq!(*ops.batches.lock().unwrap(), vec![BATCH - 1, BATCH, 6]);
+        // Results keep the plan's order, each with its own outcome.
+        assert_eq!(record.items.len(), paths.len());
+        assert_eq!(record.items[3].status, ItemStatus::Skipped);
+        assert_eq!(record.items[8].status, ItemStatus::Failed);
+        assert_eq!(record.items[8].target, files[7].display().to_string());
+        let ok = record
+            .items
+            .iter()
+            .filter(|i| i.status == ItemStatus::Succeeded)
+            .count();
+        assert_eq!(ok, files.len() - 1);
+        assert_eq!(record.bytes_trashed, 10 * ok as u64);
+        assert_eq!(record.status, ActionStatus::Partial);
+
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), 3, "one report per batch");
+        assert!(seen.windows(2).all(|w| w[0].items_done < w[1].items_done));
+        let last = seen.last().unwrap();
+        assert_eq!(
+            (last.items_done, last.items_total),
+            (paths.len(), paths.len())
+        );
+        assert_eq!(last.bytes_done, record.bytes_trashed);
+    }
 
     impl FileOps for FakeTrash {
         fn trash(&self, path: &Path) -> io::Result<()> {

@@ -314,6 +314,16 @@ export interface TrashPreview {
   totalFiles: number;
 }
 
+/** How far a running cleanup has got (cleanup://progress). */
+export interface CleanupProgress {
+  planId: string;
+  itemsDone: number;
+  itemsTotal: number;
+  bytesDone: number;
+  /** The last item handled, by name. */
+  current: string | null;
+}
+
 export interface TrashProgress {
   previewId: string;
   entriesDone: number;

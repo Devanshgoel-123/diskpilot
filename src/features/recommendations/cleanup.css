@@ -1,0 +1,47 @@
+/* Cleanup progress: the bar eases to each batch, and a soft sheen moves
+   across it while work continues, so a long batch never looks stalled. */
+.cl-working {
+  animation: cl-in 220ms var(--dp-ease, ease-out) both;
+}
+@keyframes cl-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.cl-bar {
+  position: relative;
+  transform-origin: left;
+  transition: transform 320ms var(--dp-ease, ease-out);
+}
+.cl-track {
+  position: relative;
+}
+.cl-track::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--accent) 35%, transparent) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: cl-sheen 1.4s ease-in-out infinite;
+}
+@keyframes cl-sheen {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cl-working,
+  .cl-track::after {
+    animation: none;
+  }
+  .cl-bar {
+    transition: none;
+  }
+}

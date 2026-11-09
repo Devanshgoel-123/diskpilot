@@ -678,6 +678,7 @@ pub fn discard_cleanup_plan(state: State<'_, AppState>, plan_id: String) {
 /// every path immediately before acting on it.
 #[tauri::command]
 pub async fn execute_cleanup_plan(
+    app: AppHandle,
     state: State<'_, AppState>,
     plan_id: String,
 ) -> AppResult<CleanupRecord> {
@@ -696,7 +697,11 @@ pub async fn execute_cleanup_plan(
     let home = state.home.clone();
     let history = state.history.clone();
     let record = blocking(move || {
-        let record = executor::execute(&plan, &root, &home, &executor::RealFileOps);
+        let report = |p: executor::CleanupProgress| {
+            let _ = app.emit(executor::EVENT_CLEANUP_PROGRESS, p);
+        };
+        let record =
+            executor::execute_with_progress(&plan, &root, &home, &executor::RealFileOps, &report);
         if let Some(h) = history {
             h.record_cleanup(&record)?;
         }

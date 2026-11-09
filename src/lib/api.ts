@@ -39,6 +39,7 @@ import type {
   ScanSummary,
   TrashPreview,
   TrashProgress,
+  CleanupProgress,
   TrashResult,
   TrashSummary,
 } from "./types";
@@ -136,6 +137,10 @@ export function onScanPartial(cb: (scanId: string) => void): Promise<UnlistenFn>
 
 export function onScanFinished(cb: (p: ScanFinished) => void): Promise<UnlistenFn> {
   return listen<ScanFinished>("scan://finished", (e) => cb(e.payload));
+}
+
+export function onCleanupProgress(cb: (p: CleanupProgress) => void): Promise<UnlistenFn> {
+  return listen<CleanupProgress>("cleanup://progress", (e) => cb(e.payload));
 }
 
 export function onTrashProgress(cb: (p: TrashProgress) => void): Promise<UnlistenFn> {
