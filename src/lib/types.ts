@@ -128,7 +128,7 @@ export interface FileKindGroup {
   kind: FileKind;
   bytes: number;
   fileCount: number;
-  /** Largest first, each at least 1 MB. */
+  /** Largest first, at most 2,000, each at least 25 KB. */
   files: FileEntry[];
 }
 

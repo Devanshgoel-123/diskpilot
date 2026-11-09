@@ -22,6 +22,7 @@ import { CleanupDialog } from "@/features/recommendations/CleanupDialog";
 import { StorageTabs } from "@/features/storage/StorageTabs";
 import { api } from "@/lib/api";
 import { formatBytes, formatCount, formatRelative, tildify } from "@/lib/format";
+import { listedNote } from "./listedNote";
 import { useApp } from "@/lib/store";
 import type { CleanupRecord, FileEntry, FileKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -276,6 +277,11 @@ function FileKindsView() {
               {allVisibleChosen ? "Clear selection" : `Select ${formatCount(visible.length)} shown`}
             </Button>
           </div>
+          {group ? (
+            <p className="shrink-0 border-b border-border/60 px-4 py-2 text-2xs text-muted-foreground">
+              {listedNote(group.files.length, group.fileCount)}
+            </p>
+          ) : null}
           <div className="min-h-0 flex-1 overflow-auto">
             <ul aria-label={group ? KINDS[group.kind].label : undefined}>
               {visible.map((f, i) => (
@@ -337,12 +343,6 @@ function FileKindsView() {
             </ul>
             {visible.length === 0 ? (
               <p className="px-4 py-6 text-xs text-muted-foreground">No files match the filter.</p>
-            ) : group ? (
-              <p className="px-4 py-3 text-2xs text-subtle-foreground">
-                {group.files.length < group.fileCount
-                  ? `The ${formatCount(group.files.length)} largest of ${formatCount(group.fileCount)} files. Files under 1 MB count in the total but are not listed.`
-                  : `All ${formatCount(group.fileCount)} files of at least 1 MB.`}
-              </p>
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-3 border-t border-border bg-panel px-4 py-2.5">
