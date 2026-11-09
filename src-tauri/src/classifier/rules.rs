@@ -350,6 +350,14 @@ pub static DIR_RULES: &[DirRule] = &[
         "Downloaded Java dependencies. Maven re-downloads them on the next build."
     ),
     leaf!(
+        "nuget.packages",
+        HomeRelative(&[".nuget", "packages"]),
+        Cache,
+        High,
+        "NuGet package cache",
+        "Downloaded .NET packages cached by NuGet. `dotnet restore` downloads them again on the next build."
+    ),
+    leaf!(
         "go.mod-cache",
         HomeRelative(&["go", "pkg", "mod"]),
         Cache,
