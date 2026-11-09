@@ -46,7 +46,7 @@ export function ScanControl() {
             </p>
           )}
         </div>
-        <Button variant="secondary" onClick={() => void cancelScan()}>
+        <Button variant="secondary" onClick={() => void cancelScan()} aria-keyshortcuts="Meta+.">
           <Square />
           Stop
         </Button>
@@ -57,13 +57,17 @@ export function ScanControl() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant={summary ? "secondary" : "default"} onClick={() => void startScan()}>
+        <Button
+          variant={summary ? "secondary" : "default"}
+          onClick={() => void startScan()}
+          aria-keyshortcuts="Meta+R"
+        >
           {summary ? <RefreshCw /> : <ScanSearch />}
           {summary ? "Rescan" : "Scan"}
         </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom" align="end">
-        Read-only scan of <span className="font-mono">{target}</span>. Nothing is modified.
+        Read-only scan of <span className="font-mono">{target}</span>. Nothing is modified. ⌘R
       </TooltipContent>
     </Tooltip>
   );

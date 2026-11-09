@@ -223,6 +223,7 @@ export function ExplorerPage() {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Filter by name"
+                  data-filter
                   className="pl-7"
                   aria-label="Filter by name"
                 />
