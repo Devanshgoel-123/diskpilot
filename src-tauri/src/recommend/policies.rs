@@ -864,6 +864,18 @@ pub static POLICIES: &[Policy] = &[
         before_you_start: None,
     },
     Policy {
+        rule_id: "adobe.media-cache",
+        tier: LikelySafe,
+        methods: TRASH_OR_DELETE,
+        safe_because: "Premiere Pro, After Effects and other Adobe apps rebuild their media caches when a project is opened. Premiere's Preferences > Media Cache > Delete does the same.",
+        risks: "Quit Adobe apps first. Rebuilding conformed audio and media indexes takes time on large projects.",
+        proposed_action: "Clear Adobe media cache",
+        alternative: None,
+        expand: Whole,
+        min_bytes: 50 * MB,
+        before_you_start: Some("Quit Premiere Pro, After Effects and other Adobe apps first."),
+    },
+    Policy {
         rule_id: "asdf.installs",
         tier: ReviewFirst,
         methods: TRASH_ONLY,
