@@ -42,4 +42,18 @@ describe("WindowedList", () => {
     list(12);
     expect(screen.getAllByRole("listitem")).toHaveLength(12);
   });
+
+  it("fills its parent and windows even a short list, passing each row's index", () => {
+    render(
+      <WindowedList
+        items={items}
+        rowHeight={40}
+        maxHeight="fill"
+        getKey={(s) => s}
+        renderRow={(s, i) => <span>{`${s} at ${i}`}</span>}
+      />,
+    );
+    expect(screen.getByText("item-3 at 3")).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem").length).toBeLessThan(40);
+  });
 });

@@ -11,11 +11,13 @@ import {
   Shapes,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { FilePreview } from "@/components/shared/FilePreview";
 import { FileThumbnail } from "@/components/shared/FileThumbnail";
+import { WindowedList } from "@/components/shared/WindowedList";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CleanupDialog } from "@/features/recommendations/CleanupDialog";
@@ -67,7 +69,14 @@ export function FileKindsPage() {
 }
 
 function FileKindsView() {
-  const { summary, env, scanning, startScan } = useApp();
+  const { summary, env, scanning, startScan } = useApp(
+    useShallow((s) => ({
+      summary: s.summary,
+      env: s.env,
+      scanning: s.scanning,
+      startScan: s.startScan,
+    })),
+  );
   const home = env?.homeDir;
   const groups = useMemo(() => summary?.fileKinds ?? [], [summary]);
   const [picked, setPicked] = useState<FileKind | null>(null);
@@ -147,7 +156,8 @@ function FileKindsView() {
   const finished = (record: CleanupRecord) => {
     const done = record.items.filter((i) => i.status === "succeeded").map((i) => i.target);
     setGone((g) => new Set([...g, ...done]));
-    setSelected((s) => new Set([...s].filter((p) => !done.includes(p))));
+    const gone = new Set(done);
+    setSelected((s) => new Set([...s].filter((p) => !gone.has(p))));
   };
 
   const header = (
@@ -282,65 +292,71 @@ function FileKindsView() {
               {listedNote(group.files.length, group.fileCount)}
             </p>
           ) : null}
-          <div className="min-h-0 flex-1 overflow-auto">
-            <ul aria-label={group ? KINDS[group.kind].label : undefined}>
-              {visible.map((f, i) => (
-                <li
-                  key={f.path}
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === " " && e.target === e.currentTarget) {
-                      e.preventDefault();
-                      setPreview(i);
-                    }
-                  }}
-                  className="flex h-10 items-center gap-3 border-b border-border/60 px-4 outline-none hover:bg-hover/60 focus-visible:bg-hover"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected.has(f.path)}
-                    onChange={() => toggle(f.path)}
-                    aria-label={`Select ${f.name}`}
-                    className="size-3.5 shrink-0 accent-[var(--accent)]"
-                  />
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    onClick={() => setPreview(i)}
-                    aria-label={`Preview ${f.name}`}
-                    className="shrink-0"
+          <div className="min-h-0 flex-1">
+            {visible.length ? (
+              <WindowedList
+                items={visible}
+                rowHeight={40}
+                maxHeight="fill"
+                label={group ? KINDS[group.kind].label : undefined}
+                getKey={(f) => f.path}
+                renderRow={(f, i) => (
+                  <div
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === " " && e.target === e.currentTarget) {
+                        e.preventDefault();
+                        setPreview(i);
+                      }
+                    }}
+                    className="flex h-full items-center gap-3 border-b border-border/60 px-4 outline-none hover:bg-hover/60 focus-visible:bg-hover"
                   >
-                    <FileThumbnail path={f.path} size={28} />
-                  </button>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px]" title={f.name}>
-                      {f.name}
-                    </span>
-                    <span
-                      className="block truncate font-mono text-2xs text-subtle-foreground"
-                      title={f.path}
+                    <input
+                      type="checkbox"
+                      checked={selected.has(f.path)}
+                      onChange={() => toggle(f.path)}
+                      aria-label={`Select ${f.name}`}
+                      className="size-3.5 shrink-0 accent-[var(--accent)]"
+                    />
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => setPreview(i)}
+                      aria-label={`Preview ${f.name}`}
+                      className="shrink-0"
                     >
-                      {tildify(parentOf(f.path), home)}
+                      <FileThumbnail path={f.path} size={28} />
+                    </button>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px]" title={f.name}>
+                        {f.name}
+                      </span>
+                      <span
+                        className="block truncate font-mono text-2xs text-subtle-foreground"
+                        title={f.path}
+                      >
+                        {tildify(parentOf(f.path), home)}
+                      </span>
                     </span>
-                  </span>
-                  <span className="w-28 shrink-0 text-2xs text-subtle-foreground">
-                    {formatRelative(f.modifiedMs)}
-                  </span>
-                  <span className="tabular w-20 shrink-0 text-right text-xs">
-                    {formatBytes(f.bytes)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setPreview(i)}
-                    title="Preview (Space)"
-                    aria-label={`Preview ${f.name}`}
-                    className="shrink-0 rounded p-1 text-muted-foreground hover:bg-hover hover:text-foreground"
-                  >
-                    <Eye className="size-3.5" aria-hidden />
-                  </button>
-                </li>
-              ))}
-            </ul>
+                    <span className="w-28 shrink-0 text-2xs text-subtle-foreground">
+                      {formatRelative(f.modifiedMs)}
+                    </span>
+                    <span className="tabular w-20 shrink-0 text-right text-xs">
+                      {formatBytes(f.bytes)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPreview(i)}
+                      title="Preview (Space)"
+                      aria-label={`Preview ${f.name}`}
+                      className="shrink-0 rounded p-1 text-muted-foreground hover:bg-hover hover:text-foreground"
+                    >
+                      <Eye className="size-3.5" aria-hidden />
+                    </button>
+                  </div>
+                )}
+              />
+            ) : null}
             {visible.length === 0 ? (
               <p className="px-4 py-6 text-xs text-muted-foreground">No files match the filter.</p>
             ) : null}

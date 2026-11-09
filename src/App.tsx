@@ -1,5 +1,6 @@
 import { AlertCircle, MonitorX, X } from "lucide-react";
 import { useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { Sidebar } from "@/components/layout/Sidebar";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -36,7 +37,9 @@ const PAGES: Record<PageId, () => React.JSX.Element> = {
 };
 
 function StatusBanner() {
-  const { error, lastStatus, dismissError } = useApp();
+  const { error, lastStatus, dismissError } = useApp(
+    useShallow((s) => ({ error: s.error, lastStatus: s.lastStatus, dismissError: s.dismissError })),
+  );
   const message = error ?? (lastStatus?.status === "failed" ? lastStatus.error : null);
   if (!message) return null;
   return (
@@ -54,7 +57,9 @@ function StatusBanner() {
 }
 
 export function App() {
-  const { ready, desktop, page, init } = useApp();
+  const { ready, desktop, page, init } = useApp(
+    useShallow((s) => ({ ready: s.ready, desktop: s.desktop, page: s.page, init: s.init })),
+  );
 
   useEffect(() => {
     void init();

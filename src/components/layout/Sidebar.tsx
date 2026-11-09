@@ -11,6 +11,7 @@ import {
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 
 import { formatCount, formatRelative, tildify } from "@/lib/format";
 import { useApp, type PageId } from "@/lib/store";
@@ -70,7 +71,15 @@ function Section({ title, items }: { title?: string; items: NavItem[] }) {
 
 /** Scan status at the foot of the sidebar: what was scanned and when. */
 function ScanStatus() {
-  const { scanning, partial, progress, summary, env } = useApp();
+  const { scanning, partial, progress, summary, env } = useApp(
+    useShallow((s) => ({
+      scanning: s.scanning,
+      partial: s.partial,
+      progress: s.progress,
+      summary: s.summary,
+      env: s.env,
+    })),
+  );
   const home = env?.homeDir;
   if (scanning && partial && progress && progress.containersTotal > 0) {
     const pct = Math.round((progress.containersDone / progress.containersTotal) * 100);

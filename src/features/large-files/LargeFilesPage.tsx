@@ -1,5 +1,6 @@
 import { FileStack, Search } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StorageTabs } from "@/features/storage/StorageTabs";
@@ -35,7 +36,14 @@ function parentOf(path: string): string {
 }
 
 export function LargeFilesPage() {
-  const { summary, env, scanning, startScan } = useApp();
+  const { summary, env, scanning, startScan } = useApp(
+    useShallow((s) => ({
+      summary: s.summary,
+      env: s.env,
+      scanning: s.scanning,
+      startScan: s.startScan,
+    })),
+  );
   const home = env?.homeDir;
   const [view, setView] = useState<View>("files");
   const [query, setQuery] = useState("");

@@ -1,5 +1,6 @@
 import { ListChecks, ShieldCheck, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyTrashButton } from "@/features/trash/EmptyTrashButton";
@@ -22,7 +23,16 @@ type Filter = Tier | "all";
 
 export function RecommendationsPage() {
   const { summary, recommendations, scanning, startScan, refreshRecommendations, refreshHistory } =
-    useApp();
+    useApp(
+      useShallow((s) => ({
+        summary: s.summary,
+        recommendations: s.recommendations,
+        scanning: s.scanning,
+        startScan: s.startScan,
+        refreshRecommendations: s.refreshRecommendations,
+        refreshHistory: s.refreshHistory,
+      })),
+    );
   const [filter, setFilter] = useState<Filter>("all");
   const [kind, setKind] = useState<MarkerKind | null>(null);
   const kinds = useMemo(() => markerCounts(recommendations), [recommendations]);

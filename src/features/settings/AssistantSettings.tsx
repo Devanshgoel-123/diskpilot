@@ -1,6 +1,7 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { KeyRound, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -111,7 +112,20 @@ export function AssistantSettings() {
     loadProviderModels,
     assistantStatus,
     refreshAssistantStatus,
-  } = useApp();
+  } = useApp(
+    useShallow((s) => ({
+      assistantEnabled: s.assistantEnabled,
+      setAssistantEnabled: s.setAssistantEnabled,
+      assistantProvider: s.assistantProvider,
+      setAssistantProvider: s.setAssistantProvider,
+      assistantModel: s.assistantModel,
+      setAssistantModel: s.setAssistantModel,
+      providerModels: s.providerModels,
+      loadProviderModels: s.loadProviderModels,
+      assistantStatus: s.assistantStatus,
+      refreshAssistantStatus: s.refreshAssistantStatus,
+    })),
+  );
   const [key, setKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);

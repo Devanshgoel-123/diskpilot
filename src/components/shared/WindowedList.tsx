@@ -20,10 +20,13 @@ export function WindowedList<T>({
 }: {
   items: T[];
   rowHeight: number;
-  /** Height of the scrolling area once the list is longer than it. */
-  maxHeight: number;
+  /**
+   * Height of the scrolling area once the list is longer than it, or "fill"
+   * to take the height of the parent (which must give it one).
+   */
+  maxHeight: number | "fill";
   getKey: (item: T) => string;
-  renderRow: (item: T) => ReactNode;
+  renderRow: (item: T, index: number) => ReactNode;
   className?: string;
   label?: string;
   overscan?: number;
@@ -32,9 +35,20 @@ export function WindowedList<T>({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
-  const windowed = items.length > windowAbove;
+  const [filled, setFilled] = useState(600);
+  const fill = maxHeight === "fill";
+  const windowed = fill || items.length > windowAbove;
   const total = items.length * rowHeight;
-  const height = Math.min(total, maxHeight);
+  const height = fill ? filled : Math.min(total, maxHeight);
+
+  // In fill mode, follow the parent's height as the window resizes.
+  useEffect(() => {
+    const el = ref.current;
+    if (!fill || !el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setFilled(el.clientHeight || 600));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fill]);
 
   // A new, shorter list must not stay scrolled past its end.
   useEffect(() => {
@@ -48,9 +62,9 @@ export function WindowedList<T>({
   if (!windowed) {
     return (
       <ul aria-label={label} className={className}>
-        {items.map((item) => (
+        {items.map((item, i) => (
           <li key={getKey(item)} style={{ height: rowHeight }}>
-            {renderRow(item)}
+            {renderRow(item, i)}
           </li>
         ))}
       </ul>
@@ -62,8 +76,8 @@ export function WindowedList<T>({
   return (
     <div
       ref={ref}
-      className={cn("overflow-y-auto", className)}
-      style={{ height }}
+      className={cn("overflow-y-auto", fill && "h-full", className)}
+      style={fill ? undefined : { height }}
       onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
     >
       <ul aria-label={label} className="relative" style={{ height: total }}>
@@ -75,7 +89,7 @@ export function WindowedList<T>({
             className="absolute inset-x-0"
             style={{ top: (first + i) * rowHeight, height: rowHeight }}
           >
-            {renderRow(item)}
+            {renderRow(item, first + i)}
           </li>
         ))}
       </ul>
