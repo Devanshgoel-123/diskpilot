@@ -33,6 +33,9 @@ pub(crate) struct Stat {
     pub ino: u64,
     /// A folder on another volume, or a firmlink to one. Never descended.
     pub other_volume: bool,
+    /// A folder the file system reports as empty and readable, so listing
+    /// it would return nothing. `false` when unknown.
+    pub empty_dir: bool,
 }
 
 impl Stat {
@@ -58,10 +61,13 @@ impl Stat {
             nlink: if is_dir { 1 } else { meta.nlink() },
             ino: meta.ino(),
             other_volume: kind == Kind::Dir && meta.dev() != root_dev,
+            // lstat does not report a folder's entry count.
+            empty_dir: false,
         }
     }
 }
 
+#[derive(Default)]
 pub(crate) struct Listing {
     pub entries: Vec<(OsString, Stat)>,
     /// Entries (or the listing itself, part-way) that could not be read.
@@ -158,8 +164,10 @@ mod bulk {
             | libc::ATTR_CMN_OBJTYPE
             | libc::ATTR_CMN_MODTIME
             | libc::ATTR_CMN_FLAGS
+            | libc::ATTR_CMN_USERACCESS
             | libc::ATTR_CMN_FILEID;
-        al.dirattr = libc::ATTR_DIR_MOUNTSTATUS | libc::ATTR_DIR_ALLOCSIZE;
+        al.dirattr =
+            libc::ATTR_DIR_ENTRYCOUNT | libc::ATTR_DIR_MOUNTSTATUS | libc::ATTR_DIR_ALLOCSIZE;
         al.fileattr =
             libc::ATTR_FILE_LINKCOUNT | libc::ATTR_FILE_ALLOCSIZE | libc::ATTR_FILE_DATALENGTH;
         al
@@ -274,6 +282,11 @@ mod bulk {
         } else {
             0
         };
+        let access = if ret.commonattr & libc::ATTR_CMN_USERACCESS != 0 {
+            Some(take::<u32>(rec, &mut off)?)
+        } else {
+            None
+        };
         let ino = if ret.commonattr & libc::ATTR_CMN_FILEID != 0 {
             take::<u64>(rec, &mut off)?
         } else {
@@ -283,7 +296,11 @@ mod bulk {
         let mut alloc = 0i64;
         let mut logical = 0i64;
         let mut nlink = 1u32;
+        let mut entry_count = None;
         if objtype == VDIR {
+            if ret.dirattr & libc::ATTR_DIR_ENTRYCOUNT != 0 {
+                entry_count = Some(take::<u32>(rec, &mut off)?);
+            }
             if ret.dirattr & libc::ATTR_DIR_MOUNTSTATUS != 0 {
                 mount_status = take(rec, &mut off)?;
             }
@@ -307,6 +324,8 @@ mod bulk {
             VLNK => Kind::Symlink,
             _ => Kind::Other,
         };
+        let other_volume = kind == Kind::Dir
+            && (mount_status & libc::DIR_MNTSTATUS_MNTPOINT != 0 || flags & SF_FIRMLINK != 0);
         let stat = Stat {
             kind,
             alloc: alloc.max(0) as u64,
@@ -317,8 +336,15 @@ mod bulk {
             // Bulk results report a mount point with its parent's device, so
             // ask for the mount status instead. Firmlinks join the system and
             // data volumes; lstat would show the other volume's device there.
-            other_volume: kind == Kind::Dir
-                && (mount_status & libc::DIR_MNTSTATUS_MNTPOINT != 0 || flags & SF_FIRMLINK != 0),
+            other_volume,
+            // Opening a folder can be slow (macOS checks each one opened
+            // inside another app's container), so the scanner skips opening
+            // folders known to be empty. Only when the count was reported
+            // and the folder is readable, so an unreadable one still fails.
+            empty_dir: kind == Kind::Dir
+                && !other_volume
+                && entry_count == Some(0)
+                && access.is_some_and(|a| a & (libc::R_OK as u32) != 0),
         };
         Some((rec_len, Ok((name, stat))))
     }
@@ -379,6 +405,28 @@ mod tests {
         assert_eq!(kind("sym"), Kind::Symlink);
         assert_eq!(kind("fifo"), Kind::Other);
         assert_eq!(kind("big.bin"), Kind::File);
+    }
+
+    #[test]
+    fn bulk_reports_empty_readable_folders() {
+        let dir = tempfile::tempdir().unwrap();
+        let d = dir.path();
+        std::fs::create_dir(d.join("empty")).unwrap();
+        std::fs::create_dir(d.join("full")).unwrap();
+        std::fs::write(d.join("full/f"), b"x").unwrap();
+        std::fs::create_dir(d.join("locked")).unwrap();
+        std::fs::set_permissions(d.join("locked"), std::fs::Permissions::from_mode(0o000)).unwrap();
+        let bulk = sorted(bulk::list(d).unwrap());
+        std::fs::set_permissions(d.join("locked"), std::fs::Permissions::from_mode(0o755)).unwrap();
+        let empty = |n: &str| bulk.iter().find(|(x, _)| x == n).unwrap().1.empty_dir;
+        assert!(empty("empty"));
+        assert!(!empty("full"));
+        // Unreadable: still opened, so the scan records it as an error.
+        assert!(!empty("locked"));
+        let dev = std::fs::symlink_metadata(d).unwrap().dev();
+        assert!(sorted(list_portable(d, dev).unwrap())
+            .iter()
+            .all(|(_, s)| !s.empty_dir));
     }
 
     #[test]

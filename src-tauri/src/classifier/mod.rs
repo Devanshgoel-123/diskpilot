@@ -6,6 +6,7 @@
 
 pub mod rules;
 
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
@@ -74,6 +75,54 @@ impl Resolved {
                 matched_path: None,
             },
             Resolved::Unmatched => unmatched(),
+        }
+    }
+}
+
+/// Classifies many paths that share ancestors, evaluating each folder's
+/// rules once. Gives the same results as [`Classifier::classify_path`].
+pub struct CachedClassifier<'a> {
+    classifier: &'a Classifier,
+    probe: &'a dyn Probe,
+    contexts: HashMap<PathBuf, Option<Context>>,
+}
+
+impl<'a> CachedClassifier<'a> {
+    pub fn new(classifier: &'a Classifier, probe: &'a dyn Probe) -> Self {
+        Self {
+            classifier,
+            probe,
+            contexts: HashMap::new(),
+        }
+    }
+
+    /// Same as [`Classifier::context_at`].
+    pub fn context_at(&mut self, dir: &Path) -> Option<Context> {
+        if let Some(ctx) = self.contexts.get(dir) {
+            return ctx.clone();
+        }
+        let above = dir.parent().and_then(|p| self.context_at(p));
+        let ctx = if self.classifier.below_floor(dir) {
+            above
+        } else {
+            self.classifier.descend(dir, above, self.probe).0
+        };
+        self.contexts.insert(dir.to_path_buf(), ctx.clone());
+        ctx
+    }
+
+    /// Same as [`Classifier::classify_path`].
+    pub fn classify_path(&mut self, path: &Path, is_dir: bool) -> Classification {
+        if is_dir {
+            match self.context_at(path) {
+                Some(ctx) => Resolved::Dir(ctx).to_classification(),
+                None => unmatched(),
+            }
+        } else {
+            let parent_ctx = path.parent().and_then(|p| self.context_at(p));
+            self.classifier
+                .resolve_file(path, parent_ctx.as_ref())
+                .to_classification()
         }
     }
 }
@@ -191,16 +240,17 @@ impl Classifier {
         chain.reverse();
         let mut ctx = None;
         for ancestor in chain {
-            if self
-                .floor
-                .as_ref()
-                .is_some_and(|f| !ancestor.starts_with(f))
-            {
+            if self.below_floor(ancestor) {
                 continue;
             }
             ctx = self.descend(ancestor, ctx, probe).0;
         }
         ctx
+    }
+
+    /// Whether `dir` is above the floor, so its rules are ignored.
+    fn below_floor(&self, dir: &Path) -> bool {
+        self.floor.as_ref().is_some_and(|f| !dir.starts_with(f))
     }
 
     /// Classify a file given the context of its parent directory.
@@ -267,6 +317,39 @@ fn components_equal(rel: &Path, parts: &[&str]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn cached_classifier_matches_classify_path() {
+        let home = std::env::temp_dir();
+        let probe = FsProbe;
+        let paths = [
+            home.join("Library/Caches/com.example/a/b.bin"),
+            home.join("Library/Caches/com.example/c.bin"),
+            home.join("Library/Containers/com.x/Data/Library/Caches/d"),
+            home.join("project/node_modules/x/index.js"),
+            home.join("Documents/report.pdf"),
+            PathBuf::from("/"),
+            PathBuf::from("relative/path.txt"),
+        ];
+        for classifier in [
+            Classifier::new(&home),
+            Classifier::new(&home).with_floor(home.join("Library")),
+        ] {
+            let mut cached = CachedClassifier::new(&classifier, &probe);
+            for _ in 0..2 {
+                for p in &paths {
+                    for is_dir in [false, true] {
+                        assert_eq!(
+                            format!("{:?}", cached.classify_path(p, is_dir)),
+                            format!("{:?}", classifier.classify_path(p, is_dir, &probe)),
+                            "{} dir={is_dir}",
+                            p.display()
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     use super::*;
     use std::collections::HashSet;
 

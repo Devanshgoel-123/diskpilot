@@ -30,7 +30,7 @@ pub use listing::FORCE_PORTABLE;
 use listing::{Kind, Stat};
 
 use crate::classifier::rules::RuleKind;
-use crate::classifier::{Classifier, Context, FsProbe, Probe, Resolved};
+use crate::classifier::{CachedClassifier, Classifier, Context, FsProbe, Probe, Resolved};
 use crate::error::describe_io_error;
 use crate::filekinds::{self, FileKind, FileKindGroup, LISTED_PER_KIND, MIN_LISTED_BYTES};
 use crate::model::{
@@ -152,6 +152,7 @@ struct Agg {
 struct Deferred {
     path: PathBuf,
     own_bytes: u64,
+    empty: bool,
     ctx: Option<Context>,
 }
 
@@ -285,6 +286,7 @@ impl Shared<'_> {
         &self,
         path: &Path,
         own_bytes: u64,
+        known_empty: bool,
         inherited: Option<Context>,
         parent_names: Option<&HashSet<OsString>>,
     ) -> Agg {
@@ -299,7 +301,15 @@ impl Shared<'_> {
 
         self.bytes.fetch_add(own_bytes, Ordering::Relaxed);
 
-        let listing = match listing::list(path, self.root_dev) {
+        // A folder known to be empty is not opened: inside other apps'
+        // containers each open waits on a privacy check (~4 ms), and most
+        // folders there are empty.
+        let listed = if known_empty {
+            Ok(listing::Listing::default())
+        } else {
+            listing::list(path, self.root_dev)
+        };
+        let listing = match listed {
             Ok(l) => l,
             Err(err) => {
                 self.record_error(path, &err);
@@ -366,7 +376,7 @@ impl Shared<'_> {
             files: 0,
             dirs: 1,
         };
-        let mut subdirs: Vec<(PathBuf, u64)> = Vec::new();
+        let mut subdirs: Vec<(PathBuf, u64, bool)> = Vec::new();
 
         for (name, stat) in entries {
             let child = path.join(&name);
@@ -380,10 +390,11 @@ impl Shared<'_> {
                         .push(Deferred {
                             path: child,
                             own_bytes: stat.alloc,
+                            empty: stat.empty_dir,
                             ctx: ctx.clone(),
                         });
                 } else {
-                    subdirs.push((child, stat.alloc));
+                    subdirs.push((child, stat.alloc, stat.empty_dir));
                 }
                 continue;
             }
@@ -465,7 +476,7 @@ impl Shared<'_> {
         let direct_bytes = agg.bytes;
         let children: Vec<Agg> = subdirs
             .par_iter()
-            .map(|(p, b)| self.scan_dir(p, *b, ctx.clone(), Some(&names)))
+            .map(|(p, b, empty)| self.scan_dir(p, *b, *empty, ctx.clone(), Some(&names)))
             .collect();
 
         let mut largest_child_dir = 0;
@@ -684,7 +695,9 @@ pub fn scan_with_partial(
                 }
             }
         });
-        pool.install(|| shared.scan_dir(&root, allocated_bytes(&root_meta), inherited, None));
+        pool.install(|| {
+            shared.scan_dir(&root, allocated_bytes(&root_meta), false, inherited, None)
+        });
 
         let deferred =
             std::mem::take(&mut *shared.deferred.lock().unwrap_or_else(|e| e.into_inner()));
@@ -704,7 +717,8 @@ pub fn scan_with_partial(
                 .clone();
             pool.install(|| {
                 deferred.into_par_iter().for_each(|d| {
-                    let agg = shared.scan_dir(&d.path, d.own_bytes, d.ctx, names.as_deref());
+                    let agg =
+                        shared.scan_dir(&d.path, d.own_bytes, d.empty, d.ctx, names.as_deref());
                     if !shared.cancelled() {
                         shared.add_to_ancestors(&d.path, agg, &root);
                     }
@@ -738,8 +752,9 @@ fn build_outcome(
     finished_at_ms: i64,
     duration_ms: u64,
 ) -> ScanOutcome {
-    let classifier = shared.classifier.clone();
     let opts = shared.opts;
+    // Listed files share folders; evaluate each folder's rules once.
+    let classifier = std::cell::RefCell::new(CachedClassifier::new(&shared.classifier, &FsProbe));
 
     let mut categories: Vec<CategoryTotal> = Category::ALL
         .iter()
@@ -775,7 +790,7 @@ fn build_outcome(
                     .file_name()
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_default(),
-                classification: classifier.classify_path(&c.path, false, &FsProbe),
+                classification: classifier.borrow_mut().classify_path(&c.path, false),
                 path: c.path.display().to_string(),
                 bytes: c.bytes,
                 logical_bytes: c.logical,
@@ -848,7 +863,7 @@ fn build_outcome(
     let heavy_directories = heavy_directories(&index, &root, opts.heavy_dirs_limit)
         .into_iter()
         .map(|(path, stats)| DirectorySize {
-            classification: classifier.classify_path(&path, true, &FsProbe),
+            classification: classifier.borrow_mut().classify_path(&path, true),
             path: path.display().to_string(),
             bytes: stats.bytes,
             file_count: stats.files,
@@ -888,16 +903,22 @@ fn build_outcome(
 /// than in subfolders). These are where storage physically accumulates, as
 /// opposed to the chain of ancestors above them.
 pub fn heavy_directories(index: &DirIndex, root: &Path, limit: usize) -> Vec<(PathBuf, DirStats)> {
-    let mut heavy: Vec<(PathBuf, DirStats)> = index
+    // Most folders qualify, so rank borrowed entries and copy only the top.
+    let mut heavy: Vec<(&PathBuf, &DirStats)> = index
         .iter()
         .filter(|(path, s)| {
             path.as_path() != root && s.bytes > 0 && s.direct_bytes.saturating_mul(2) >= s.bytes
         })
-        .map(|(p, s)| (p.clone(), *s))
         .collect();
-    heavy.sort_by(|(a, x), (b, y)| y.bytes.cmp(&x.bytes).then_with(|| a.cmp(b)));
+    let order = |(a, x): &(&PathBuf, &DirStats), (b, y): &(&PathBuf, &DirStats)| {
+        y.bytes.cmp(&x.bytes).then_with(|| a.cmp(b))
+    };
+    if heavy.len() > limit && limit > 0 {
+        heavy.select_nth_unstable_by(limit - 1, order);
+    }
     heavy.truncate(limit);
-    heavy
+    heavy.sort_by(order);
+    heavy.into_iter().map(|(p, s)| (p.clone(), *s)).collect()
 }
 
 /// Allocated size of one file or folder tree, measured on demand. Same rules
