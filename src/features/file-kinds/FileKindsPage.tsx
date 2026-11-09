@@ -370,11 +370,12 @@ function FileKindsView() {
           path: f.path,
           bytes: f.bytes,
           modifiedMs: f.modifiedMs,
-          note: selected.has(f.path) ? "Selected to move to Trash" : undefined,
+          selected: selected.has(f.path),
         }))}
         index={preview}
         onIndexChange={setPreview}
         onClose={() => setPreview(null)}
+        onToggleSelect={toggle}
       />
       {dialog ? (
         <CleanupDialog

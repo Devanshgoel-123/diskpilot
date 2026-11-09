@@ -483,13 +483,14 @@ export function DuplicatesPage() {
           note:
             f.path === (preview ? keptPath(preview.group, keep) : "")
               ? "Keeping this copy"
-              : selected.has(f.path)
-                ? "Selected to move to Trash"
-                : undefined,
+              : undefined,
+          selected: selected.has(f.path),
+          selectable: f.path !== (preview ? keptPath(preview.group, keep) : ""),
         }))}
         index={preview?.index ?? null}
         onIndexChange={(index) => setPreview((p) => (p ? { ...p, index } : p))}
         onClose={() => setPreview(null)}
+        onToggleSelect={toggle}
       />
       {dialog ? (
         <CleanupDialog

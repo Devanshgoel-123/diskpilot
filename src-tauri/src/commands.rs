@@ -467,6 +467,53 @@ pub async fn file_thumbnail(
     path: String,
     size: f64,
 ) -> AppResult<tauri::ipc::Response> {
+    ensure_listed(&state, &path)?;
+    blocking(move || {
+        let path = previewable_file(&path)?;
+        crate::preview::thumbnail_png(&path, size)
+            .map(tauri::ipc::Response::new)
+            .ok_or_else(|| AppError::Other("macOS could not make a preview of this file".into()))
+    })
+    .await
+}
+
+/// Opens a file DiskPilot listed in its default app (Preview for photos,
+/// QuickTime for videos), so people can look at it properly before deciding.
+///
+/// The same rules as `file_thumbnail` apply, and only types that open to be
+/// looked at are accepted (see `opens_to_view`): never an app, script,
+/// installer or archive.
+#[tauri::command]
+pub async fn open_listed_file(state: State<'_, AppState>, path: String) -> AppResult<()> {
+    ensure_listed(&state, &path)?;
+    blocking(move || {
+        let path = previewable_file(&path)?;
+        if !opens_to_view(&path) {
+            return Err(AppError::Other(
+                "DiskPilot opens photos, videos, audio and documents only. Use Show in Finder for this file.".into(),
+            ));
+        }
+        let status = std::process::Command::new("/usr/bin/open")
+            .arg("--")
+            .arg(&path)
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map_err(|e| AppError::io(&path, &e))?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(AppError::Other(format!(
+                "macOS has no app to open {}",
+                path.display()
+            )))
+        }
+    })
+    .await
+}
+
+/// Only paths that Files by type or the duplicate search listed, exactly as
+/// listed, may be previewed or opened.
+fn ensure_listed(state: &AppState, path: &str) -> AppResult<()> {
     let listed = {
         let slot = state.slot();
         let dups = state.duplicates();
@@ -483,18 +530,27 @@ pub async fn file_thumbnail(
         });
         by_type.chain(duplicates).any(|p| p == path)
     };
-    if !listed {
-        return Err(AppError::Other(
+    if listed {
+        Ok(())
+    } else {
+        Err(AppError::Other(
             "Only files DiskPilot listed can be previewed".into(),
-        ));
+        ))
     }
-    blocking(move || {
-        let path = previewable_file(&path)?;
-        crate::preview::thumbnail_png(&path, size)
-            .map(tauri::ipc::Response::new)
-            .ok_or_else(|| AppError::Other("macOS could not make a preview of this file".into()))
+}
+
+/// Whether opening the file only shows it: photos, videos, audio and
+/// documents. Archives (opening one unpacks it), installers and disk images
+/// (they mount or run), apps and scripts are refused. The type comes from
+/// the extension, which is also what macOS uses to choose the app.
+fn opens_to_view(path: &Path) -> bool {
+    use crate::filekinds::FileKind;
+    path.file_name().and_then(FileKind::of).is_some_and(|k| {
+        matches!(
+            k,
+            FileKind::Images | FileKind::Videos | FileKind::Audio | FileKind::Documents
+        )
     })
-    .await
 }
 
 /// The path, if it is still a regular file reached without any symbolic
@@ -1210,7 +1266,35 @@ fn unique_id(prefix: &str, now: i64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::previewable_file;
+    use super::{opens_to_view, previewable_file};
+
+    #[test]
+    fn opens_photos_videos_and_documents_only() {
+        let yes = [
+            "beach.png",
+            "clip.MOV",
+            "notes.pdf",
+            "song.m4a",
+            "IMG_1.HEIC",
+        ];
+        let no = [
+            "run.command",
+            "Install.sh",
+            "Tool",
+            "App.app",
+            "archive.zip",
+            "Setup.dmg",
+            "setup.pkg",
+            "link.webloc",
+            ".hidden.jpg",
+        ];
+        for n in yes {
+            assert!(opens_to_view(std::path::Path::new(n)), "{n}");
+        }
+        for n in no {
+            assert!(!opens_to_view(std::path::Path::new(n)), "{n}");
+        }
+    }
 
     #[test]
     fn previews_only_regular_files_reached_without_links() {
