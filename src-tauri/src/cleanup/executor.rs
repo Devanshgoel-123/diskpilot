@@ -1,8 +1,8 @@
 //! Executes a confirmed cleanup plan.
 //!
 //! Items are handled in batches of [`BATCH`]: each batch is re-authorized
-//! immediately before it is touched, then moved to the Trash with one Finder
-//! request (one request per item took about a second each). Permanent
+//! immediately before it is touched, then moved to the Trash with the system
+//! file manager, and progress is reported after each batch. Permanent
 //! deletion uses `std::fs::remove_dir_all`, which does not follow symbolic
 //! links. Failures are recorded per item and never abort the remaining items.
 
@@ -53,32 +53,11 @@ pub struct CleanupProgress {
 
 pub struct RealFileOps;
 
-/// Move `path` to the Trash. Finder does it first, so "Put Back" works. If
-/// macOS has not let DiskPilot ask Finder (the user declined, or the app's
-/// signature changed), the system file manager moves it instead: no
-/// permission needed, the item still lands in the Trash, but Finder may not
-/// offer "Put Back" for it.
+/// Moves `path` to the Trash with the system file manager (NSFileManager's
+/// trashItemAtURL). Finder is not asked: it played its Trash sound on every
+/// request and made each one wait on an Apple event. The item lands in the
+/// Trash as with Finder, though Finder may not offer "Put Back" for it.
 fn move_to_trash(path: &Path) -> io::Result<()> {
-    match trash::delete(path) {
-        Ok(()) => Ok(()),
-        Err(e) if finder_refused(&e.to_string()) => file_manager_trash(path),
-        Err(e) => Err(io::Error::other(e.to_string())),
-    }
-}
-
-/// Finder's "not authorized to send Apple events" (-1743), or Finder not
-/// running (-600). AppleScript puts the code in brackets; matching that form
-/// keeps a file name such as "IMG-6001.jpg" in some other error from
-/// counting. A timeout (-1712) is not a refusal:
-/// Finder may still finish moving the item, so it is reported, not retried.
-fn finder_refused(message: &str) -> bool {
-    message.contains("Not authorized to send Apple events")
-        || message.contains("(-1743)")
-        || message.contains("(-600)")
-}
-
-/// The system file manager's Trash, used when Finder may not be asked.
-fn file_manager_trash(path: &Path) -> io::Result<()> {
     #[cfg(target_os = "macos")]
     {
         use trash::macos::{DeleteMethod, TrashContextExtMacos};
@@ -94,33 +73,6 @@ fn file_manager_trash(path: &Path) -> io::Result<()> {
 impl FileOps for RealFileOps {
     fn trash(&self, path: &Path) -> io::Result<()> {
         move_to_trash(path)
-    }
-
-    /// One Finder request for the whole batch. If Finder refuses, the system
-    /// file manager moves each item. If the batch fails for another reason,
-    /// Finder stops at the item it could not move, so each item still here
-    /// is tried on its own and gets its own result; one the batch already
-    /// moved is no longer where it was.
-    fn trash_many(&self, paths: &[PathBuf]) -> Vec<io::Result<()>> {
-        if paths.len() < 2 {
-            return paths.iter().map(|p| self.trash(p)).collect();
-        }
-        match trash::delete_all(paths) {
-            Ok(()) => paths.iter().map(|_| Ok(())).collect(),
-            Err(e) if finder_refused(&e.to_string()) => {
-                paths.iter().map(|p| file_manager_trash(p)).collect()
-            }
-            Err(_) => paths
-                .iter()
-                .map(|p| {
-                    if p.symlink_metadata().is_err() {
-                        Ok(())
-                    } else {
-                        move_to_trash(p)
-                    }
-                })
-                .collect(),
-        }
     }
 
     fn delete(&self, path: &Path) -> io::Result<()> {
@@ -415,31 +367,6 @@ pub fn execute_with_progress(
         bytes_freed,
         bytes_trashed,
         items: results,
-    }
-}
-
-#[cfg(test)]
-mod finder_tests {
-    use super::finder_refused;
-
-    #[test]
-    fn recognises_finder_refusing() {
-        assert!(finder_refused("Error during a `trash` operation: Os { code: 1, description: \"The AppleScript exited with error. stderr: 29:96: execution error: Not authorized to send Apple events to Finder. (-1743)\\n\" }"));
-        assert!(!finder_refused("No such file or directory (os error 2)"));
-        let wrap = |inner: &str| {
-            format!("Error during a `trash` operation: Os {{ code: 1, description: \"The AppleScript exited with error. stderr: {inner}\\n\" }}")
-        };
-        assert!(finder_refused(&wrap(
-            "execution error: Finder got an error: Application isn’t running. (-600)"
-        )));
-        // A file name that merely contains "-600", in an unrelated error.
-        assert!(!finder_refused(&wrap(
-            "execution error: Can’t get file \"Macintosh HD:Users:a:IMG-6001.jpg\". (-1728)"
-        )));
-        // Finder timed out: it may still move the item, so no second attempt.
-        assert!(!finder_refused(&wrap(
-            "execution error: Finder got an error: AppleEvent timed out. (-1712)"
-        )));
     }
 }
 
