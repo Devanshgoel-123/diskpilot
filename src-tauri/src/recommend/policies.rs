@@ -165,6 +165,18 @@ pub static POLICIES: &[Policy] = &[
         before_you_start: None,
     },
     Policy {
+        rule_id: "swiftpm.cache",
+        tier: LikelySafe,
+        methods: TRASH_OR_DELETE,
+        safe_because: "Swift Package Manager downloads packages again on the next build.",
+        risks: "The next build needs network access and is slower while packages are fetched again.",
+        proposed_action: "Clear the Swift Package Manager cache",
+        alternative: Some("swift package purge-cache"),
+        expand: Whole,
+        min_bytes: 50 * MB,
+        before_you_start: None,
+    },
+    Policy {
         rule_id: "go.build-cache",
         tier: LikelySafe,
         methods: TRASH_OR_DELETE,

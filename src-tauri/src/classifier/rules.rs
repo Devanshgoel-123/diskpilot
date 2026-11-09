@@ -310,6 +310,14 @@ pub static DIR_RULES: &[DirRule] = &[
         "Downloaded crate sources and index. Cargo re-downloads them when needed."
     ),
     leaf!(
+        "swiftpm.cache",
+        HomeRelative(&["Library", "Caches", "org.swift.swiftpm"]),
+        Cache,
+        High,
+        "Swift Package Manager cache",
+        "Downloaded package repositories and manifests cached by Swift Package Manager. SwiftPM downloads them again on the next build."
+    ),
+    leaf!(
         "rustup.toolchains",
         HomeRelative(&[".rustup", "toolchains"]),
         DeveloperTools,
