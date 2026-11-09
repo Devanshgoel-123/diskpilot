@@ -19,6 +19,7 @@ import { useApp } from "@/lib/store";
 import { TrashGlyph } from "@/features/trash/TrashGlyph";
 import { useTrash } from "@/features/trash/trashStore";
 import { useCountUp } from "@/features/trash/useCountUp";
+import { playCleanupDone } from "@/lib/sounds";
 import type { CleanupMethod, CleanupPlan, CleanupProgress, CleanupRecord } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -105,6 +106,7 @@ export function CleanupDialog({
       const result = await api.executeCleanupPlan(planId);
       setRecord(result);
       onFinished(result);
+      if (result.items.some((i) => i.status === "succeeded")) playCleanupDone();
       // Space cleared and streaks count every cleanup, from any page.
       void useApp.getState().refreshHistory();
       void useApp.getState().refreshDisk();

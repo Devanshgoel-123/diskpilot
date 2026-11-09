@@ -1,5 +1,5 @@
 import { AlertCircle, MonitorX, X } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -22,6 +22,7 @@ import { inDesktopApp, onTrayNavigate } from "@/lib/api";
 import { useApp, type PageId } from "@/lib/store";
 import { WhatsNewAfterUpdate } from "@/components/layout/WhatsNewAfterUpdate";
 import { startUpdateChecks } from "@/lib/updates";
+import { playScanDone, startScanSound, stopScanSound } from "@/lib/sounds";
 
 const PAGES: Record<PageId, () => React.JSX.Element> = {
   assistant: AssistantPage,
@@ -54,6 +55,23 @@ function StatusBanner() {
       </Button>
     </div>
   );
+}
+
+/** A quiet tone while a scan runs, and a soft chime when it completes. */
+function ScanSounds() {
+  const scanning = useApp((s) => s.scanning);
+  const status = useApp((s) => s.lastStatus?.status);
+  const was = useRef(false);
+  useEffect(() => {
+    if (scanning && !was.current) startScanSound();
+    if (!scanning && was.current) {
+      stopScanSound();
+      if (status === "completed") playScanDone();
+    }
+    was.current = scanning;
+  }, [scanning, status]);
+  useEffect(() => () => stopScanSound(), []);
+  return null;
 }
 
 export function App() {
@@ -106,6 +124,7 @@ export function App() {
           <Page />
         </main>
       </div>
+      <ScanSounds />
       <EmptyTrashDialog />
       <WhatsNewAfterUpdate />
     </TooltipProvider>

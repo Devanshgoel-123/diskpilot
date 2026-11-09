@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { api, errorMessage } from "@/lib/api";
 import { formatBytes, formatRelative, tildify } from "@/lib/format";
+import { setSoundsEnabled, soundsEnabled, playScanDone } from "@/lib/sounds";
 import { useApp } from "@/lib/store";
 import type { ThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -15,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { AssistantSettings } from "./AssistantSettings";
 import { BackgroundSettings } from "./BackgroundSettings";
 import { UpdatesSettings } from "./UpdatesSettings";
-import { Section, Setting } from "./parts";
+import { Section, Setting, Switch } from "./parts";
 
 const REPO_URL = "https://github.com/Devanshgoel-123/diskpilot";
 
@@ -132,6 +133,7 @@ export function SettingsPage() {
                 </div>
               }
             />
+            <SoundsSetting />
           </Section>
 
           <Section title="Scanning">
@@ -211,5 +213,26 @@ export function SettingsPage() {
         </div>
       </div>
     </>
+  );
+}
+
+function SoundsSetting() {
+  const [on, setOn] = useState(soundsEnabled);
+  return (
+    <Setting
+      label="Sounds"
+      description="A quiet tone while a scan runs, and a soft chime when a scan or cleanup finishes. Never while the window is hidden."
+      control={
+        <Switch
+          on={on}
+          label="Sounds"
+          onChange={(v) => {
+            setSoundsEnabled(v);
+            setOn(v);
+            if (v) playScanDone();
+          }}
+        />
+      }
+    />
   );
 }

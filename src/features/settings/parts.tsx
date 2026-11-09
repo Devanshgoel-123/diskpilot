@@ -1,6 +1,7 @@
 import type * as React from "react";
 
 import { Panel } from "@/components/ui/panel";
+import { cn } from "@/lib/utils";
 
 export function Section({
   title,
@@ -38,5 +39,37 @@ export function Setting({
       </div>
       <div className="shrink-0">{control}</div>
     </div>
+  );
+}
+
+/** An on/off switch for a setting. */
+export function Switch({
+  on,
+  onChange,
+  label,
+}: {
+  on: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={() => onChange(!on)}
+      className={cn(
+        "relative h-5 w-9 rounded-full transition-colors",
+        on ? "bg-accent" : "bg-border-strong",
+      )}
+    >
+      <span
+        className={cn(
+          "absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow transition-transform",
+          on && "translate-x-4",
+        )}
+      />
+    </button>
   );
 }

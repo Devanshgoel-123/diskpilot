@@ -11,38 +11,7 @@ import { ASSISTANT_PROVIDERS, useApp } from "@/lib/store";
 import type { AssistantProvider, ModelInfo, ProviderStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-import { Section, Setting } from "./parts";
-
-function Switch({
-  on,
-  onChange,
-  label,
-}: {
-  on: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      onClick={() => onChange(!on)}
-      className={cn(
-        "relative h-5 w-9 rounded-full transition-colors",
-        on ? "bg-accent" : "bg-border-strong",
-      )}
-    >
-      <span
-        className={cn(
-          "absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow transition-transform",
-          on && "translate-x-4",
-        )}
-      />
-    </button>
-  );
-}
+import { Section, Setting, Switch } from "./parts";
 
 const PROVIDER_LABELS: Record<AssistantProvider, string> = {
   anthropic: "Anthropic",
