@@ -509,6 +509,10 @@ mod tests {
             dir("/Users/test/Library/Caches/org.swift.swiftpm", &p).rule_id,
             "swiftpm.cache"
         );
+        assert_eq!(
+            dir("/Users/test/.cache/puppeteer", &p).rule_id,
+            "puppeteer.browsers"
+        );
         assert_eq!(dir("/Users/test/go/pkg/mod", &p).rule_id, "go.mod-cache");
         assert_eq!(
             dir("/Users/test/.asdf/installs", &p).rule_id,

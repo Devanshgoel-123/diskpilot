@@ -471,11 +471,12 @@ pub static DIR_RULES: &[DirRule] = &[
         "Gemini CLI data",
         "Gemini CLI configuration and session data."
     ),
-    leaf!(
+    container!(
         "xdg.cache",
         HomeRelative(&[".cache"]),
         Cache,
         Medium,
+        false,
         "CLI tool caches",
         "Cache folder shared by many command-line tools (pip, Hugging Face, pre-commit and others). Some tools keep large downloads here, such as ML models, that are slow to fetch again."
     ),
@@ -723,6 +724,14 @@ pub static DIR_RULES: &[DirRule] = &[
         High,
         "Playwright browsers",
         "Browser builds downloaded by Playwright for automated testing, one folder per browser version. `npx playwright install` downloads them again."
+    ),
+    leaf!(
+        "puppeteer.browsers",
+        HomeRelative(&[".cache", "puppeteer"]),
+        DeveloperTools,
+        High,
+        "Puppeteer browsers",
+        "Chrome builds downloaded by Puppeteer, one folder per browser version. `npx puppeteer browsers install` downloads them again."
     ),
     leaf!(
         "asdf.installs",

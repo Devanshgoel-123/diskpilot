@@ -840,6 +840,18 @@ pub static POLICIES: &[Policy] = &[
         before_you_start: None,
     },
     Policy {
+        rule_id: "puppeteer.browsers",
+        tier: LikelySafe,
+        methods: TRASH_OR_DELETE,
+        safe_because: "Puppeteer downloads browser builds again with `npx puppeteer browsers install`.",
+        risks: "Scripts and tests that use Puppeteer fail until the browser is installed again.",
+        proposed_action: "Clear Puppeteer's downloaded browsers",
+        alternative: Some("npx puppeteer browsers clear"),
+        expand: Whole,
+        min_bytes: 50 * MB,
+        before_you_start: None,
+    },
+    Policy {
         rule_id: "asdf.installs",
         tier: ReviewFirst,
         methods: TRASH_ONLY,
