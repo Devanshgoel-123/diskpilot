@@ -32,3 +32,4 @@ preview.html
 src/__preview.ts
 public/__preview*.json
 src-tauri/examples/_preview_*.rs
+.vercel
