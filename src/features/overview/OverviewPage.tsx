@@ -1,6 +1,7 @@
 import { ClearedStatsLine } from "@/features/history/ClearedStats";
 import { FolderSearch, ScanSearch } from "lucide-react";
 import { useMemo } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -50,7 +51,20 @@ export function OverviewPage() {
     startScan,
     navigate,
     recommendations,
-  } = useApp();
+  } = useApp(
+    useShallow((s) => ({
+      disk: s.disk,
+      summary: s.summary,
+      env: s.env,
+      scanning: s.scanning,
+      partial: s.partial,
+      progress: s.progress,
+      scanRoot: s.scanRoot,
+      startScan: s.startScan,
+      navigate: s.navigate,
+      recommendations: s.recommendations,
+    })),
+  );
   const home = env?.homeDir;
 
   const consumers = useMemo(

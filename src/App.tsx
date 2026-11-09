@@ -1,5 +1,6 @@
 import { AlertCircle, MonitorX, X } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { Sidebar } from "@/components/layout/Sidebar";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -21,6 +22,7 @@ import { inDesktopApp, onTrayNavigate } from "@/lib/api";
 import { useApp, type PageId } from "@/lib/store";
 import { WhatsNewAfterUpdate } from "@/components/layout/WhatsNewAfterUpdate";
 import { startUpdateChecks } from "@/lib/updates";
+import { playScanDone, startScanSound, stopScanSound } from "@/lib/sounds";
 
 const PAGES: Record<PageId, () => React.JSX.Element> = {
   assistant: AssistantPage,
@@ -36,7 +38,9 @@ const PAGES: Record<PageId, () => React.JSX.Element> = {
 };
 
 function StatusBanner() {
-  const { error, lastStatus, dismissError } = useApp();
+  const { error, lastStatus, dismissError } = useApp(
+    useShallow((s) => ({ error: s.error, lastStatus: s.lastStatus, dismissError: s.dismissError })),
+  );
   const message = error ?? (lastStatus?.status === "failed" ? lastStatus.error : null);
   if (!message) return null;
   return (
@@ -53,8 +57,27 @@ function StatusBanner() {
   );
 }
 
+/** A quiet tone while a scan runs, and a soft chime when it completes. */
+function ScanSounds() {
+  const scanning = useApp((s) => s.scanning);
+  const status = useApp((s) => s.lastStatus?.status);
+  const was = useRef(false);
+  useEffect(() => {
+    if (scanning && !was.current) startScanSound();
+    if (!scanning && was.current) {
+      stopScanSound();
+      if (status === "completed") playScanDone();
+    }
+    was.current = scanning;
+  }, [scanning, status]);
+  useEffect(() => () => stopScanSound(), []);
+  return null;
+}
+
 export function App() {
-  const { ready, desktop, page, init } = useApp();
+  const { ready, desktop, page, init } = useApp(
+    useShallow((s) => ({ ready: s.ready, desktop: s.desktop, page: s.page, init: s.init })),
+  );
 
   useEffect(() => {
     void init();
@@ -101,6 +124,7 @@ export function App() {
           <Page />
         </main>
       </div>
+      <ScanSounds />
       <EmptyTrashDialog />
       <WhatsNewAfterUpdate />
     </TooltipProvider>

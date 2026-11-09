@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -101,7 +102,22 @@ export function AssistantPage() {
     recommendations,
     navigate,
     refreshAssistantStatus,
-  } = useApp();
+  } = useApp(
+    useShallow((s) => ({
+      assistantEnabled: s.assistantEnabled,
+      assistantStatus: s.assistantStatus,
+      assistantProvider: s.assistantProvider,
+      assistantModel: s.assistantModel,
+      providerModels: s.providerModels,
+      chat: s.chat,
+      asking: s.asking,
+      ask: s.ask,
+      resetChat: s.resetChat,
+      recommendations: s.recommendations,
+      navigate: s.navigate,
+      refreshAssistantStatus: s.refreshAssistantStatus,
+    })),
+  );
   const [draft, setDraft] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
 

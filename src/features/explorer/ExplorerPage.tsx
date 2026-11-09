@@ -1,5 +1,6 @@
 import { ArrowUp, ChevronRight, File, Folder, FolderTree, Link2, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StorageTabs } from "@/features/storage/StorageTabs";
@@ -110,7 +111,16 @@ function Breadcrumbs({
 }
 
 export function ExplorerPage() {
-  const { summary, env, explorerPath, scanning, startScan, browse } = useApp();
+  const { summary, env, explorerPath, scanning, startScan, browse } = useApp(
+    useShallow((s) => ({
+      summary: s.summary,
+      env: s.env,
+      explorerPath: s.explorerPath,
+      scanning: s.scanning,
+      startScan: s.startScan,
+      browse: s.browse,
+    })),
+  );
   const home = env?.homeDir;
   const requested = explorerPath ?? summary?.root ?? null;
   const [listing, setListing] = useState<DirectoryListing | null>(null);

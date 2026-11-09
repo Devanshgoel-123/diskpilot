@@ -1,5 +1,8 @@
 import { FileStack, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
+import { Pager } from "@/components/shared/Pager";
+import { usePage, useScrollTopOnPage } from "@/lib/usePage";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StorageTabs } from "@/features/storage/StorageTabs";
@@ -35,7 +38,14 @@ function parentOf(path: string): string {
 }
 
 export function LargeFilesPage() {
-  const { summary, env, scanning, startScan } = useApp();
+  const { summary, env, scanning, startScan } = useApp(
+    useShallow((s) => ({
+      summary: s.summary,
+      env: s.env,
+      scanning: s.scanning,
+      startScan: s.startScan,
+    })),
+  );
   const home = env?.homeDir;
   const [view, setView] = useState<View>("files");
   const [query, setQuery] = useState("");
@@ -79,6 +89,9 @@ export function LargeFilesPage() {
       return dir * (a.bytes - b.bytes);
     });
   }, [rows, query, category, sort]);
+  const page = usePage(visible, 100, `${view}|${query}|${category}|${sort.key}|${sort.desc}`);
+  const listRef = useRef<HTMLDivElement>(null);
+  useScrollTopOnPage(listRef, page.page);
 
   const presentCategories = useMemo(
     () => ALL_CATEGORIES.filter((c) => rows.some((r) => r.classification.category === c)),
@@ -167,7 +180,7 @@ export function LargeFilesPage() {
               where storage actually accumulates.
             </p>
           ) : null}
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div ref={listRef} className="min-h-0 flex-1 overflow-auto">
             <table className="w-full table-fixed border-collapse text-[13px]">
               <thead className="sticky top-0 z-10 bg-background">
                 <tr className="border-b border-border text-left text-xs text-muted-foreground">
@@ -202,7 +215,7 @@ export function LargeFilesPage() {
                 </tr>
               </thead>
               <tbody>
-                {visible.map((r) => (
+                {page.items.map((r) => (
                   <tr
                     key={r.path}
                     tabIndex={0}
@@ -253,11 +266,14 @@ export function LargeFilesPage() {
             {visible.length === 0 ? (
               <p className="px-4 py-6 text-xs text-muted-foreground">No items match the filter.</p>
             ) : (
-              <p className="px-4 py-3 text-2xs text-subtle-foreground">
-                {view === "files"
-                  ? `The ${formatCount(summary.largestFiles.length)} largest files found by the scan.`
-                  : `The ${formatCount(summary.heavyDirectories.length)} largest such folders found by the scan.`}
-              </p>
+              <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+                <p className="min-w-0 flex-1 text-2xs text-subtle-foreground">
+                  {view === "files"
+                    ? `The ${formatCount(summary.largestFiles.length)} largest files found by the scan.`
+                    : `The ${formatCount(summary.heavyDirectories.length)} largest such folders found by the scan.`}
+                </p>
+                <Pager page={page} label="items" />
+              </div>
             )}
           </div>
         </div>

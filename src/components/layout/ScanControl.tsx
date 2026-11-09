@@ -1,4 +1,5 @@
 import { Loader2, RefreshCw, ScanSearch, Square } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -8,7 +9,19 @@ import { useApp } from "@/lib/store";
 /** Global scan button / live progress, shown in every page header. */
 export function ScanControl() {
   const { desktop, scanning, partial, progress, summary, scanRoot, env, startScan, cancelScan } =
-    useApp();
+    useApp(
+      useShallow((s) => ({
+        desktop: s.desktop,
+        scanning: s.scanning,
+        partial: s.partial,
+        progress: s.progress,
+        summary: s.summary,
+        scanRoot: s.scanRoot,
+        env: s.env,
+        startScan: s.startScan,
+        cancelScan: s.cancelScan,
+      })),
+    );
   if (!desktop) return null;
 
   const target = tildify(scanRoot ?? env?.homeDir ?? "~", env?.homeDir);

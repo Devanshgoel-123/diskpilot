@@ -5,6 +5,7 @@
 //! cleanup::executor, with `safety` as the single gate for every path that is
 //! read from the UI or removed. Docker changes go through `docker::actions`.
 
+pub mod adjust;
 pub mod apps;
 pub mod assistant;
 pub mod classifier;

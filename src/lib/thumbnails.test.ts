@@ -87,4 +87,33 @@ describe("thumbnails", () => {
       "/open.jpg",
     ]);
   });
+
+  it("loads the newest row thumbnails first", async () => {
+    const order: string[] = [];
+    const pending: Array<() => void> = [];
+    fileThumbnail.mockImplementation((path: string) => {
+      order.push(path);
+      return new Promise<ArrayBuffer>((r) => pending.push(() => r(new ArrayBuffer(4))));
+    });
+    const rows = Array.from({ length: 8 }, (_, i) => loadThumbnail(`/row${i}.jpg`, 28));
+    while (pending.length) {
+      pending.shift()?.();
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    await Promise.all(rows);
+    // Four start at once; of the rest, the most recently requested goes first.
+    expect(order.slice(4)).toEqual(["/row7.jpg", "/row6.jpg", "/row5.jpg", "/row4.jpg"]);
+  });
+
+  it("keeps a whole 2,000-row list, and looking rows up stays cheap", async () => {
+    for (let i = 0; i < 2000; i++) await loadThumbnail(`/r${i}.jpg`, 28);
+    expect(revoked).toEqual([]);
+    const start = performance.now();
+    for (let pass = 0; pass < 10; pass++) {
+      for (let i = 0; i < 2000; i++) cachedThumbnail(`/r${i}.jpg`, 28);
+    }
+    // 20,000 lookups; the old cache copied and filtered every key on each one.
+    expect(performance.now() - start).toBeLessThan(100);
+    expect(cachedThumbnail("/r0.jpg", 28)).toBe("blob:1");
+  });
 });
