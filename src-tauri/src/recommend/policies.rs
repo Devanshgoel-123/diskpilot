@@ -153,6 +153,18 @@ pub static POLICIES: &[Policy] = &[
         before_you_start: None,
     },
     Policy {
+        rule_id: "deno.cache",
+        tier: LikelySafe,
+        methods: TRASH_OR_DELETE,
+        safe_because: "Deno downloads modules again when a script needs them.",
+        risks: "Offline work needs network access the first time until the cache refills.",
+        proposed_action: "Clear the Deno cache",
+        alternative: Some("deno clean"),
+        expand: Whole,
+        min_bytes: 50 * MB,
+        before_you_start: None,
+    },
+    Policy {
         rule_id: "cargo.registry",
         tier: LikelySafe,
         methods: TRASH_OR_DELETE,
