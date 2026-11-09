@@ -10,14 +10,15 @@ import {
   Search,
   Shapes,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { FilePreview } from "@/components/shared/FilePreview";
 import { FileThumbnail } from "@/components/shared/FileThumbnail";
-import { WindowedList } from "@/components/shared/WindowedList";
+import { Pager } from "@/components/shared/Pager";
+import { usePage, useScrollTopOnPage } from "@/lib/usePage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CleanupDialog } from "@/features/recommendations/CleanupDialog";
@@ -38,6 +39,7 @@ const KINDS: Record<FileKind, { label: string; icon: LucideIcon }> = {
   documents: { label: "Documents", icon: FileText },
 };
 
+const PAGE_SIZE = 100;
 const DAY = 24 * 60 * 60 * 1000;
 const AGES = [
   { id: "any", label: "Any age", olderThan: 0 },
@@ -111,6 +113,11 @@ function FileKindsView() {
         (!olderThan || (f.modifiedMs !== null && now - f.modifiedMs > olderThan)),
     );
   }, [files, query, age, folder, home, now]);
+
+  // 100 rows a page: a page renders at once, and the rest wait until asked for.
+  const page = usePage(visible, PAGE_SIZE, `${kind}|${query}|${age}|${folder}`);
+  const listRef = useRef<HTMLDivElement>(null);
+  useScrollTopOnPage(listRef, page.page);
 
   const sizes = useMemo(
     () => new Map(groups.flatMap((g) => g.files.map((f) => [f.path, f.bytes] as const))),
@@ -284,79 +291,83 @@ function FileKindsView() {
               disabled={!visible.length}
               onClick={toggleVisible}
             >
-              {allVisibleChosen ? "Clear selection" : `Select ${formatCount(visible.length)} shown`}
+              {allVisibleChosen ? "Clear selection" : `Select all ${formatCount(visible.length)}`}
             </Button>
           </div>
           {group ? (
-            <p className="shrink-0 border-b border-border/60 px-4 py-2 text-2xs text-muted-foreground">
-              {listedNote(group.files.length, group.fileCount)}
-            </p>
+            <div className="flex shrink-0 items-center gap-3 border-b border-border/60 px-4 py-1.5">
+              <p className="min-w-0 flex-1 text-2xs text-muted-foreground">
+                {listedNote(group.files.length, group.fileCount)}
+              </p>
+              <Pager page={page} label="files" />
+            </div>
           ) : null}
-          <div className="min-h-0 flex-1">
+          <div ref={listRef} className="min-h-0 flex-1 overflow-auto">
             {visible.length ? (
-              <WindowedList
-                items={visible}
-                rowHeight={40}
-                maxHeight="fill"
-                label={group ? KINDS[group.kind].label : undefined}
-                getKey={(f) => f.path}
-                renderRow={(f, i) => (
-                  <div
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === " " && e.target === e.currentTarget) {
-                        e.preventDefault();
-                        setPreview(i);
-                      }
-                    }}
-                    className="flex h-full items-center gap-3 border-b border-border/60 px-4 outline-none hover:bg-hover/60 focus-visible:bg-hover"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selected.has(f.path)}
-                      onChange={() => toggle(f.path)}
-                      aria-label={`Select ${f.name}`}
-                      className="size-3.5 shrink-0 accent-[var(--accent)]"
-                    />
-                    <button
-                      type="button"
-                      tabIndex={-1}
-                      onClick={() => setPreview(i)}
-                      aria-label={`Preview ${f.name}`}
-                      className="shrink-0"
-                    >
-                      <FileThumbnail path={f.path} size={28} />
-                    </button>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px]" title={f.name}>
-                        {f.name}
-                      </span>
-                      <span
-                        className="block truncate font-mono text-2xs text-subtle-foreground"
-                        title={f.path}
+              <ul aria-label={group ? KINDS[group.kind].label : undefined}>
+                {page.items.map((f, j) => {
+                  const i = page.start + j;
+                  return (
+                    <li key={f.path} className="h-10">
+                      <div
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === " " && e.target === e.currentTarget) {
+                            e.preventDefault();
+                            setPreview(i);
+                          }
+                        }}
+                        className="flex h-full items-center gap-3 border-b border-border/60 px-4 outline-none hover:bg-hover/60 focus-visible:bg-hover"
                       >
-                        {tildify(parentOf(f.path), home)}
-                      </span>
-                    </span>
-                    <span className="w-28 shrink-0 text-2xs text-subtle-foreground">
-                      {formatRelative(f.modifiedMs)}
-                    </span>
-                    <span className="tabular w-20 shrink-0 text-right text-xs">
-                      {formatBytes(f.bytes)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setPreview(i)}
-                      title="Preview (Space)"
-                      aria-label={`Preview ${f.name}`}
-                      className="shrink-0 rounded p-1 text-muted-foreground hover:bg-hover hover:text-foreground"
-                    >
-                      <Eye className="size-3.5" aria-hidden />
-                    </button>
-                  </div>
-                )}
-              />
+                        <input
+                          type="checkbox"
+                          checked={selected.has(f.path)}
+                          onChange={() => toggle(f.path)}
+                          aria-label={`Select ${f.name}`}
+                          className="size-3.5 shrink-0 accent-[var(--accent)]"
+                        />
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          onClick={() => setPreview(i)}
+                          aria-label={`Preview ${f.name}`}
+                          className="shrink-0"
+                        >
+                          <FileThumbnail path={f.path} size={28} />
+                        </button>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[13px]" title={f.name}>
+                            {f.name}
+                          </span>
+                          <span
+                            className="block truncate font-mono text-2xs text-subtle-foreground"
+                            title={f.path}
+                          >
+                            {tildify(parentOf(f.path), home)}
+                          </span>
+                        </span>
+                        <span className="w-28 shrink-0 text-2xs text-subtle-foreground">
+                          {formatRelative(f.modifiedMs)}
+                        </span>
+                        <span className="tabular w-20 shrink-0 text-right text-xs">
+                          {formatBytes(f.bytes)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setPreview(i)}
+                          title="Preview (Space)"
+                          aria-label={`Preview ${f.name}`}
+                          className="shrink-0 rounded p-1 text-muted-foreground hover:bg-hover hover:text-foreground"
+                        >
+                          <Eye className="size-3.5" aria-hidden />
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             ) : null}
+            <Pager page={page} label="files" className="px-4 py-3" />
             {visible.length === 0 ? (
               <p className="px-4 py-6 text-xs text-muted-foreground">No files match the filter.</p>
             ) : null}

@@ -2,7 +2,8 @@ import { AlertTriangle, CheckCircle2, Loader2, Trash2, XCircle } from "lucide-re
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
 
 import { TierBadge } from "@/components/shared/TierBadge";
-import { WindowedList } from "@/components/shared/WindowedList";
+import { Pager } from "@/components/shared/Pager";
+import { usePage } from "@/lib/usePage";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -89,6 +90,7 @@ export function CleanupDialog({
   }, [open, ids, method, record, createPlan]);
 
   const loading = !plan || plan.method !== method;
+  const reviewPage = usePage(plan?.items ?? [], 50, plan?.id ?? null);
 
   const execute = async () => {
     if (!plan) return;
@@ -199,31 +201,31 @@ export function CleanupDialog({
                     </span>
                     <span className="tabular text-foreground">{formatBytes(plan.totalBytes)}</span>
                   </p>
-                  <WindowedList
-                    items={plan.items}
-                    rowHeight={52}
-                    maxHeight={416}
-                    label="Items in this cleanup"
-                    getKey={(i) => i.path}
-                    className="rounded-lg border border-border"
-                    renderRow={(i) => (
-                      <div className="flex h-full items-center gap-3 border-b border-border px-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="flex items-center gap-2 truncate text-xs">
-                            <span className="truncate">{i.title}</span>
-                            <TierBadge tier={i.tier} />
-                          </p>
-                          <p
-                            className="selectable mt-0.5 truncate font-mono text-2xs text-subtle-foreground"
-                            title={i.path}
-                          >
-                            {tildify(i.path, home)}
-                          </p>
+                  <ul
+                    aria-label="Items in this cleanup"
+                    className="divide-y divide-border rounded-lg border border-border"
+                  >
+                    {reviewPage.items.map((i) => (
+                      <li key={i.path}>
+                        <div className="flex items-center gap-3 px-3 py-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="flex items-center gap-2 truncate text-xs">
+                              <span className="truncate">{i.title}</span>
+                              <TierBadge tier={i.tier} />
+                            </p>
+                            <p
+                              className="selectable mt-0.5 font-mono text-2xs break-all text-subtle-foreground"
+                              title={i.path}
+                            >
+                              {tildify(i.path, home)}
+                            </p>
+                          </div>
+                          <span className="tabular shrink-0 text-xs">{formatBytes(i.bytes)}</span>
                         </div>
-                        <span className="tabular shrink-0 text-xs">{formatBytes(i.bytes)}</span>
-                      </div>
-                    )}
-                  />
+                      </li>
+                    ))}
+                  </ul>
+                  <Pager page={reviewPage} label="items" className="mt-2" />
                   {plan.rejected.length ? (
                     <div className="mt-3">
                       <p className="mb-1 text-xs text-muted-foreground">
@@ -345,6 +347,7 @@ function ResultView({
     ],
     [record],
   );
+  const resultPage = usePage(items, 50, record.id);
   return (
     <>
       <DialogHeader>
@@ -369,34 +372,32 @@ function ResultView({
           elsewhere reflect the last scan until you rescan.
         </DialogDescription>
       </DialogHeader>
-      <div className="min-h-0 flex-1 px-5 py-2">
-        <WindowedList
-          items={items}
-          rowHeight={44}
-          maxHeight={420}
-          label="Cleanup results"
-          getKey={(i) => i.target}
-          renderRow={(i) => (
-            <div className="flex h-full flex-col justify-center border-b border-border">
-              <p className="flex items-center gap-2 text-xs">
-                {i.status === "succeeded" ? (
-                  <CheckCircle2 className="size-3.5 shrink-0 text-good" aria-hidden />
-                ) : (
-                  <XCircle className="size-3.5 shrink-0 text-critical" aria-hidden />
-                )}
-                <span className="selectable truncate font-mono text-2xs" title={i.target}>
-                  {tildify(i.target, home)}
-                </span>
-                <span className="tabular ml-auto shrink-0">{formatBytes(i.bytes)}</span>
-              </p>
-              {i.error ? (
-                <p className="mt-0.5 truncate pl-5 text-2xs text-critical" title={i.error}>
-                  {i.error}
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-2">
+        <ul aria-label="Cleanup results" className="divide-y divide-border">
+          {resultPage.items.map((i) => (
+            <li key={i.target}>
+              <div className="py-2">
+                <p className="flex items-center gap-2 text-xs">
+                  {i.status === "succeeded" ? (
+                    <CheckCircle2 className="size-3.5 shrink-0 text-good" aria-hidden />
+                  ) : (
+                    <XCircle className="size-3.5 shrink-0 text-critical" aria-hidden />
+                  )}
+                  <span className="selectable truncate font-mono text-2xs" title={i.target}>
+                    {tildify(i.target, home)}
+                  </span>
+                  <span className="tabular ml-auto shrink-0">{formatBytes(i.bytes)}</span>
                 </p>
-              ) : null}
-            </div>
-          )}
-        />
+                {i.error ? (
+                  <p className="mt-0.5 truncate pl-5 text-2xs text-critical" title={i.error}>
+                    {i.error}
+                  </p>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+        <Pager page={resultPage} label="results" className="mt-2" />
       </div>
       <DialogFooter>
         {record.bytesTrashed > 0 ? (
