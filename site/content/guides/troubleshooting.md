@@ -5,7 +5,7 @@ nav: Troubleshooting
 description: Fixes for the questions people hit most with DiskPilot: permission prompts, skipped folders, the Trash, updates and Homebrew.
 summary: Permission prompts, skipped folders, the Trash, updates and Homebrew.
 order: 6
-updated: 2026-11-09
+updated: 2026-11-10
 ---
 
 ## macOS keeps asking for permission
@@ -20,9 +20,9 @@ Folders such as Mail, Messages and the Photos library need Full Disk Access, whi
 
 Items go to the Trash first. The space is freed when you empty it, which you can do from DiskPilot. Storage in System Settings also updates on its own schedule, so it can lag by a few minutes.
 
-## Moving to the Trash asked to control Finder
+## Finder doesn't offer Put Back
 
-DiskPilot can move items to the Trash without controlling Finder. If you declined, Finder may not offer Put Back for those items, but you can still drag them out of the Trash.
+From version 0.6.3, DiskPilot moves items to the Trash itself instead of asking Finder, so it is quiet and much faster. The items are in the Trash as usual, but Finder may not offer Put Back for them. To restore one, drag it out of the Trash to where you want it.
 
 ## Smaller files are missing from Files by type
 
