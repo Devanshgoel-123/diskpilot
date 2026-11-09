@@ -62,6 +62,8 @@ export const api = {
   /** PNG bytes of a Quick Look thumbnail; files inside the last scan only. */
   fileThumbnail: (path: string, size: number) =>
     invoke<ArrayBuffer>("file_thumbnail", { path, size }),
+  /** Opens a listed file in its default app; apps and scripts are refused. */
+  openListedFile: (path: string) => invoke<null>("open_listed_file", { path }),
   getAppStorage: () => invoke<AppStorageReport>("get_app_storage"),
   getAppBadges: (paths: string[]) => invoke<Record<string, AppBadge>>("get_app_badges", { paths }),
 
