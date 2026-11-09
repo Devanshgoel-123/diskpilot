@@ -490,6 +490,7 @@ mod tests {
                     operation: method.describe().into(),
                     keep_copy: None,
                     was_file: false,
+                    category: None,
                 })
                 .collect(),
             rejected: vec![],

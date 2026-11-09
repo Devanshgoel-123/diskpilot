@@ -414,6 +414,10 @@ pub struct PlanItem {
     /// review is not removed in its place.
     #[serde(default)]
     pub was_file: bool,
+    /// The category the scan counted this item under, so its bytes can be
+    /// taken off the right total once it is removed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<Category>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

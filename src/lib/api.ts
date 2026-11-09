@@ -139,6 +139,11 @@ export function onScanFinished(cb: (p: ScanFinished) => void): Promise<UnlistenF
   return listen<ScanFinished>("scan://finished", (e) => cb(e.payload));
 }
 
+/** The last scan's numbers changed because DiskPilot removed something. */
+export function onScanUpdated(cb: () => void): Promise<UnlistenFn> {
+  return listen<null>("scan://updated", () => cb());
+}
+
 export function onCleanupProgress(cb: (p: CleanupProgress) => void): Promise<UnlistenFn> {
   return listen<CleanupProgress>("cleanup://progress", (e) => cb(e.payload));
 }

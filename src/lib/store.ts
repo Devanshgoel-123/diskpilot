@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+import { useTrash } from "@/features/trash/trashStore";
+
 import {
   api,
   errorMessage,
@@ -7,6 +9,7 @@ import {
   onScanFinished,
   onScanPartial,
   onScanProgress,
+  onScanUpdated,
 } from "./api";
 import { applyTheme, loadTheme, saveTheme, type ThemePreference } from "./theme";
 import { clearThumbnails } from "./thumbnails";
@@ -257,6 +260,22 @@ export const useApp = create<AppState>((set, get) => ({
         // The final results may already have arrived on a fast scan.
         if (!get().scanning) return;
         set({ summary, recommendations, partial: true, explorerPath: null });
+      });
+      // After a cleanup or emptying the Trash, the engine takes what was
+      // removed off the last scan; show the new numbers without a rescan.
+      await onScanUpdated(async () => {
+        if (get().scanning) return;
+        try {
+          const [summary, recommendations] = await Promise.all([
+            api.getScanSummary(),
+            api.getRecommendations(),
+          ]);
+          if (!get().scanning) set({ summary, recommendations });
+        } catch {
+          /* the next scan shows them */
+        }
+        void get().refreshDisk();
+        void useTrash.getState().refresh();
       });
       await onScanFinished(async (done) => {
         finishedScanId = done.scanId;

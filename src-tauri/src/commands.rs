@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::adjust;
 use crate::assistant::{
     self, keychain, provider::Provider, tools::ToolContext, AssistantReply, AssistantStatus,
     ModelInfo,
@@ -39,6 +40,8 @@ pub const EVENT_SCAN_FINISHED: &str = "scan://finished";
 /// Results for everything except app containers, which are still being
 /// measured. Payload: the scan id. `scan://finished` follows.
 pub const EVENT_SCAN_PARTIAL: &str = "scan://partial";
+/// The last scan's numbers changed because DiskPilot removed something.
+pub const EVENT_SCAN_UPDATED: &str = "scan://updated";
 
 /// Run blocking work off the main thread.
 async fn blocking<T: Send + 'static>(
@@ -696,7 +699,15 @@ pub async fn execute_cleanup_plan(
     let root = cleanup_root(&state);
     let home = state.home.clone();
     let history = state.history.clone();
+    let planned: std::collections::HashMap<String, (u64, Option<crate::model::Category>)> = plan
+        .items
+        .iter()
+        .map(|i| (i.path.clone(), (i.bytes, i.category)))
+        .collect();
+    let trashed = plan.method == CleanupMethod::Trash;
+    let reporter = app.clone();
     let record = blocking(move || {
+        let app = reporter;
         let report = |p: executor::CleanupProgress| {
             let _ = app.emit(executor::EVENT_CLEANUP_PROGRESS, p);
         };
@@ -720,7 +731,60 @@ pub async fn execute_cleanup_plan(
     if let Some(report) = state.duplicates().report.as_mut() {
         duplicates::forget(report, &done, &state.home);
     }
+    let removals = done
+        .iter()
+        .map(|p| {
+            let (bytes, category) = planned.get(p).copied().unwrap_or((0, None));
+            adjust::Removal {
+                path: PathBuf::from(p),
+                bytes,
+                category,
+                trashed,
+            }
+        })
+        .collect();
+    reflect_removals(app, removals).await;
     Ok(record)
+}
+
+/// Takes what DiskPilot just removed off the last scan's numbers, rebuilds
+/// its recommendations, tells the window (scan://updated) and saves the
+/// result, so nothing waits for the next scan. Does nothing if a newer scan
+/// finished meanwhile, since that one already measured the change.
+async fn reflect_removals(app: AppHandle, removals: Vec<adjust::Removal>) {
+    if removals.is_empty() {
+        return;
+    }
+    let _ = blocking(move || {
+        let state = app.state::<AppState>();
+        let Some(before) = state.slot().last.clone() else {
+            return Ok(());
+        };
+        let outcome = adjust::apply(&before, &removals, &state.home);
+        let recs = scan_recommendations(&state.home, &outcome);
+        let outcome = Arc::new(outcome);
+        {
+            let mut slot = state.slot();
+            if !slot.last.as_ref().is_some_and(|l| Arc::ptr_eq(l, &before)) {
+                return Ok(());
+            }
+            slot.last = Some(outcome.clone());
+            let gone: std::collections::HashSet<String> = removals
+                .iter()
+                .map(|r| r.path.display().to_string())
+                .collect();
+            slot.recommendations = Arc::new(recs);
+            slot.remove_paths(&gone);
+        }
+        let _ = app.emit(EVENT_SCAN_UPDATED, ());
+        if let Some(dir) = &state.data_dir {
+            if let Err(e) = snapshot::save(dir, &outcome) {
+                eprintln!("diskpilot: could not save updated scan results: {e}");
+            }
+        }
+        Ok(())
+    })
+    .await;
 }
 
 #[tauri::command]
@@ -975,7 +1039,9 @@ pub async fn empty_trash(
     };
     let dir = trash::trash_dir(&state.home);
     let history = state.history.clone();
+    let reporter = app.clone();
     let outcome = blocking(move || {
+        let app = reporter;
         let result = trash::empty(&preview, &dir, &cancel, &mut |p| {
             let _ = app.emit(trash::EVENT_TRASH_PROGRESS, p);
         });
@@ -988,6 +1054,21 @@ pub async fn empty_trash(
     })
     .await;
     state.trash().running = None;
+    if let Ok(result) = &outcome {
+        let removals = result
+            .record
+            .items
+            .iter()
+            .filter(|i| i.status == ItemStatus::Succeeded)
+            .map(|i| adjust::Removal {
+                path: PathBuf::from(&i.target),
+                bytes: i.bytes,
+                category: Some(crate::model::Category::UserData),
+                trashed: false,
+            })
+            .collect();
+        reflect_removals(app, removals).await;
+    }
     outcome
 }
 
