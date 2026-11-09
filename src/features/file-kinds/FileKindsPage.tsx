@@ -239,6 +239,7 @@ function FileKindsView() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Filter by name or path"
+                data-filter
                 className="pl-7"
                 aria-label="Filter by name or path"
               />

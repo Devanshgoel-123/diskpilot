@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { api, errorMessage } from "@/lib/api";
 import { formatBytes, formatRelative, tildify } from "@/lib/format";
+import { useShortcutsDialog } from "@/lib/shortcuts";
 import { useApp } from "@/lib/store";
 import type { ThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -185,6 +186,19 @@ export function SettingsPage() {
           <UpdatesSettings />
 
           <Section title="About">
+            <Setting
+              label="Keyboard shortcuts"
+              description="Go to any page with ⌘1 to ⌘8, scan again with ⌘R, filter a list with ⌘F."
+              control={
+                <Button
+                  variant="secondary"
+                  onClick={() => useShortcutsDialog.getState().setOpen(true)}
+                >
+                  Show all
+                  <kbd className="ml-1 font-mono text-2xs text-muted-foreground">⌘/</kbd>
+                </Button>
+              }
+            />
             <Setting
               label="DiskPilot"
               description={`Version ${env?.appVersion ?? "—"} · ${env?.os ?? ""} ${env?.arch ?? ""} · MIT License`}

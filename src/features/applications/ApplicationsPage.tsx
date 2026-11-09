@@ -241,6 +241,7 @@ export function ApplicationsPage() {
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
                       placeholder="Filter apps"
+                      data-filter
                       aria-label="Filter apps"
                       className="w-52 pl-7"
                     />

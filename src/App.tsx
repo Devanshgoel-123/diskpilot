@@ -19,7 +19,9 @@ import { EmptyTrashDialog } from "@/features/trash/EmptyTrashDialog";
 import { useTrash } from "@/features/trash/trashStore";
 import { inDesktopApp, onTrayNavigate } from "@/lib/api";
 import { useApp, type PageId } from "@/lib/store";
+import { ShortcutsDialog } from "@/components/layout/ShortcutsDialog";
 import { WhatsNewAfterUpdate } from "@/components/layout/WhatsNewAfterUpdate";
+import { runShortcut, useShortcutsDialog } from "@/lib/shortcuts";
 import { startUpdateChecks } from "@/lib/updates";
 
 const PAGES: Record<PageId, () => React.JSX.Element> = {
@@ -55,6 +57,16 @@ function StatusBanner() {
 
 export function App() {
   const { ready, desktop, page, init } = useApp();
+  const shortcuts = useShortcutsDialog();
+
+  // App-wide keyboard shortcuts (⌘1 to ⌘8, ⌘R, ⌘F and the rest).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (runShortcut(e, useApp.getState())) e.preventDefault();
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
     void init();
@@ -103,6 +115,7 @@ export function App() {
       </div>
       <EmptyTrashDialog />
       <WhatsNewAfterUpdate />
+      <ShortcutsDialog open={shortcuts.open} onOpenChange={shortcuts.setOpen} />
     </TooltipProvider>
   );
 }

@@ -154,6 +154,7 @@ export function LargeFilesPage() {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search name or path"
+                  data-filter
                   className="pl-7"
                   aria-label="Search name or path"
                 />

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { formatCount, formatRelative, tildify } from "@/lib/format";
+import { shortcutLabel } from "@/lib/shortcuts";
 import { useApp, type PageId } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { UpdateBanner } from "@/components/layout/UpdateBanner";
@@ -34,6 +35,8 @@ function NavButton({ item }: { item: NavItem }) {
     <button
       type="button"
       onClick={() => navigate(item.id)}
+      title={shortcutLabel(item.id) ? `${item.label} (${shortcutLabel(item.id)})` : undefined}
+      aria-keyshortcuts={shortcutLabel(item.id)?.replace("⌘", "Meta+") ?? undefined}
       aria-current={active ? "page" : undefined}
       className={cn(
         "flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] transition-colors duration-[120ms]",
