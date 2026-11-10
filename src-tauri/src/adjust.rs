@@ -34,7 +34,10 @@ pub fn apply(outcome: &ScanOutcome, removals: &[Removal], home: &Path) -> ScanOu
     let mut index: DirIndex = outcome.index.clone();
     let root = PathBuf::from(&summary.root);
     let trash = home.join(".Trash");
-    let trash_counted = trash.starts_with(&root) && trash != root;
+    // On Windows the Recycle Bin is a hidden folder at the top of each drive,
+    // outside the user folder, so a recycled item leaves the totals like a
+    // deleted one. (A whole-drive scan sees it there again at the next scan.)
+    let trash_counted = cfg!(not(windows)) && trash.starts_with(&root) && trash != root;
 
     let mut gone: HashSet<PathBuf> = HashSet::new();
     for r in removals {
@@ -287,7 +290,7 @@ mod tests {
     #[test]
     fn matches_a_new_scan_after_deleting_and_trashing() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let proj = home.join("code/app");
         let modules = proj.join("node_modules/pkg");
         fs::create_dir_all(&modules).unwrap();
@@ -331,6 +334,10 @@ mod tests {
 
         // What actually happens on disk.
         fs::remove_dir_all(&node_modules).unwrap();
+        // On Windows the Recycle Bin is outside the scan, so the photo leaves it.
+        #[cfg(windows)]
+        fs::remove_file(&photo).unwrap();
+        #[cfg(not(windows))]
         fs::rename(&photo, home.join(".Trash/beach.jpg")).unwrap();
 
         let adjusted = apply(&before, &removals, &home);
@@ -353,7 +360,7 @@ mod tests {
     #[test]
     fn emptying_the_trash_takes_its_bytes_off_the_totals() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let trash = home.join(".Trash");
         fs::create_dir_all(trash.join("old")).unwrap();
         fs::write(trash.join("old/a.bin"), vec![b'a'; 500_000]).unwrap();
@@ -385,7 +392,7 @@ mod tests {
     #[test]
     fn ignores_paths_outside_the_scan_and_repeats() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         fs::write(home.join("a.txt"), "x").unwrap();
         let before = scan_home(&home);
         let outside = Removal {
