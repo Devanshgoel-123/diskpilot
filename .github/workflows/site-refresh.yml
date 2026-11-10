@@ -1,0 +1,33 @@
+name: Refresh website
+
+# Rebuilds diskpilot.live once a day and after each release, so the download
+# count, stars, changelog and shortcuts page stay current. The site fetches
+# those numbers from GitHub while it builds (site/build/pages.mjs).
+#
+# Needs a Vercel deploy hook (Project Settings > Git > Deploy Hooks) saved as
+# the repository secret VERCEL_DEPLOY_HOOK. Without it, this does nothing.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger a Vercel build
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::notice::VERCEL_DEPLOY_HOOK is not set; the website was not rebuilt."
+            exit 0
+          fi
+          curl -fsS -X POST "$HOOK" > /dev/null
+          echo "Vercel build requested."

@@ -11,8 +11,10 @@ import {
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 
 import { formatCount, formatRelative, tildify } from "@/lib/format";
+import { ariaKeys, shortcutKeys, shortcutLabel } from "@/lib/shortcuts";
 import { useApp, type PageId } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { UpdateBanner } from "@/components/layout/UpdateBanner";
@@ -34,6 +36,11 @@ function NavButton({ item }: { item: NavItem }) {
     <button
       type="button"
       onClick={() => navigate(item.id)}
+      title={shortcutLabel(item.id) ? `${item.label} (${shortcutLabel(item.id)})` : undefined}
+      aria-keyshortcuts={(() => {
+        const keys = shortcutKeys(item.id);
+        return keys ? ariaKeys(keys) : undefined;
+      })()}
       aria-current={active ? "page" : undefined}
       className={cn(
         "flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] transition-colors duration-[120ms]",
@@ -70,7 +77,15 @@ function Section({ title, items }: { title?: string; items: NavItem[] }) {
 
 /** Scan status at the foot of the sidebar: what was scanned and when. */
 function ScanStatus() {
-  const { scanning, partial, progress, summary, env } = useApp();
+  const { scanning, partial, progress, summary, env } = useApp(
+    useShallow((s) => ({
+      scanning: s.scanning,
+      partial: s.partial,
+      progress: s.progress,
+      summary: s.summary,
+      env: s.env,
+    })),
+  );
   const home = env?.homeDir;
   if (scanning && partial && progress && progress.containersTotal > 0) {
     const pct = Math.round((progress.containersDone / progress.containersTotal) * 100);

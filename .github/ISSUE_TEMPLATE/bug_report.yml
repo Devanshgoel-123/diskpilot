@@ -39,6 +39,14 @@ body:
     validations:
       required: true
   - type: textarea
+    id: scan
+    attributes:
+      label: What the scan showed
+      description: The sizes, categories or tiers DiskPilot showed for the items involved, and what you expected. A screenshot works too; hide personal names.
+      placeholder: |
+        Overview: 130 GB used, 23 GB likely recoverable
+        ~/Library/Caches/Example shown as "Likely safe", 4.2 GB
+  - type: textarea
     id: logs
     attributes:
       label: Logs or screenshots

@@ -1,6 +1,7 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { KeyRound, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,38 +12,7 @@ import type { AssistantProvider, ModelInfo, ProviderStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { isWindows, words } from "@/lib/platform";
 
-import { Section, Setting } from "./parts";
-
-function Switch({
-  on,
-  onChange,
-  label,
-}: {
-  on: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      onClick={() => onChange(!on)}
-      className={cn(
-        "relative h-5 w-9 rounded-full transition-colors",
-        on ? "bg-accent" : "bg-border-strong",
-      )}
-    >
-      <span
-        className={cn(
-          "absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow transition-transform",
-          on && "translate-x-4",
-        )}
-      />
-    </button>
-  );
-}
+import { Section, Setting, Switch } from "./parts";
 
 const PROVIDER_LABELS: Record<AssistantProvider, string> = {
   anthropic: "Anthropic",
@@ -112,7 +82,20 @@ export function AssistantSettings() {
     loadProviderModels,
     assistantStatus,
     refreshAssistantStatus,
-  } = useApp();
+  } = useApp(
+    useShallow((s) => ({
+      assistantEnabled: s.assistantEnabled,
+      setAssistantEnabled: s.setAssistantEnabled,
+      assistantProvider: s.assistantProvider,
+      setAssistantProvider: s.setAssistantProvider,
+      assistantModel: s.assistantModel,
+      setAssistantModel: s.setAssistantModel,
+      providerModels: s.providerModels,
+      loadProviderModels: s.loadProviderModels,
+      assistantStatus: s.assistantStatus,
+      refreshAssistantStatus: s.refreshAssistantStatus,
+    })),
+  );
   const [key, setKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);

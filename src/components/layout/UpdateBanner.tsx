@@ -76,6 +76,7 @@ export function UpdateBanner() {
         title={`What's new in DiskPilot ${update.version}`}
         subtitle="Updating keeps your scan history, settings and saved results."
         notes={update.body ? inAppNotes(update.body) : null}
+        version={update.version}
         onClose={() => setNotesOpen(false)}
         footer={installing ? null : primary}
       />

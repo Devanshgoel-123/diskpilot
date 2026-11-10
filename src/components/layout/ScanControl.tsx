@@ -1,4 +1,5 @@
 import { Loader2, RefreshCw, ScanSearch, Square, Zap } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 
 import { DrivePicker } from "@/components/shared/DrivePicker";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,7 @@ import { isDriveRoot } from "@/lib/drives";
 import { formatBytes, formatCount, tildify } from "@/lib/format";
 import { samePath } from "@/lib/paths";
 import { isWindows } from "@/lib/platform";
+import { ariaKeys, keysText } from "@/lib/shortcuts";
 import { useApp } from "@/lib/store";
 
 import { FastScanOffer } from "./FastScanDialog";
@@ -27,7 +29,23 @@ export function ScanControl() {
     fastScan,
     startScan,
     cancelScan,
-  } = useApp();
+  } = useApp(
+    useShallow((s) => ({
+      desktop: s.desktop,
+      scanning: s.scanning,
+      partial: s.partial,
+      progress: s.progress,
+      summary: s.summary,
+      scanRoot: s.scanRoot,
+      env: s.env,
+      page: s.page,
+      drives: s.drives,
+      elevated: s.elevated,
+      fastScan: s.fastScan,
+      startScan: s.startScan,
+      cancelScan: s.cancelScan,
+    })),
+  );
   if (!desktop) return null;
 
   const target = tildify(scanRoot ?? env?.homeDir ?? "~", env?.homeDir);
@@ -64,7 +82,11 @@ export function ScanControl() {
             </p>
           )}
         </div>
-        <Button variant="secondary" onClick={() => void cancelScan()}>
+        <Button
+          variant="secondary"
+          onClick={() => void cancelScan()}
+          aria-keyshortcuts={ariaKeys(["⌘", "."])}
+        >
           <Square />
           Stop
         </Button>
@@ -93,7 +115,11 @@ export function ScanControl() {
       ) : null}
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant={summary ? "secondary" : "default"} onClick={() => void startScan()}>
+          <Button
+            variant={summary ? "secondary" : "default"}
+            onClick={() => void startScan()}
+            aria-keyshortcuts={ariaKeys(["⌘", "R"])}
+          >
             {rescan ? <RefreshCw /> : <ScanSearch />}
             {rescan ? "Rescan" : "Scan"}
           </Button>
@@ -101,7 +127,7 @@ export function ScanControl() {
         <TooltipContent side="bottom" align="end">
           {fast ? "Fast read-only scan" : "Read-only scan"} of{" "}
           <span className="font-mono">{target}</span>
-          {fast ? ", from the drive's file table" : ""}. Nothing is modified.
+          {fast ? ", from the drive's file table" : ""}. Nothing is modified. {keysText(["⌘", "R"])}
         </TooltipContent>
       </Tooltip>
     </>

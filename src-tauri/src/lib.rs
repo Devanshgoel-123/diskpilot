@@ -5,6 +5,7 @@
 //! cleanup::executor, with `safety` as the single gate for every path that is
 //! read from the UI or removed. Docker changes go through `docker::actions`.
 
+pub mod adjust;
 pub mod apps;
 pub mod assistant;
 pub mod classifier;
@@ -130,6 +131,7 @@ pub fn run() {
             commands::open_owner_app,
             commands::uninstall_app,
             commands::file_thumbnail,
+            commands::open_listed_file,
             commands::get_scan_history,
             commands::get_app_badges,
             commands::get_app_storage,

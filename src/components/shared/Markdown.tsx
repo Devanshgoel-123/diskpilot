@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
 import { type Inline, parseMarkdown } from "@/lib/markdown";
+import { cn } from "@/lib/utils";
 
 function Inlines({ items }: { items: Inline[] }) {
   return (
@@ -23,15 +24,27 @@ function Inlines({ items }: { items: Inline[] }) {
 }
 
 /** Renders the assistant's Markdown subset as React elements (no raw HTML). */
-export function Markdown({ text }: { text: string }) {
+export function Markdown({ text, variant }: { text: string; variant?: "notes" }) {
   const blocks = useMemo(() => parseMarkdown(text), [text]);
+  const notes = variant === "notes";
   return (
-    <div className="selectable space-y-2.5 text-[13px] leading-relaxed">
+    <div
+      className={
+        notes
+          ? "selectable space-y-2 text-[13px] leading-relaxed text-foreground/85"
+          : "selectable space-y-2.5 text-[13px] leading-relaxed"
+      }
+    >
       {blocks.map((b, idx) => {
         switch (b.kind) {
           case "heading":
             return (
-              <p key={idx} className="font-semibold">
+              <p
+                key={idx}
+                className={
+                  notes ? "pt-3 text-xs font-semibold text-foreground first:pt-0" : "font-semibold"
+                }
+              >
                 <Inlines items={b.inlines} />
               </p>
             );
@@ -40,7 +53,10 @@ export function Markdown({ text }: { text: string }) {
             return (
               <Tag
                 key={idx}
-                className={b.ordered ? "list-decimal space-y-1 pl-5" : "list-disc space-y-1 pl-5"}
+                className={cn(
+                  b.ordered ? "list-decimal space-y-1 pl-5" : "list-disc space-y-1 pl-5",
+                  notes && "space-y-1.5 marker:text-subtle-foreground",
+                )}
               >
                 {b.items.map((item, j) => (
                   <li key={j}>

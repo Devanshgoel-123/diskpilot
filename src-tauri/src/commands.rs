@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::adjust;
 use crate::assistant::{
     self, keychain, provider::Provider, tools::ToolContext, AssistantReply, AssistantStatus,
     ModelInfo,
@@ -39,6 +40,8 @@ pub const EVENT_SCAN_FINISHED: &str = "scan://finished";
 /// Results for everything except app containers, which are still being
 /// measured. Payload: the scan id. `scan://finished` follows.
 pub const EVENT_SCAN_PARTIAL: &str = "scan://partial";
+/// The last scan's numbers changed because DiskPilot removed something.
+pub const EVENT_SCAN_UPDATED: &str = "scan://updated";
 
 /// Run blocking work off the main thread.
 async fn blocking<T: Send + 'static>(
@@ -542,6 +545,86 @@ pub async fn file_thumbnail(
     path: String,
     size: f64,
 ) -> AppResult<tauri::ipc::Response> {
+    ensure_listed(&state, &path)?;
+    blocking(move || {
+        let path = previewable_file(&path)?;
+        ensure_local(&path)?;
+        let system = if cfg!(windows) { "Windows" } else { "macOS" };
+        crate::preview::thumbnail_png(&path, size)
+            .map(tauri::ipc::Response::new)
+            .ok_or_else(|| {
+                AppError::Other(format!("{system} could not make a preview of this file"))
+            })
+    })
+    .await
+}
+
+/// Opens a file DiskPilot listed in its default app (Preview for photos,
+/// QuickTime for videos), so people can look at it properly before deciding.
+///
+/// The same rules as `file_thumbnail` apply, and only types that open to be
+/// looked at are accepted (see `opens_to_view`): never an app, script,
+/// installer or archive.
+#[tauri::command]
+pub async fn open_listed_file(state: State<'_, AppState>, path: String) -> AppResult<()> {
+    ensure_listed(&state, &path)?;
+    blocking(move || {
+        let path = previewable_file(&path)?;
+        if !opens_to_view(&path) {
+            let show = if cfg!(windows) {
+                "Show in File Explorer"
+            } else {
+                "Show in Finder"
+            };
+            return Err(AppError::Other(format!(
+                "DiskPilot opens photos, videos, audio and documents only. Use {show} for this file."
+            )));
+        }
+        ensure_local(&path)?;
+        #[cfg(windows)]
+        return crate::winshell::shell_open(path.as_os_str(), None, true).map_err(|_| {
+            AppError::Other(format!("Windows has no app to open {}", path.display()))
+        });
+        #[cfg(not(windows))]
+        let status = std::process::Command::new("/usr/bin/open")
+            .arg("--")
+            .arg(&path)
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map_err(|e| AppError::io(&path, &e))?;
+        #[cfg(not(windows))]
+        if status.success() {
+            Ok(())
+        } else {
+            Err(AppError::Other(format!(
+                "macOS has no app to open {}",
+                path.display()
+            )))
+        }
+    })
+    .await
+}
+
+/// Refuses a file that is online only (a OneDrive placeholder), since
+/// previewing or opening it would download it. Files are always local on a
+/// Mac as far as this check goes.
+fn ensure_local(path: &Path) -> AppResult<()> {
+    #[cfg(windows)]
+    if path
+        .symlink_metadata()
+        .is_ok_and(|m| !crate::platform::is_local(&m))
+    {
+        return Err(AppError::Other(
+            "This file is online only. DiskPilot does not download files to preview them.".into(),
+        ));
+    }
+    let _ = path;
+    Ok(())
+}
+
+/// Only paths that Files by type or the duplicate search listed, exactly as
+/// listed, may be previewed or opened.
+fn ensure_listed(state: &AppState, path: &str) -> AppResult<()> {
     let listed = {
         let slot = state.slot();
         let dups = state.duplicates();
@@ -558,31 +641,27 @@ pub async fn file_thumbnail(
         });
         by_type.chain(duplicates).any(|p| p == path)
     };
-    if !listed {
-        return Err(AppError::Other(
+    if listed {
+        Ok(())
+    } else {
+        Err(AppError::Other(
             "Only files DiskPilot listed can be previewed".into(),
-        ));
+        ))
     }
-    blocking(move || {
-        let path = previewable_file(&path)?;
-        #[cfg(windows)]
-        if path
-            .symlink_metadata()
-            .is_ok_and(|m| !crate::platform::is_local(&m))
-        {
-            return Err(AppError::Other(
-                "This file is online only. DiskPilot does not download files to preview them."
-                    .into(),
-            ));
-        }
-        let system = if cfg!(windows) { "Windows" } else { "macOS" };
-        crate::preview::thumbnail_png(&path, size)
-            .map(tauri::ipc::Response::new)
-            .ok_or_else(|| {
-                AppError::Other(format!("{system} could not make a preview of this file"))
-            })
+}
+
+/// Whether opening the file only shows it: photos, videos, audio and
+/// documents. Archives (opening one unpacks it), installers and disk images
+/// (they mount or run), apps and scripts are refused. The type comes from
+/// the extension, which is also what macOS uses to choose the app.
+fn opens_to_view(path: &Path) -> bool {
+    use crate::filekinds::FileKind;
+    path.file_name().and_then(FileKind::of).is_some_and(|k| {
+        matches!(
+            k,
+            FileKind::Images | FileKind::Videos | FileKind::Audio | FileKind::Documents
+        )
     })
-    .await
 }
 
 /// Whether `path` is `canonical`, the path with every link resolved.
@@ -732,6 +811,7 @@ pub fn discard_cleanup_plan(state: State<'_, AppState>, plan_id: String) {
 /// every path immediately before acting on it.
 #[tauri::command]
 pub async fn execute_cleanup_plan(
+    app: AppHandle,
     state: State<'_, AppState>,
     plan_id: String,
 ) -> AppResult<CleanupRecord> {
@@ -749,8 +829,20 @@ pub async fn execute_cleanup_plan(
     let root = cleanup_root(&state);
     let home = state.home.clone();
     let history = state.history.clone();
+    let planned: std::collections::HashMap<String, (u64, Option<crate::model::Category>)> = plan
+        .items
+        .iter()
+        .map(|i| (i.path.clone(), (i.bytes, i.category)))
+        .collect();
+    let trashed = plan.method == CleanupMethod::Trash;
+    let reporter = app.clone();
     let record = blocking(move || {
-        let record = executor::execute(&plan, &root, &home, &executor::RealFileOps);
+        let app = reporter;
+        let report = |p: executor::CleanupProgress| {
+            let _ = app.emit(executor::EVENT_CLEANUP_PROGRESS, p);
+        };
+        let record =
+            executor::execute_with_progress(&plan, &root, &home, &executor::RealFileOps, &report);
         if let Some(h) = history {
             h.record_cleanup(&record)?;
         }
@@ -769,7 +861,60 @@ pub async fn execute_cleanup_plan(
     if let Some(report) = state.duplicates().report.as_mut() {
         duplicates::forget(report, &done, &state.home);
     }
+    let removals = done
+        .iter()
+        .map(|p| {
+            let (bytes, category) = planned.get(p).copied().unwrap_or((0, None));
+            adjust::Removal {
+                path: PathBuf::from(p),
+                bytes,
+                category,
+                trashed,
+            }
+        })
+        .collect();
+    reflect_removals(app, removals).await;
     Ok(record)
+}
+
+/// Takes what DiskPilot just removed off the last scan's numbers, rebuilds
+/// its recommendations, tells the window (scan://updated) and saves the
+/// result, so nothing waits for the next scan. Does nothing if a newer scan
+/// finished meanwhile, since that one already measured the change.
+async fn reflect_removals(app: AppHandle, removals: Vec<adjust::Removal>) {
+    if removals.is_empty() {
+        return;
+    }
+    let _ = blocking(move || {
+        let state = app.state::<AppState>();
+        let Some(before) = state.slot().last.clone() else {
+            return Ok(());
+        };
+        let outcome = adjust::apply(&before, &removals, &state.home);
+        let recs = scan_recommendations(&state.home, &outcome);
+        let outcome = Arc::new(outcome);
+        {
+            let mut slot = state.slot();
+            if !slot.last.as_ref().is_some_and(|l| Arc::ptr_eq(l, &before)) {
+                return Ok(());
+            }
+            slot.last = Some(outcome.clone());
+            let gone: std::collections::HashSet<String> = removals
+                .iter()
+                .map(|r| r.path.display().to_string())
+                .collect();
+            slot.recommendations = Arc::new(recs);
+            slot.remove_paths(&gone);
+        }
+        let _ = app.emit(EVENT_SCAN_UPDATED, ());
+        if let Some(dir) = &state.data_dir {
+            if let Err(e) = snapshot::save(dir, &outcome) {
+                eprintln!("diskpilot: could not save updated scan results: {e}");
+            }
+        }
+        Ok(())
+    })
+    .await;
 }
 
 #[tauri::command]
@@ -1024,7 +1169,9 @@ pub async fn empty_trash(
     };
     let dir = trash::trash_dir(&state.home);
     let history = state.history.clone();
+    let reporter = app.clone();
     let outcome = blocking(move || {
+        let app = reporter;
         let result = trash::empty(&preview, &dir, &cancel, &mut |p| {
             let _ = app.emit(trash::EVENT_TRASH_PROGRESS, p);
         });
@@ -1037,6 +1184,21 @@ pub async fn empty_trash(
     })
     .await;
     state.trash().running = None;
+    if let Ok(result) = &outcome {
+        let removals = result
+            .record
+            .items
+            .iter()
+            .filter(|i| i.status == ItemStatus::Succeeded)
+            .map(|i| adjust::Removal {
+                path: PathBuf::from(&i.target),
+                bytes: i.bytes,
+                category: Some(crate::model::Category::UserData),
+                trashed: false,
+            })
+            .collect();
+        reflect_removals(app, removals).await;
+    }
     outcome
 }
 
@@ -1449,8 +1611,44 @@ fn unique_id(prefix: &str, now: i64) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::opens_to_view;
     #[cfg(unix)]
     use super::previewable_file;
+
+    #[test]
+    fn opens_photos_videos_and_documents_only() {
+        let yes = [
+            "beach.png",
+            "clip.MOV",
+            "notes.pdf",
+            "song.m4a",
+            "IMG_1.HEIC",
+        ];
+        let no = [
+            "run.command",
+            "Install.sh",
+            "Tool",
+            "App.app",
+            "archive.zip",
+            "Setup.dmg",
+            "setup.pkg",
+            "link.webloc",
+            ".hidden.jpg",
+            "Setup.exe",
+            "setup.msi",
+            "run.bat",
+            "run.cmd",
+            "script.ps1",
+            "Shortcut.lnk",
+            "page.url",
+        ];
+        for n in yes {
+            assert!(opens_to_view(std::path::Path::new(n)), "{n}");
+        }
+        for n in no {
+            assert!(!opens_to_view(std::path::Path::new(n)), "{n}");
+        }
+    }
 
     #[cfg(unix)]
     #[test]

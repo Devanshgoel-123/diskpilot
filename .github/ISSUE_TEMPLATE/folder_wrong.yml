@@ -1,0 +1,58 @@
+name: A folder DiskPilot got wrong
+description: DiskPilot explained a folder wrongly, sized it wrongly, or put it in the wrong tier
+labels: [classification]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks, these reports are how DiskPilot's rules get better. Replace personal names in paths with placeholders, for example `~/Projects/<my-app>/build`.
+  - type: input
+    id: path
+    attributes:
+      label: Folder
+      description: The path as DiskPilot shows it, with personal names replaced.
+      placeholder: ~/Library/Application Support/<App>/Cache
+    validations:
+      required: true
+  - type: textarea
+    id: shown
+    attributes:
+      label: What DiskPilot said
+      description: Its name, category, tier (Likely safe, Review first, Keep) and size.
+      placeholder: '"Application caches", Likely safe, 2.1 GB'
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What it really is
+      description: Which app or tool makes it, whether it comes back on its own, and what breaks if it is removed.
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is wrong
+      multiple: true
+      options:
+        - The explanation or app name
+        - The tier (it is safer or riskier than shown)
+        - The size
+        - It should not be suggested at all
+        - It should be suggested but is not
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: DiskPilot version
+      description: Shown in Settings > About
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and chip
+      placeholder: macOS 15.1, Apple M2
+    validations:
+      required: true

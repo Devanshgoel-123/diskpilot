@@ -449,8 +449,9 @@ fn personal_files_are_grouped_by_type() {
         .find(|g| g.kind == FileKind::Installers)
         .expect("installers found");
     assert_eq!(installers.file_count, 1);
-    // The fixture installer is under 1 MB, so it is counted but not listed.
-    assert!(installers.files.is_empty());
+    // 400 KB is above the 25 KB listing threshold.
+    let names: Vec<&str> = installers.files.iter().map(|e| e.name.as_str()).collect();
+    assert_eq!(names, ["installer.dmg"]);
 }
 
 #[test]

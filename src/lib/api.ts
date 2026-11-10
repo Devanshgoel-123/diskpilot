@@ -43,6 +43,7 @@ import type {
   ScanSummary,
   TrashPreview,
   TrashProgress,
+  CleanupProgress,
   TrashResult,
   TrashSummary,
   UninstallOutcome,
@@ -85,6 +86,8 @@ export const api = {
   /** PNG bytes of a system thumbnail (Quick Look on macOS); files inside the last scan only. */
   fileThumbnail: (path: string, size: number) =>
     invoke<ArrayBuffer>("file_thumbnail", { path, size }),
+  /** Opens a listed file in its default app; apps and scripts are refused. */
+  openListedFile: (path: string) => invoke<null>("open_listed_file", { path }),
   getAppStorage: () => invoke<AppStorageReport>("get_app_storage"),
   getAppBadges: (paths: string[]) => invoke<Record<string, AppBadge>>("get_app_badges", { paths }),
   /**
@@ -177,6 +180,15 @@ export function onScanPartial(cb: (scanId: string) => void): Promise<UnlistenFn>
 
 export function onScanFinished(cb: (p: ScanFinished) => void): Promise<UnlistenFn> {
   return listen<ScanFinished>("scan://finished", (e) => cb(e.payload));
+}
+
+/** The last scan's numbers changed because DiskPilot removed something. */
+export function onScanUpdated(cb: () => void): Promise<UnlistenFn> {
+  return listen<null>("scan://updated", () => cb());
+}
+
+export function onCleanupProgress(cb: (p: CleanupProgress) => void): Promise<UnlistenFn> {
+  return listen<CleanupProgress>("cleanup://progress", (e) => cb(e.payload));
 }
 
 export function onTrashProgress(cb: (p: TrashProgress) => void): Promise<UnlistenFn> {

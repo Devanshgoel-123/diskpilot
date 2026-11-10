@@ -1,5 +1,6 @@
 import { History } from "lucide-react";
 import { useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -12,7 +13,9 @@ import { CleanupHistory } from "./CleanupHistory";
 import { ScansTable } from "./ScansTable";
 
 export function HistoryPage() {
-  const { history, env, refreshHistory } = useApp();
+  const { history, env, refreshHistory } = useApp(
+    useShallow((s) => ({ history: s.history, env: s.env, refreshHistory: s.refreshHistory })),
+  );
   const home = env?.homeDir;
 
   useEffect(() => {

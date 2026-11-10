@@ -38,6 +38,7 @@ export function WhatsNewAfterUpdate() {
       title={`DiskPilot is now ${shown}`}
       subtitle="Here is what changed."
       notes={releaseNotes(shown)}
+      version={shown}
       onClose={() => setShown(null)}
       footer={<Button onClick={() => setShown(null)}>Got it</Button>}
     />

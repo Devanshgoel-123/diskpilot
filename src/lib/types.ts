@@ -141,7 +141,7 @@ export interface FileKindGroup {
   kind: FileKind;
   bytes: number;
   fileCount: number;
-  /** Largest first, each at least 1 MB. */
+  /** Largest first, at most 2,000, each at least 25 KB. */
   files: FileEntry[];
 }
 
@@ -325,6 +325,16 @@ export interface TrashPreview {
   entries: TrashEntry[];
   totalBytes: number;
   totalFiles: number;
+}
+
+/** How far a running cleanup has got (cleanup://progress). */
+export interface CleanupProgress {
+  planId: string;
+  itemsDone: number;
+  itemsTotal: number;
+  bytesDone: number;
+  /** The last item handled, by name. */
+  current: string | null;
 }
 
 export interface TrashProgress {

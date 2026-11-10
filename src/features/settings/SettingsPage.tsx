@@ -2,11 +2,14 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ExternalLink, FolderOpen, Lock, Monitor, Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { api, errorMessage } from "@/lib/api";
 import { formatBytes, formatRelative, tildify } from "@/lib/format";
+import { keysText, useShortcutsDialog } from "@/lib/shortcuts";
+import { playScanDone, setSoundsEnabled, soundsEnabled } from "@/lib/sounds";
 import { useApp } from "@/lib/store";
 import type { ThemePreference } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -15,7 +18,7 @@ import { isWindows, words } from "@/lib/platform";
 import { AssistantSettings } from "./AssistantSettings";
 import { BackgroundSettings } from "./BackgroundSettings";
 import { UpdatesSettings } from "./UpdatesSettings";
-import { Section, Setting } from "./parts";
+import { Section, Setting, Switch } from "./parts";
 
 const REPO_URL = "https://github.com/Devanshgoel-123/diskpilot";
 
@@ -26,7 +29,9 @@ const THEMES: { id: ThemePreference; label: string; icon: typeof Sun }[] = [
 ];
 
 function SavedResults() {
-  const { summary, scanning, forgetScan } = useApp();
+  const { summary, scanning, forgetScan } = useApp(
+    useShallow((s) => ({ summary: s.summary, scanning: s.scanning, forgetScan: s.forgetScan })),
+  );
   const [fileBytes, setFileBytes] = useState<number | null>(null);
   // Re-read after each scan (which saves) and after clearing.
   useEffect(() => {
@@ -70,7 +75,16 @@ function SavedResults() {
 }
 
 export function SettingsPage() {
-  const { theme, setTheme, scanRoot, setScanRoot, env, scanning } = useApp();
+  const { theme, setTheme, scanRoot, setScanRoot, env, scanning } = useApp(
+    useShallow((s) => ({
+      theme: s.theme,
+      setTheme: s.setTheme,
+      scanRoot: s.scanRoot,
+      setScanRoot: s.setScanRoot,
+      env: s.env,
+      scanning: s.scanning,
+    })),
+  );
   const home = env?.homeDir;
 
   const chooseFolder = async () => {
@@ -121,6 +135,7 @@ export function SettingsPage() {
                 </div>
               }
             />
+            <SoundsSetting />
           </Section>
 
           <Section title="Scanning">
@@ -193,6 +208,21 @@ export function SettingsPage() {
 
           <Section title="About">
             <Setting
+              label="Keyboard shortcuts"
+              description={`Go to any page with ${keysText(["⌘", "1"])} to ${keysText(["⌘", "8"])}, scan again with ${keysText(["⌘", "R"])}, filter a list with ${keysText(["⌘", "F"])}.`}
+              control={
+                <Button
+                  variant="secondary"
+                  onClick={() => useShortcutsDialog.getState().setOpen(true)}
+                >
+                  Show all
+                  <kbd className="ml-1 font-mono text-2xs text-muted-foreground">
+                    {keysText(["⌘", "/"])}
+                  </kbd>
+                </Button>
+              }
+            />
+            <Setting
               label="DiskPilot"
               description={`Version ${env?.appVersion ?? "—"} · ${env?.os ?? ""} ${env?.arch ?? ""} · MIT License`}
               control={
@@ -206,5 +236,26 @@ export function SettingsPage() {
         </div>
       </div>
     </>
+  );
+}
+
+function SoundsSetting() {
+  const [on, setOn] = useState(soundsEnabled);
+  return (
+    <Setting
+      label="Sounds"
+      description="A quiet tone while a scan runs, and a soft chime when a scan or cleanup finishes. Never while the window is hidden."
+      control={
+        <Switch
+          on={on}
+          label="Sounds"
+          onChange={(v) => {
+            setSoundsEnabled(v);
+            setOn(v);
+            if (v) playScanDone();
+          }}
+        />
+      }
+    />
   );
 }

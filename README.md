@@ -4,9 +4,36 @@
 
 DiskPilot is a native desktop application built with Tauri and Rust. It scans your storage locally, classifies every folder with an explanation, identifies developer data that can be regenerated, and performs cleanup only through a previewed, confirmed and audited workflow. It is built for developers whose Macs accumulate Docker images, `node_modules`, Xcode build data, AI coding tool data and package manager caches, and who want to know what is safe to remove before anything is removed.
 
-> **Project status:** early development (version 0.5). Release builds are published on GitHub, signed with a Developer ID and notarized by Apple; see [Installation](#installation).
+> **Project status:** early development (version 0.6). Release builds are published on GitHub, signed with a Developer ID and notarized by Apple; see [Installation](#installation).
 
-<!-- Screenshots will be added here. Contributors: please do not submit screenshots containing personal file names. -->
+<p align="center">
+  <img src="docs/images/diskpilot-tour.gif" alt="A 20-second tour of DiskPilot: the Overview, reviewing a cleanup, previewing duplicate copies, and files grouped by type" width="900">
+</p>
+
+**Overview.** How full the disk is, what is likely recoverable, and the largest items DiskPilot can explain.
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/overview-light.jpg">
+  <img src="docs/images/overview-dark.jpg" alt="DiskPilot Overview: 130 GB used of 245 GB, 23.2 GB likely recoverable, and a list of the largest items with their safety tier" width="900">
+</picture>
+
+**Cleanup.** Every suggestion is Likely safe, Review first or Keep, with its path, size and the reason.
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/cleanup-light.jpg">
+  <img src="docs/images/cleanup-dark.jpg" alt="DiskPilot Cleanup screen with suggestions grouped into Likely safe, Review first and Keep" width="900">
+</picture>
+
+**Duplicates.** Identical files with a preview of each copy. One copy in every set always stays.
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/duplicates-preview-light.jpg">
+  <img src="docs/images/duplicates-preview-dark.jpg" alt="DiskPilot Duplicates screen with a large preview of one copy open" width="900">
+</picture>
+
+<!-- Contributors: please do not submit screenshots containing personal file names. -->
+
+**Talk to me.** Questions, ideas or a folder DiskPilot got wrong: post in [GitHub Discussions](https://github.com/Devanshgoel-123/diskpilot/discussions) or DM me on X at [@0xgoel](https://x.com/0xgoel). If you use DiskPilot, I'll gladly do a 15 minute call to hear what works and what doesn't.
 
 ## Contents
 
@@ -98,7 +125,7 @@ Dedicated analyzers inspect the on-disk layout of individual tools:
 | Go                 | Module cache and build cache, including locations moved with `go env -w`; toolchains downloaded into the module cache; programs installed with `go install`. The module cache is read-only, so it is cleared with `go clean -modcache`, never by DiskPilot                                       |
 | Local AI models    | Ollama models (with layers shared between models) and LM Studio models, listed for reference; Ollama layers no model uses and interrupted downloads are offered for cleanup                                                                                                                      |
 
-**Credentials in AI transcripts.** Coding agents keep every conversation on disk, including keys that were pasted or printed. DiskPilot can check the Claude Code, Codex CLI and Gemini CLI transcripts for well-known credential formats (API keys, access tokens, private keys). The check runs offline, changes nothing, and shows only a masked form of each value.
+**Credentials in AI transcripts.** Coding agents keep your conversations on disk, including keys that were pasted or printed. DiskPilot can check the Claude Code, Codex CLI and Gemini CLI transcripts for well-known credential formats (API keys, access tokens, private keys). The check runs offline, changes nothing, and shows only a masked form of each value.
 
 Findings that can be cleaned up feed into the same recommendation and cleanup workflow. For AI agents, caches, logs and downloaded updates are marked likely safe; edit checkpoints, stale backups and sessions for deleted projects need review; conversation history, sign-in and settings are never recommended. DiskPilot reads other applications' databases but never modifies them.
 

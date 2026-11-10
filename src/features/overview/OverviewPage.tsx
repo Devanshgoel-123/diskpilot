@@ -1,6 +1,7 @@
 import { ClearedStatsLine } from "@/features/history/ClearedStats";
 import { FolderSearch, ScanSearch } from "lucide-react";
 import { useMemo } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -57,7 +58,22 @@ export function OverviewPage() {
     recommendations,
     drives,
     fastScan,
-  } = useApp();
+  } = useApp(
+    useShallow((s) => ({
+      disk: s.disk,
+      summary: s.summary,
+      env: s.env,
+      scanning: s.scanning,
+      partial: s.partial,
+      progress: s.progress,
+      scanRoot: s.scanRoot,
+      startScan: s.startScan,
+      navigate: s.navigate,
+      recommendations: s.recommendations,
+      drives: s.drives,
+      fastScan: s.fastScan,
+    })),
+  );
   const home = env?.homeDir;
   const w = words();
   // Windows: the strip shows the drive that holds what was (or will be) scanned.

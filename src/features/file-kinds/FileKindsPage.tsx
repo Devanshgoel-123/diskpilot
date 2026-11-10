@@ -10,18 +10,22 @@ import {
   Search,
   Shapes,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { FilePreview } from "@/components/shared/FilePreview";
 import { FileThumbnail } from "@/components/shared/FileThumbnail";
+import { Pager } from "@/components/shared/Pager";
+import { usePage, useScrollTopOnPage } from "@/lib/usePage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CleanupDialog } from "@/features/recommendations/CleanupDialog";
 import { StorageTabs } from "@/features/storage/StorageTabs";
 import { api } from "@/lib/api";
 import { formatBytes, formatCount, formatRelative, tildify } from "@/lib/format";
+import { listedNote } from "./listedNote";
 import { useApp } from "@/lib/store";
 import type { CleanupRecord, FileEntry, FileKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -37,6 +41,7 @@ const KINDS: Record<FileKind, { label: string; icon: LucideIcon }> = {
   documents: { label: "Documents", icon: FileText },
 };
 
+const PAGE_SIZE = 100;
 const DAY = 24 * 60 * 60 * 1000;
 const AGES = [
   { id: "any", label: "Any age", olderThan: 0 },
@@ -61,7 +66,14 @@ export function FileKindsPage() {
 }
 
 function FileKindsView() {
-  const { summary, env, scanning, startScan } = useApp();
+  const { summary, env, scanning, startScan } = useApp(
+    useShallow((s) => ({
+      summary: s.summary,
+      env: s.env,
+      scanning: s.scanning,
+      startScan: s.startScan,
+    })),
+  );
   const home = env?.homeDir;
   const groups = useMemo(() => summary?.fileKinds ?? [], [summary]);
   const [picked, setPicked] = useState<FileKind | null>(null);
@@ -96,6 +108,11 @@ function FileKindsView() {
         (!olderThan || (f.modifiedMs !== null && now - f.modifiedMs > olderThan)),
     );
   }, [files, query, age, folder, home, now]);
+
+  // 100 rows a page: a page renders at once, and the rest wait until asked for.
+  const page = usePage(visible, PAGE_SIZE, `${kind}|${query}|${age}|${folder}`);
+  const listRef = useRef<HTMLDivElement>(null);
+  useScrollTopOnPage(listRef, page.page);
 
   const sizes = useMemo(
     () => new Map(groups.flatMap((g) => g.files.map((f) => [f.path, f.bytes] as const))),
@@ -141,7 +158,8 @@ function FileKindsView() {
   const finished = (record: CleanupRecord) => {
     const done = record.items.filter((i) => i.status === "succeeded").map((i) => i.target);
     setGone((g) => new Set([...g, ...done]));
-    setSelected((s) => new Set([...s].filter((p) => !done.includes(p))));
+    const gone = new Set(done);
+    setSelected((s) => new Set([...s].filter((p) => !gone.has(p))));
   };
 
   const header = (
@@ -233,6 +251,7 @@ function FileKindsView() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Filter by name or path"
+                data-filter
                 className="pl-7"
                 aria-label="Filter by name or path"
               />
@@ -268,76 +287,85 @@ function FileKindsView() {
               disabled={!visible.length}
               onClick={toggleVisible}
             >
-              {allVisibleChosen ? "Clear selection" : `Select ${formatCount(visible.length)} shown`}
+              {allVisibleChosen ? "Clear selection" : `Select all ${formatCount(visible.length)}`}
             </Button>
           </div>
-          <div className="min-h-0 flex-1 overflow-auto">
-            <ul aria-label={group ? KINDS[group.kind].label : undefined}>
-              {visible.map((f, i) => (
-                <li
-                  key={f.path}
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === " " && e.target === e.currentTarget) {
-                      e.preventDefault();
-                      setPreview(i);
-                    }
-                  }}
-                  className="flex h-10 items-center gap-3 border-b border-border/60 px-4 outline-none hover:bg-hover/60 focus-visible:bg-hover"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected.has(f.path)}
-                    onChange={() => toggle(f.path)}
-                    aria-label={`Select ${f.name}`}
-                    className="size-3.5 shrink-0 accent-[var(--accent)]"
-                  />
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    onClick={() => setPreview(i)}
-                    aria-label={`Preview ${f.name}`}
-                    className="shrink-0"
-                  >
-                    <FileThumbnail path={f.path} size={28} />
-                  </button>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px]" title={f.name}>
-                      {f.name}
-                    </span>
-                    <span
-                      className="block truncate font-mono text-2xs text-subtle-foreground"
-                      title={f.path}
-                    >
-                      {tildify(parentOf(f.path), home)}
-                    </span>
-                  </span>
-                  <span className="w-28 shrink-0 text-2xs text-subtle-foreground">
-                    {formatRelative(f.modifiedMs)}
-                  </span>
-                  <span className="tabular w-20 shrink-0 text-right text-xs">
-                    {formatBytes(f.bytes)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setPreview(i)}
-                    title="Preview (Space)"
-                    aria-label={`Preview ${f.name}`}
-                    className="shrink-0 rounded p-1 text-muted-foreground hover:bg-hover hover:text-foreground"
-                  >
-                    <Eye className="size-3.5" aria-hidden />
-                  </button>
-                </li>
-              ))}
-            </ul>
+          {group ? (
+            <div className="flex shrink-0 items-center gap-3 border-b border-border/60 px-4 py-1.5">
+              <p className="min-w-0 flex-1 text-2xs text-muted-foreground">
+                {listedNote(group.files.length, group.fileCount)}
+              </p>
+              <Pager page={page} label="files" />
+            </div>
+          ) : null}
+          <div ref={listRef} className="min-h-0 flex-1 overflow-auto">
+            {visible.length ? (
+              <ul aria-label={group ? KINDS[group.kind].label : undefined}>
+                {page.items.map((f, j) => {
+                  const i = page.start + j;
+                  return (
+                    <li key={f.path} className="h-10">
+                      <div
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === " " && e.target === e.currentTarget) {
+                            e.preventDefault();
+                            setPreview(i);
+                          }
+                        }}
+                        className="flex h-full items-center gap-3 border-b border-border/60 px-4 outline-none hover:bg-hover/60 focus-visible:bg-hover"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected.has(f.path)}
+                          onChange={() => toggle(f.path)}
+                          aria-label={`Select ${f.name}`}
+                          className="size-3.5 shrink-0 accent-[var(--accent)]"
+                        />
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          onClick={() => setPreview(i)}
+                          aria-label={`Preview ${f.name}`}
+                          className="shrink-0"
+                        >
+                          <FileThumbnail path={f.path} size={28} />
+                        </button>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[13px]" title={f.name}>
+                            {f.name}
+                          </span>
+                          <span
+                            className="block truncate font-mono text-2xs text-subtle-foreground"
+                            title={f.path}
+                          >
+                            {tildify(parentOf(f.path), home)}
+                          </span>
+                        </span>
+                        <span className="w-28 shrink-0 text-2xs text-subtle-foreground">
+                          {formatRelative(f.modifiedMs)}
+                        </span>
+                        <span className="tabular w-20 shrink-0 text-right text-xs">
+                          {formatBytes(f.bytes)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setPreview(i)}
+                          title="Preview (Space)"
+                          aria-label={`Preview ${f.name}`}
+                          className="shrink-0 rounded p-1 text-muted-foreground hover:bg-hover hover:text-foreground"
+                        >
+                          <Eye className="size-3.5" aria-hidden />
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+            <Pager page={page} label="files" className="px-4 py-3" />
             {visible.length === 0 ? (
               <p className="px-4 py-6 text-xs text-muted-foreground">No files match the filter.</p>
-            ) : group ? (
-              <p className="px-4 py-3 text-2xs text-subtle-foreground">
-                {group.files.length < group.fileCount
-                  ? `The ${formatCount(group.files.length)} largest of ${formatCount(group.fileCount)} files. Files under 1 MB count in the total but are not listed.`
-                  : `All ${formatCount(group.fileCount)} files of at least 1 MB.`}
-              </p>
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-3 border-t border-border bg-panel px-4 py-2.5">
@@ -365,11 +393,12 @@ function FileKindsView() {
           path: f.path,
           bytes: f.bytes,
           modifiedMs: f.modifiedMs,
-          note: selected.has(f.path) ? `Selected to move to ${words().trash}` : undefined,
+          selected: selected.has(f.path),
         }))}
         index={preview}
         onIndexChange={setPreview}
         onClose={() => setPreview(null)}
+        onToggleSelect={toggle}
       />
       {dialog ? (
         <CleanupDialog

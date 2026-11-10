@@ -32,6 +32,12 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      # The website, built offline from its saved stats so CI does not depend on the GitHub API.
+      - run: pnpm --dir site install --frozen-lockfile
+      - run: node --test site/build/pages.test.mjs
+      - run: pnpm --dir site build
+        env:
+          DISKPILOT_OFFLINE: "1"
 
   engine:
     name: Rust engine (fmt, clippy, tests)

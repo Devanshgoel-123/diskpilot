@@ -17,6 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AppIcon } from "@/components/shared/AppIcon";
@@ -264,7 +265,15 @@ function ToolCard({
 
 export function DeveloperToolsPage() {
   const { devtools, analyzingDevTools, analyzeDevTools, recommendations, reviewInRecommendations } =
-    useApp();
+    useApp(
+      useShallow((s) => ({
+        devtools: s.devtools,
+        analyzingDevTools: s.analyzingDevTools,
+        analyzeDevTools: s.analyzeDevTools,
+        recommendations: s.recommendations,
+        reviewInRecommendations: s.reviewInRecommendations,
+      })),
+    );
 
   useEffect(() => {
     if (!devtools) void analyzeDevTools();

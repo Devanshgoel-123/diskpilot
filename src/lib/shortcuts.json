@@ -1,0 +1,62 @@
+{
+  "$comment": "DiskPilot's keyboard shortcuts. The app's Keyboard Shortcuts window and the website's /shortcuts page are both made from this list, so they always match. `since` is the first version that has the shortcut; the website lists only those already released.",
+  "groups": [
+    {
+      "title": "Go to a page",
+      "items": [
+        { "keys": ["⌘", "1"], "action": "Overview", "page": "overview", "since": "0.6.3" },
+        { "keys": ["⌘", "2"], "action": "Storage", "page": "explorer", "since": "0.6.3" },
+        { "keys": ["⌘", "3"], "action": "Duplicates", "page": "duplicates", "since": "0.6.3" },
+        { "keys": ["⌘", "4"], "action": "Applications", "page": "applications", "since": "0.6.3" },
+        { "keys": ["⌘", "5"], "action": "Developer Tools", "page": "developer", "since": "0.6.3" },
+        { "keys": ["⌘", "6"], "action": "Docker", "page": "docker", "since": "0.6.3" },
+        { "keys": ["⌘", "7"], "action": "Cleanup", "page": "recommendations", "since": "0.6.3" },
+        { "keys": ["⌘", "8"], "action": "History", "page": "history", "since": "0.6.3" },
+        { "keys": ["⌘", ","], "action": "Settings", "page": "settings", "since": "0.6.3" }
+      ]
+    },
+    {
+      "title": "Scan",
+      "items": [
+        { "keys": ["⌘", "R"], "action": "Scan again", "command": "scan", "since": "0.6.3" },
+        { "keys": ["⌘", "."], "action": "Stop the scan", "command": "stop", "since": "0.6.3" }
+      ]
+    },
+    {
+      "title": "Lists",
+      "items": [
+        {
+          "keys": ["⌘", "F"],
+          "action": "Filter the list on this page",
+          "command": "filter",
+          "since": "0.6.3"
+        },
+        {
+          "keys": ["Space"],
+          "action": "Preview the file in the focused row",
+          "since": "0.6.0"
+        }
+      ]
+    },
+    {
+      "title": "In a preview",
+      "items": [
+        { "keys": ["←", "→"], "action": "Previous or next file", "since": "0.6.0" },
+        { "keys": ["⌘", "⌫"], "action": "Select or unselect for the Trash", "since": "0.6.1" },
+        { "keys": ["⌘", "O"], "action": "Open in its own app", "since": "0.6.1" },
+        { "keys": ["Space"], "action": "Close the preview", "since": "0.6.0" }
+      ]
+    },
+    {
+      "title": "Help",
+      "items": [
+        {
+          "keys": ["⌘", "/"],
+          "action": "Show keyboard shortcuts",
+          "command": "help",
+          "since": "0.6.3"
+        }
+      ]
+    }
+  ]
+}

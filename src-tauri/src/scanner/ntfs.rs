@@ -589,6 +589,8 @@ impl Tree {
                     nlink: u64::from(node.links.max(1)),
                     ino: u64::from(name.child),
                     other_volume: false,
+                    // The table lists a folder's children directly.
+                    empty_dir: false,
                 };
                 (os_name(units), stat)
             })

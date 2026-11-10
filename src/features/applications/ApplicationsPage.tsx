@@ -1,5 +1,6 @@
 import { AppWindow, ChevronRight, FolderOpen, PackageX, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AppIcon } from "@/components/shared/AppIcon";
@@ -179,7 +180,9 @@ function AppRow({
 }
 
 export function ApplicationsPage() {
-  const { summary, startScan, scanning } = useApp();
+  const { summary, startScan, scanning } = useApp(
+    useShallow((s) => ({ summary: s.summary, startScan: s.startScan, scanning: s.scanning })),
+  );
   const [report, setReport] = useState<AppStorageReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -288,6 +291,7 @@ export function ApplicationsPage() {
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
                       placeholder="Filter apps"
+                      data-filter
                       aria-label="Filter apps"
                       className="w-52 pl-7"
                     />

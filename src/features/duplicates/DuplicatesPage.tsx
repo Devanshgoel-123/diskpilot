@@ -1,8 +1,10 @@
 import { ChevronDown, Copy, Eye, FolderOpen, Layers, Loader2, Search, Square } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { Pager } from "@/components/shared/Pager";
+import { usePage, useScrollTopOnPage } from "@/lib/usePage";
 import { FilePreview } from "@/components/shared/FilePreview";
 import { FileThumbnail } from "@/components/shared/FileThumbnail";
 import { Button } from "@/components/ui/button";
@@ -295,6 +297,11 @@ export function DuplicatesPage() {
     return q ? all.filter((g) => g.files.some((f) => f.path.toLowerCase().includes(q))) : all;
   }, [report, query]);
 
+  // 50 sets a page; each set can hold many copies.
+  const groupPage = usePage(groups, 50, `${report?.finishedAtMs ?? ""}|${query}`);
+  const listRef = useRef<HTMLDivElement>(null);
+  useScrollTopOnPage(listRef, groupPage.page);
+
   const chosen = useMemo(() => [...selected], [selected]);
   const chosenBytes = useMemo(() => {
     let total = 0;
@@ -431,6 +438,7 @@ export function DuplicatesPage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Filter by name or path"
+                data-filter
                 className="pl-7"
                 aria-label="Filter by name or path"
               />
@@ -439,29 +447,32 @@ export function DuplicatesPage() {
               Select extra copies
             </Button>
           </div>
-          <ul className="min-h-0 flex-1 overflow-auto">
-            {groups.map((g) => (
-              <GroupRow
-                key={g.id}
-                group={g}
-                kept={keptPath(g, keep)}
-                selected={selected}
-                open={open.has(g.id)}
-                onToggleOpen={() =>
-                  setOpen((o) => {
-                    const next = new Set(o);
-                    if (next.has(g.id)) next.delete(g.id);
-                    else next.add(g.id);
-                    return next;
-                  })
-                }
-                onKeep={(p) => setKept(g, p)}
-                onToggle={toggle}
-                onToggleGroup={() => toggleGroup(g)}
-                onPreview={(index) => setPreview({ group: g, index })}
-              />
-            ))}
-          </ul>
+          <div ref={listRef} className="min-h-0 flex-1 overflow-auto">
+            <ul>
+              {groupPage.items.map((g) => (
+                <GroupRow
+                  key={g.id}
+                  group={g}
+                  kept={keptPath(g, keep)}
+                  selected={selected}
+                  open={open.has(g.id)}
+                  onToggleOpen={() =>
+                    setOpen((o) => {
+                      const next = new Set(o);
+                      if (next.has(g.id)) next.delete(g.id);
+                      else next.add(g.id);
+                      return next;
+                    })
+                  }
+                  onKeep={(p) => setKept(g, p)}
+                  onToggle={toggle}
+                  onToggleGroup={() => toggleGroup(g)}
+                  onPreview={(index) => setPreview({ group: g, index })}
+                />
+              ))}
+            </ul>
+            <Pager page={groupPage} label="duplicate sets" className="px-4 py-3" />
+          </div>
           <div className="flex shrink-0 items-center gap-3 border-t border-border bg-panel px-4 py-2.5">
             <p className="text-xs text-muted-foreground">
               {chosen.length
@@ -487,13 +498,14 @@ export function DuplicatesPage() {
           note:
             f.path === (preview ? keptPath(preview.group, keep) : "")
               ? "Keeping this copy"
-              : selected.has(f.path)
-                ? `Selected to move to ${words().trash}`
-                : undefined,
+              : undefined,
+          selected: selected.has(f.path),
+          selectable: f.path !== (preview ? keptPath(preview.group, keep) : ""),
         }))}
         index={preview?.index ?? null}
         onIndexChange={(index) => setPreview((p) => (p ? { ...p, index } : p))}
         onClose={() => setPreview(null)}
+        onToggleSelect={toggle}
       />
       {dialog ? (
         <CleanupDialog

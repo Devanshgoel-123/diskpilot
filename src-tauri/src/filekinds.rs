@@ -15,10 +15,12 @@ use serde::{Deserialize, Serialize};
 use crate::duplicates::{skipped_dir_name, SKIPPED_HOME_DIRS};
 use crate::model::FileEntry;
 
-/// Files below this size are counted in a type's total but not listed.
-pub const MIN_LISTED_BYTES: u64 = 1024 * 1024;
+/// Files below this size are counted in a type's total but not listed. Small
+/// enough that thousands of screenshots or photos add up to something worth
+/// reviewing, large enough to leave out icons and thumbnails.
+pub const MIN_LISTED_BYTES: u64 = 25_000;
 /// Files listed per type, largest first.
-pub const LISTED_PER_KIND: usize = 300;
+pub const LISTED_PER_KIND: usize = 2_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

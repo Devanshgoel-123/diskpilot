@@ -76,6 +76,7 @@ pub fn build_plan(
             was_file: std::path::Path::new(&rec.path)
                 .symlink_metadata()
                 .is_ok_and(|m| m.is_file()),
+            category: Some(rec.classification.category),
         });
     }
 
