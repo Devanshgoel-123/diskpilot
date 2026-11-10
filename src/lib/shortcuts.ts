@@ -24,6 +24,11 @@ export const SHORTCUT_GROUPS = data.groups as ShortcutGroup[];
 
 const ALL = SHORTCUT_GROUPS.flatMap((g) => g.items);
 
+/** Shortcuts that first came in `version`, in the order the shortcuts window lists them. */
+export function shortcutsNewIn(version: string | undefined): Shortcut[] {
+  return version ? ALL.filter((s) => s.since === version) : [];
+}
+
 /**
  * The page or command for a key press with Command held, if it is one of
  * DiskPilot's shortcuts. Only Command shortcuts are global; Space and the

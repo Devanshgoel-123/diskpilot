@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { inAppNotes, isNewerVersion, releaseNotes } from "./releaseNotes";
+import {
+  inAppNotes,
+  isNewerVersion,
+  releaseNotes,
+  splitNotes,
+  withoutSection,
+} from "./releaseNotes";
 
 describe("release notes", () => {
   it("leaves out download instructions", () => {
@@ -62,5 +68,42 @@ describe("isNewerVersion", () => {
     expect(isNewerVersion("0.6.0", "0.6.1")).toBe(false);
     expect(isNewerVersion("0.6.0", "0.6.0")).toBe(false);
     expect(isNewerVersion("1.0.0", "0.99.0")).toBe(true);
+  });
+});
+
+describe("notes layout", () => {
+  const md = [
+    "DiskPilot 9.9 is faster.",
+    "",
+    "## What's changed",
+    "",
+    "### Faster",
+    "",
+    "- Quick.",
+    "",
+    "### Keyboard shortcuts",
+    "",
+    "- ⌘R scans.",
+    "",
+    "### Quieter",
+    "",
+    "- Soft.",
+  ].join("\n");
+
+  it("drops one section and keeps the ones after it", () => {
+    const out = withoutSection(md, "Keyboard shortcuts");
+    expect(out).not.toContain("⌘R");
+    expect(out).toContain("### Quieter");
+  });
+
+  it("splits off the opening paragraph and the empty umbrella heading", () => {
+    const { lead, rest } = splitNotes(md);
+    expect(lead).toBe("DiskPilot 9.9 is faster.");
+    expect(rest.startsWith("### Faster")).toBe(true);
+    expect(rest).not.toContain("What's changed");
+  });
+
+  it("has no lead when the notes start with a heading", () => {
+    expect(splitNotes("### Fixed\n\n- A bug.").lead).toBeNull();
   });
 });

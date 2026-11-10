@@ -5,6 +5,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Keys } from "@/components/shared/Kbd";
 import { SHORTCUT_GROUPS } from "@/lib/shortcuts";
 
 /** Every keyboard shortcut, from the same list the website uses. */
@@ -30,15 +31,8 @@ export function ShortcutsDialog({
                 {g.items.map((s) => (
                   <div key={s.action} className="flex items-center justify-between gap-3 text-xs">
                     <dt className="text-foreground/90">{s.action}</dt>
-                    <dd className="flex shrink-0 gap-1">
-                      {s.keys.map((k) => (
-                        <kbd
-                          key={k}
-                          className="min-w-5 rounded border border-border-strong bg-track px-1.5 py-px text-center font-mono text-2xs text-muted-foreground"
-                        >
-                          {k}
-                        </kbd>
-                      ))}
+                    <dd>
+                      <Keys keys={s.keys} />
                     </dd>
                   </div>
                 ))}
