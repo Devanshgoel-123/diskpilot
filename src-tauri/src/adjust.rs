@@ -291,7 +291,7 @@ mod tests {
     fn matches_a_new_scan_after_deleting_and_trashing() {
         let dir = crate::test_support::sandbox();
         let home = crate::platform::canonicalize(dir.path()).unwrap();
-        let proj = home.join("code/app");
+        let proj = home.join("code").join("app");
         let modules = proj.join("node_modules/pkg");
         fs::create_dir_all(&modules).unwrap();
         fs::write(proj.join("package.json"), "{}").unwrap();
@@ -357,6 +357,8 @@ mod tests {
             .all(|f| !f.path.starts_with(&node_modules.display().to_string())));
     }
 
+    // The Mac's ~/.Trash is inside the home folder; the Recycle Bin is not.
+    #[cfg(not(windows))]
     #[test]
     fn emptying_the_trash_takes_its_bytes_off_the_totals() {
         let dir = crate::test_support::sandbox();
