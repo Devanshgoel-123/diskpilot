@@ -2062,8 +2062,20 @@ h1 {
   gap: 12px 32px;
 }
 
+.footer-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
 .footer-badge {
   display: inline-flex;
+}
+
+.footer-badge img {
+  height: 44px;
+  width: auto;
 }
 
 .footer-brand {
