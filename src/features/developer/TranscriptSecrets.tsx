@@ -40,7 +40,7 @@ export function TranscriptSecrets() {
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-medium">Credentials in AI transcripts</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Claude Code, Codex CLI and Gemini CLI keep every conversation on disk, including keys
+            Claude Code, Codex CLI and Gemini CLI keep your conversations on disk, including keys
             you pasted or that commands printed. This check runs on this Mac only and shows masked
             values.
           </p>
