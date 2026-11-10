@@ -322,7 +322,6 @@ function page({ path, title, description, body, crumbs = [], ld = [] }, parts) {
     <meta name="twitter:creator" content="@0xgoel" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <script defer src="/_vercel/insights/script.js"></script>
     ${json}
   </head>
   <body class="subpage">
