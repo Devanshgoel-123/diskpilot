@@ -6,6 +6,27 @@ import { neon } from "@neondatabase/serverless";
 const EMAIL = /^[^\s@]{1,64}@[^\s@.][^\s@]*\.[^\s@.]+$/;
 const VERSION = /^[0-9A-Za-z.+-]{1,32}$/;
 const ARCH = new Set(["aarch64", "x86_64", "arm64", "x64"]);
+// A signup is under 300 bytes; anything much bigger is not from the app.
+const MAX_BODY = 2048;
+
+// A few signups per address per 10 minutes is plenty for a real person.
+// Counted in memory only, so no IP address is ever stored. This is per
+// function instance; the Vercel Firewall rule on /api/signup is the hard cap.
+const WINDOW_MS = 10 * 60 * 1000;
+const PER_WINDOW = 5;
+const hits = new Map();
+export function limited(ip, now = Date.now()) {
+  if (hits.size > 10_000) hits.clear();
+  const h = hits.get(ip);
+  if (!h || now - h.start > WINDOW_MS) {
+    hits.set(ip, { start: now, n: 1 });
+    return false;
+  }
+  h.n += 1;
+  return h.n > PER_WINDOW;
+}
+
+let tableReady = false;
 
 function clean(body) {
   if (!body || typeof body !== "object") return null;
@@ -30,6 +51,17 @@ export default async function handler(req, res) {
   if (!/^DiskPilot\//.test(req.headers["user-agent"] ?? "")) {
     return res.status(403).json({ error: "Sign up from the DiskPilot app." });
   }
+  if (Number(req.headers["content-length"] ?? 0) > MAX_BODY) {
+    return res.status(413).json({ error: "Too large." });
+  }
+  const ip =
+    String(req.headers["x-forwarded-for"] ?? "")
+      .split(",")[0]
+      .trim() || "unknown";
+  if (limited(ip)) {
+    res.setHeader("Retry-After", "600");
+    return res.status(429).json({ error: "Too many signups. Try again later." });
+  }
   const url = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
   if (!url) return res.status(503).json({ error: "Signups are not set up yet." });
 
@@ -46,7 +78,8 @@ export default async function handler(req, res) {
 
   try {
     const sql = neon(url);
-    await sql`CREATE TABLE IF NOT EXISTS signups (
+    if (!tableReady) {
+      await sql`CREATE TABLE IF NOT EXISTS signups (
       email text PRIMARY KEY,
       app_version text,
       os_version text,
@@ -55,6 +88,8 @@ export default async function handler(req, res) {
       last_seen timestamptz NOT NULL DEFAULT now(),
       times integer NOT NULL DEFAULT 1
     )`;
+      tableReady = true;
+    }
     await sql`INSERT INTO signups (email, app_version, os_version, arch)
       VALUES (${s.email}, ${s.appVersion}, ${s.osVersion}, ${s.arch})
       ON CONFLICT (email) DO UPDATE SET
