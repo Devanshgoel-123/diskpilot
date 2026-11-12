@@ -8,6 +8,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
+  Signup,
   FileEntry,
   FileKind,
   AppBadge,
@@ -50,6 +51,8 @@ export const inDesktopApp = (): boolean => isTauri();
 
 export const api = {
   getEnvironment: () => invoke<AppEnvironment>("get_environment"),
+  getSignup: () => invoke<Signup | null>("get_signup"),
+  submitSignup: (email: string) => invoke<Signup>("submit_signup", { email }),
   getDiskInfo: () => invoke<DiskInfo>("get_disk_info"),
   startScan: (root?: string) => invoke<string>("start_scan", { root: root ?? null }),
   cancelScan: () => invoke<boolean>("cancel_scan"),

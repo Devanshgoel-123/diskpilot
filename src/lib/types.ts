@@ -690,3 +690,11 @@ export interface Schedule {
   reminder: boolean;
   lastReminderMs: number | null;
 }
+
+/** The email this Mac signed up with on first launch. */
+export interface Signup {
+  email: string;
+  signedUpAtMs: number;
+  /** Whether diskpilot.live has received it (it is sent later when offline). */
+  sent: boolean;
+}

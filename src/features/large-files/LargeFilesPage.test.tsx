@@ -54,7 +54,8 @@ beforeEach(() => {
 describe("LargeFilesPage", () => {
   it("opens a folder in Storage > Folders on double-click", () => {
     render(<LargeFilesPage />);
-    fireEvent.click(screen.getAllByRole("tab", { name: "Folders" }).at(-1)!);
+    const tabs = screen.getAllByRole("tab", { name: "Folders" });
+    fireEvent.click(tabs[tabs.length - 1] as HTMLElement);
     fireEvent.doubleClick(screen.getByText("Downloads", { selector: "td" }));
     const s = useApp.getState();
     expect([s.storageView, s.explorerPath]).toEqual(["browse", "/Users/t/Downloads"]);
@@ -62,7 +63,7 @@ describe("LargeFilesPage", () => {
 
   it("shows the folder that holds a file on Return", () => {
     render(<LargeFilesPage />);
-    fireEvent.keyDown(screen.getByText("big.zip").closest("tr")!, { key: "Enter" });
+    fireEvent.keyDown(screen.getByText("big.zip").closest("tr") as HTMLElement, { key: "Enter" });
     expect(useApp.getState().explorerPath).toBe("/Users/t/Downloads");
   });
 });

@@ -1,5 +1,5 @@
 import { AlertCircle, MonitorX, X } from "lucide-react";
-import { lazy, Suspense, useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -11,10 +11,11 @@ import { DuplicatesPage } from "@/features/duplicates/DuplicatesPage";
 import { HistoryPage } from "@/features/history/HistoryPage";
 import { OverviewPage } from "@/features/overview/OverviewPage";
 import { RecommendationsPage } from "@/features/recommendations/RecommendationsPage";
+import { SignupScreen } from "@/features/signup/SignupScreen";
 import { StoragePage } from "@/features/storage/StoragePage";
 import { EmptyTrashDialog } from "@/features/trash/EmptyTrashDialog";
 import { useTrash } from "@/features/trash/trashStore";
-import { inDesktopApp, onTrayNavigate } from "@/lib/api";
+import { api, inDesktopApp, onTrayNavigate } from "@/lib/api";
 import { useApp, type PageId } from "@/lib/store";
 import { ShortcutsDialog } from "@/components/layout/ShortcutsDialog";
 import { WhatsNewAfterUpdate } from "@/components/layout/WhatsNewAfterUpdate";
@@ -108,6 +109,9 @@ export function App() {
     void init();
   }, [init]);
 
+  // DiskPilot asks for an email before the app opens (SignupScreen).
+  const [signup, setSignedUp] = useSignupGate();
+
   useEffect(() => {
     const idle = window.requestIdleCallback ?? ((f: () => void) => setTimeout(f, 200));
     idle(preloadPages);
@@ -144,6 +148,9 @@ export function App() {
     );
   }
 
+  if (signup === "checking") return null;
+  if (signup === "needed") return <SignupScreen onDone={() => setSignedUp()} />;
+
   const Page = PAGES[page];
   return (
     <TooltipProvider delayDuration={300}>
@@ -162,4 +169,26 @@ export function App() {
       <ShortcutsDialog open={shortcuts.open} onOpenChange={shortcuts.setOpen} />
     </TooltipProvider>
   );
+}
+
+/**
+ * Whether this Mac has signed up. Outside the desktop app (the browser
+ * preview), there is nothing to sign up for.
+ */
+function useSignupGate(): ["checking" | "needed" | "done", () => void] {
+  const [state, setState] = useState<"checking" | "needed" | "done">(() =>
+    inDesktopApp() ? "checking" : "done",
+  );
+  useEffect(() => {
+    if (state !== "checking") return;
+    let live = true;
+    api
+      .getSignup()
+      .then((s) => live && setState(s ? "done" : "needed"))
+      .catch(() => live && setState("needed"));
+    return () => {
+      live = false;
+    };
+  }, [state]);
+  return [state, () => setState("done")];
 }

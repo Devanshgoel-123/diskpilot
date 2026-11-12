@@ -37,6 +37,8 @@ mockIPC(
     switch (cmd) {
       case "get_environment":
         return { homeDir: HOME, os: "macos", arch: "aarch64", appVersion: "0.0.0", readOnly: true };
+      case "get_signup":
+        return { email: "perf@example.com", signedUpAtMs: 0, sent: true };
       case "get_disk_info":
         return fx.disk;
       case "get_scan_summary":

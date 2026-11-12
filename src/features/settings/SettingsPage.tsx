@@ -12,7 +12,10 @@ import { useShortcutsDialog } from "@/lib/shortcuts";
 import { playScanDone, setSoundsEnabled, soundsEnabled } from "@/lib/sounds";
 import { useApp } from "@/lib/store";
 import type { ThemePreference } from "@/lib/theme";
+import type { Signup } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+import { CONTACT_EMAIL, PRIVACY_URL } from "@/features/signup/signup";
 
 import { AssistantSettings } from "./AssistantSettings";
 import { BackgroundSettings } from "./BackgroundSettings";
@@ -188,11 +191,7 @@ export function SettingsPage() {
                 </span>
               }
             />
-            <Setting
-              label="Privacy"
-              description="Scanning, analysis and cleanup run entirely on this Mac. There is no account and no telemetry. The optional assistant is the only feature that uses the network, and only when you ask it a question."
-              control={null}
-            />
+            <Setting label="Privacy" description={<PrivacyNote />} control={null} />
           </Section>
 
           <BackgroundSettings />
@@ -248,5 +247,30 @@ function SoundsSetting() {
         />
       }
     />
+  );
+}
+
+/** What leaves this Mac: the signup, update checks and the optional assistant. */
+function PrivacyNote() {
+  const [signup, setSignup] = useState<Signup | null>(null);
+  useEffect(() => {
+    void api.getSignup().then(setSignup, () => setSignup(null));
+  }, []);
+  return (
+    <>
+      Scanning, analysis and cleanup run on this Mac, and nothing about your files is sent anywhere.{" "}
+      {signup ? `You signed up as ${signup.email}. ` : ""}DiskPilot sent that email with its
+      version, your macOS version and your kind of Mac to diskpilot.live, to tell you about updates
+      and ask for feedback. To change or delete it, write to {CONTACT_EMAIL}. Once a day DiskPilot
+      asks GitHub whether a new version is out. The optional assistant sends questions to the AI
+      provider you choose, only when you ask one.{" "}
+      <button
+        type="button"
+        className="underline underline-offset-2 hover:text-foreground"
+        onClick={() => void openUrl(PRIVACY_URL)}
+      >
+        Privacy details
+      </button>
+    </>
   );
 }
