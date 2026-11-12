@@ -64,3 +64,94 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
+
+  perf:
+    name: Performance (scan, bundle, UI)
+    # Pull requests only: the base branch and the pull request are measured
+    # one after the other on the same runner, so runner speed cancels out.
+    if: github.event_name == 'pull_request'
+    runs-on: macos-15-intel
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      # A faster release build for timing: same opt-level, no LTO.
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+      # One target folder for both sides, so the base build only recompiles DiskPilot itself.
+      CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
+      PERF_RUNS: "3"
+      CHROME: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: 1.99.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: src-tauri
+          key: perf
+      - name: Check out the base branch next to this one
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git worktree add ../base "origin/$BASE_REF"
+          # The measuring tools come from this pull request, so both sides run the same harness.
+          rm -rf ../base/perf && cp -R perf ../base/perf
+          cp src-tauri/examples/_bench_fixture.rs ../base/src-tauri/examples/
+      - name: Install
+        run: |
+          pnpm install --frozen-lockfile
+          (cd ../base && pnpm install --frozen-lockfile)
+          mkdir -p dist ../base/dist
+      - name: Scan benchmark
+        run: |
+          fixture="$RUNNER_TEMP/perf-tree"
+          for side in base head; do
+            dir=$([ "$side" = head ] && echo . || echo ../base)
+            (cd "$dir/src-tauri" && cargo build --release --locked --example _bench_fixture)
+            "$CARGO_TARGET_DIR/release/examples/_bench_fixture" "$fixture" 200000 5 > "$RUNNER_TEMP/scan-$side.json"
+            cat "$RUNNER_TEMP/scan-$side.json"
+          done
+      - name: UI benchmark
+        run: |
+          for side in base head; do
+            dir=$([ "$side" = head ] && echo . || echo ../base)
+            (cd "$dir" && pnpm build >/dev/null && node "$GITHUB_WORKSPACE/perf/ui.mjs" "$RUNNER_TEMP/ui-$side.json")
+          done
+      - name: Compare
+        id: compare
+        run: |
+          for side in base head; do
+            node -e 'const [a,b,o]=process.argv.slice(1);const fs=require("fs");const s=JSON.parse(fs.readFileSync(a));const u=JSON.parse(fs.readFileSync(b));fs.writeFileSync(o,JSON.stringify({...u,scanFixtureMs:s.scanMs},null,2))' \
+              "$RUNNER_TEMP/scan-$side.json" "$RUNNER_TEMP/ui-$side.json" "$RUNNER_TEMP/perf-$side.json"
+          done
+          set +e
+          node perf/compare.mjs "$RUNNER_TEMP/perf-base.json" "$RUNNER_TEMP/perf-head.json" > "$RUNNER_TEMP/perf.md"
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/perf.md" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Comment on the pull request
+        # Pull requests from forks get a read-only token; the job summary has the table.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh pr comment "$PR" --body-file "$RUNNER_TEMP/perf.md" --edit-last --create-if-none
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: perf-results
+          path: ${{ runner.temp }}/perf-*.json
+          retention-days: 30
+      - name: Fail on a regression
+        if: steps.compare.outputs.status != '0'
+        run: exit 1

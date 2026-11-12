@@ -1,7 +1,7 @@
 // Measures the app's UI in Chrome against the synthetic harness (perf/index.html).
 // Usage: node perf/ui.mjs [out.json]. Set CHROME to a Chrome binary if it is
 // not in the default macOS location.
-import { readdirSync, statSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { chromium } from "playwright-core";
@@ -15,6 +15,9 @@ const median = (xs) => {
   return s[Math.floor(s.length / 2)];
 };
 const round = (x) => Math.round(x * 10) / 10;
+// Timings are the best of the runs: the fastest run is the least disturbed by
+// the machine, which keeps comparisons between commits steady.
+const best = (xs) => Math.min(...xs);
 
 // A production build of the harness, served like the app's own files.
 await build({
@@ -182,26 +185,31 @@ for (let run = 0; run < RUNS; run++) {
   await page.keyboard.press("Escape");
 }
 
+// The app's own build (pnpm build), not the harness build.
 const js = readdirSync("dist/assets")
   .filter((f) => f.endsWith(".js"))
   .reduce((s, f) => s + statSync(join("dist/assets", f)).size, 0);
+const entry = readFileSync("dist/index.html", "utf8").match(/src="\/assets\/([^"]+\.js)"/)?.[1];
+const entryJs = entry ? statSync(join("dist/assets", entry)).size : js;
 
 const summary = {
   cpuThrottle: THROTTLE,
   jsBytes: js,
-  firstRenderMs: round(median(results.firstRenderMs)),
-  pageSwitchMaxMs: round(Math.max(...PAGES.map((p) => median(results.pageSwitchMs[p])))),
-  pageSwitchMs: Object.fromEntries(PAGES.map((p) => [p, round(median(results.pageSwitchMs[p]))])),
+  entryJsBytes: entryJs,
+  firstRenderMs: round(best(results.firstRenderMs)),
+  pageSwitchMaxMs: round(Math.max(...PAGES.map((p) => best(results.pageSwitchMs[p])))),
+  pageSwitchMs: Object.fromEntries(PAGES.map((p) => [p, round(best(results.pageSwitchMs[p]))])),
   scrollFpsMin: round(Math.min(...Object.values(results.scrollFps).map(median))),
   scrollFps: Object.fromEntries(
     Object.entries(results.scrollFps).map(([k, v]) => [k, round(median(v))]),
   ),
-  previewOpenMs: round(median(results.previewOpenMs)),
-  previewFirstImageMs: round(median(results.previewFirstImageMs)),
+  previewOpenMs: round(best(results.previewOpenMs)),
+  previewFirstImageMs: round(best(results.previewFirstImageMs)),
   longTasksPerRun: median(results.longTasks),
 };
 writeFileSync(OUT, JSON.stringify(summary, null, 2) + "\n");
 console.log(JSON.stringify(summary, null, 2));
-await browser.close();
-await server.close();
+// Closing can hang on a throttled page; the results are already written.
+const quit = (ms) => new Promise((r) => setTimeout(r, ms));
+await Promise.race([Promise.all([browser.close(), server.close()]), quit(5000)]);
 process.exit(0);
