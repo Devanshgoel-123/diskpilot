@@ -1,0 +1,199 @@
+// Measures the app's UI in Chrome against the synthetic harness (perf/index.html).
+// Usage: node perf/ui.mjs [out.json]. Set CHROME to a Chrome binary if it is
+// not in the default macOS location.
+import { readdirSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { chromium } from "playwright-core";
+import { build, preview } from "vite";
+
+const OUT = process.argv[2] ?? "perf-ui.json";
+const CHROME = process.env.CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const RUNS = Number(process.env.PERF_RUNS ?? 5);
+const median = (xs) => {
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+};
+const round = (x) => Math.round(x * 10) / 10;
+
+// A production build of the harness, served like the app's own files.
+await build({
+  logLevel: "error",
+  build: { outDir: "dist-perf", emptyOutDir: true, rollupOptions: { input: "perf/index.html" } },
+});
+const server = await preview({
+  logLevel: "error",
+  build: { outDir: "dist-perf" },
+  preview: { port: 0, strictPort: false },
+});
+const url = `${server.resolvedUrls.local[0]}perf/`;
+const browser = await chromium.launch({ executablePath: CHROME, headless: true });
+const ctx = await browser.newContext({ viewport: { width: 1280, height: 820 } });
+const page = await ctx.newPage();
+// Slow the CPU down (4x by default) to stand in for older Macs and make
+// regressions visible above the noise.
+const THROTTLE = Number(process.env.PERF_CPU_THROTTLE ?? 4);
+await (await ctx.newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: THROTTLE });
+
+// Runs inside the page: navigates and reports when the DOM has settled
+// (no changes for three frames), measured from the call.
+const SETTLE = `window.__settle = (fn) => new Promise((resolve) => {
+  let last = performance.now();
+  const mo = new MutationObserver(() => { last = performance.now(); });
+  mo.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+  const start = performance.now();
+  fn();
+  let quiet = 0;
+  const tick = () => {
+    if (performance.now() - last > 0 && quiet++ >= 3) { mo.disconnect(); resolve(last - start); return; }
+    if (performance.now() - start > 5000) { mo.disconnect(); resolve(5000); return; }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+});
+window.__longTasks = [];
+new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__longTasks.push(e.duration); })
+  .observe({ type: "longtask", buffered: true });`;
+
+const results = {
+  firstRenderMs: [],
+  pageSwitchMs: {},
+  scrollFps: {},
+  previewOpenMs: [],
+  longTasks: [],
+};
+const PAGES = [
+  "explorer",
+  "duplicates",
+  "applications",
+  "developer",
+  "docker",
+  "recommendations",
+  "history",
+  "settings",
+  "overview",
+];
+
+for (let run = 0; run < RUNS; run++) {
+  await page.goto(url, { waitUntil: "load" });
+  await page.evaluate(SETTLE);
+  // First render: navigation start to the Overview showing scan results.
+  const first = await page.waitForFunction(
+    () => {
+      const main = document.querySelector("main");
+      return main &&
+        /used of/.test(main.textContent ?? "") &&
+        /Largest/.test(main.textContent ?? "")
+        ? performance.now()
+        : null;
+    },
+    null,
+    { polling: "raf", timeout: 20_000 },
+  );
+  results.firstRenderMs.push(await first.jsonValue());
+  await page.waitForFunction(() => window.__perf, null, { polling: "raf" });
+
+  for (const p of PAGES) {
+    const ms = await page.evaluate(
+      (p) => window.__settle(() => window.__perf.useApp.getState().navigate(p)),
+      p,
+    );
+    (results.pageSwitchMs[p] ??= []).push(ms);
+  }
+
+  // Scrolling: one 60 px step per frame for 120 frames on the longest lists.
+  for (const [name, setup] of [
+    ["storageBrowse", () => window.__perf.useApp.getState().navigate("explorer")],
+    [
+      "filesByType",
+      () => {
+        const s = window.__perf.useApp.getState();
+        s.navigate("explorer");
+        s.setStorageView("types");
+      },
+    ],
+  ]) {
+    await page.evaluate(`window.__settle(${setup.toString()})`);
+    const fps = await page.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const rows = document.querySelectorAll("main tr, main li");
+          const row = rows[rows.length - 1] ?? document.querySelector("main");
+          let el = row;
+          while (
+            el &&
+            !(
+              el.scrollHeight > el.clientHeight + 10 &&
+              /auto|scroll/.test(getComputedStyle(el).overflowY)
+            )
+          )
+            el = el.parentElement;
+          el ??= document.scrollingElement;
+          el.scrollTop = 0;
+          let frames = 0;
+          const start = performance.now();
+          const step = () => {
+            el.scrollTop += 60;
+            if (++frames < 120) requestAnimationFrame(step);
+            else resolve((frames * 1000) / (performance.now() - start));
+          };
+          requestAnimationFrame(step);
+        }),
+    );
+    (results.scrollFps[name] ??= []).push(fps);
+  }
+
+  // Preview: click a row's preview button on Files by type, until the image shows.
+  const open = await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        const s = window.__perf.useApp.getState();
+        s.navigate("explorer");
+        s.setStorageView("types");
+        const go = () => {
+          const btns = document.querySelectorAll('main button[aria-label^="Preview "]');
+          const btn = btns[Math.min(btns.length - 1, 7)];
+          if (!btn) return requestAnimationFrame(go);
+          const start = performance.now();
+          btn.click();
+          const wait = () => {
+            const img = document.querySelector('[role="dialog"] img[alt^="Preview of"]');
+            if (img && img.complete && img.naturalWidth > 0) {
+              resolve(performance.now() - start);
+              return;
+            }
+            if (performance.now() - start > 5000) resolve(5000);
+            else requestAnimationFrame(wait);
+          };
+          requestAnimationFrame(wait);
+        };
+        setTimeout(go, 300);
+      }),
+  );
+  results.previewOpenMs.push(open);
+  results.longTasks.push(await page.evaluate(() => window.__longTasks.length));
+  await page.keyboard.press("Escape");
+}
+
+const js = readdirSync("dist/assets")
+  .filter((f) => f.endsWith(".js"))
+  .reduce((s, f) => s + statSync(join("dist/assets", f)).size, 0);
+
+const summary = {
+  cpuThrottle: THROTTLE,
+  jsBytes: js,
+  firstRenderMs: round(median(results.firstRenderMs)),
+  pageSwitchMaxMs: round(Math.max(...PAGES.map((p) => median(results.pageSwitchMs[p])))),
+  pageSwitchMs: Object.fromEntries(PAGES.map((p) => [p, round(median(results.pageSwitchMs[p]))])),
+  scrollFpsMin: round(Math.min(...Object.values(results.scrollFps).map(median))),
+  scrollFps: Object.fromEntries(
+    Object.entries(results.scrollFps).map(([k, v]) => [k, round(median(v))]),
+  ),
+  previewOpenMs: round(median(results.previewOpenMs)),
+  longTasksPerRun: median(results.longTasks),
+};
+writeFileSync(OUT, JSON.stringify(summary, null, 2) + "\n");
+console.log(JSON.stringify(summary, null, 2));
+await browser.close();
+await server.close();
+process.exit(0);

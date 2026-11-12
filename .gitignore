@@ -4,6 +4,8 @@ node_modules/
 # Build output
 dist/
 dist-ssr/
+dist-perf/
+perf-*.json
 src-tauri/target/
 src-tauri/gen/schemas/
 
