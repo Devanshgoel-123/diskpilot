@@ -44,3 +44,6 @@ view, so compare them with each other rather than with the real app.
 | Opaque thumbnails as JPEG (6809c6c) | Large preview, warm       | 55 ms, 928 KB  | 14 ms, 138 KB  |
 |                                     | Large preview, first pass | 62 ms          | 26 ms          |
 |                                     | Row thumbnail             | 3.5 ms, 5.0 KB | 3.1 ms, 2.2 KB |
+| Storage table renders only visible rows | Switch to Storage (1,000 rows) | 187 ms | 70 ms |
+| | Long tasks per run | 6 | 2 |
+| | JS bundle | 653 KB | 667 KB (+2%, @tanstack/react-virtual) |

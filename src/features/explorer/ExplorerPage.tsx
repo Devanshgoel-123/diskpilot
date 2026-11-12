@@ -1,5 +1,6 @@
 import { ArrowUp, ChevronRight, File, Folder, FolderTree, Link2, Search } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -23,6 +24,9 @@ import { AppIcon } from "@/components/shared/AppIcon";
 import { CategorySelect } from "@/components/shared/CategorySelect";
 import { SortHeader } from "@/components/shared/SortHeader";
 import { type SortKey, sortEntries } from "./sorting";
+
+/** Height of a row in the folder table, in pixels (Tailwind h-8). */
+const ROW_HEIGHT = 32;
 
 function EntryIcon({ entry }: { entry: DirectoryEntry }) {
   const cls = "size-3.5 shrink-0";
@@ -163,6 +167,25 @@ export function ExplorerPage() {
     return sortEntries(filtered, sort.key, sort.desc);
   }, [listing, query, category, sort]);
 
+  // Only the rows in view (plus a margin) are rendered: a folder can list
+  // 1,000 items, and drawing them all made opening Storage take ~190 ms on a
+  // slow CPU. Rows have a fixed height.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // The app does not use the React Compiler, so its memoization warning does not apply.
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtual = useVirtualizer({
+    count: entries.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 12,
+    initialRect: { width: 0, height: 800 },
+  });
+  const rows = virtual.getVirtualItems();
+  const pad = {
+    top: rows[0]?.start ?? 0,
+    bottom: rows.length ? virtual.getTotalSize() - (rows[rows.length - 1]?.end ?? 0) : 0,
+  };
+
   const cleanup = useCleanupIndex();
   const maxBytes = listing?.entries[0]?.bytes ?? 0;
   const presentCategories = useMemo(
@@ -248,7 +271,7 @@ export function ExplorerPage() {
             </div>
           ) : null}
 
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
             {error ? <p className="px-4 py-6 text-xs text-critical">{error.message}</p> : null}
             {loading && !listing ? (
               <div className="space-y-2 p-4">
@@ -296,58 +319,64 @@ export function ExplorerPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {entries.map((e) => (
-                    <tr
-                      key={e.path}
-                      tabIndex={0}
-                      aria-selected={selected === e.path}
-                      onClick={() => setSelected(e.path)}
-                      onDoubleClick={() => open(e)}
-                      onKeyDown={(ev) => {
-                        if (ev.key === "Enter") open(e);
-                        if (ev.key === " ") {
-                          ev.preventDefault();
-                          setSelected(e.path);
-                        }
-                      }}
-                      className={cn(
-                        "h-8 border-b border-border/60 outline-none hover:bg-hover/60 focus-visible:bg-hover",
-                        selected === e.path && "bg-accent-soft hover:bg-accent-soft",
-                      )}
-                    >
-                      <td className="truncate pr-2 pl-4">
-                        <span className="flex min-w-0 items-center gap-2">
-                          <EntryIcon entry={e} />
-                          <span className="truncate" title={e.name}>
-                            {e.name}
+                  {pad.top > 0 ? <tr aria-hidden style={{ height: pad.top }} /> : null}
+                  {rows.map((v) => {
+                    const e = entries[v.index];
+                    if (!e) return null;
+                    return (
+                      <tr
+                        key={e.path}
+                        tabIndex={0}
+                        aria-selected={selected === e.path}
+                        onClick={() => setSelected(e.path)}
+                        onDoubleClick={() => open(e)}
+                        onKeyDown={(ev) => {
+                          if (ev.key === "Enter") open(e);
+                          if (ev.key === " ") {
+                            ev.preventDefault();
+                            setSelected(e.path);
+                          }
+                        }}
+                        className={cn(
+                          "h-8 border-b border-border/60 outline-none hover:bg-hover/60 focus-visible:bg-hover",
+                          selected === e.path && "bg-accent-soft hover:bg-accent-soft",
+                        )}
+                      >
+                        <td className="truncate pr-2 pl-4">
+                          <span className="flex min-w-0 items-center gap-2">
+                            <EntryIcon entry={e} />
+                            <span className="truncate" title={e.name}>
+                              {e.name}
+                            </span>
                           </span>
-                        </span>
-                      </td>
-                      <td className="px-2">
-                        <div className="flex items-center gap-2">
-                          <SizeBar
-                            value={e.bytes}
-                            max={maxBytes}
-                            color={CATEGORY_META[e.classification.category].color}
-                            className="w-16"
-                          />
-                          <span className="tabular ml-auto">{formatBytes(e.bytes)}</span>
-                        </div>
-                      </td>
-                      <td className="tabular px-2 text-right text-xs text-muted-foreground">
-                        {e.kind === "directory" ? formatCount(e.fileCount) : ""}
-                      </td>
-                      <td className="truncate px-2 text-xs text-muted-foreground">
-                        {formatRelative(e.modifiedMs)}
-                      </td>
-                      <td className="px-2" title={e.classification.label}>
-                        <CategoryBadge category={e.classification.category} />
-                      </td>
-                      <td className="px-2 pr-4">
-                        <CleanupCell path={e.path} index={cleanup} />
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-2">
+                          <div className="flex items-center gap-2">
+                            <SizeBar
+                              value={e.bytes}
+                              max={maxBytes}
+                              color={CATEGORY_META[e.classification.category].color}
+                              className="w-16"
+                            />
+                            <span className="tabular ml-auto">{formatBytes(e.bytes)}</span>
+                          </div>
+                        </td>
+                        <td className="tabular px-2 text-right text-xs text-muted-foreground">
+                          {e.kind === "directory" ? formatCount(e.fileCount) : ""}
+                        </td>
+                        <td className="truncate px-2 text-xs text-muted-foreground">
+                          {formatRelative(e.modifiedMs)}
+                        </td>
+                        <td className="px-2" title={e.classification.label}>
+                          <CategoryBadge category={e.classification.category} />
+                        </td>
+                        <td className="px-2 pr-4">
+                          <CleanupCell path={e.path} index={cleanup} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {pad.bottom > 0 ? <tr aria-hidden style={{ height: pad.bottom }} /> : null}
                 </tbody>
               </table>
             ) : null}
