@@ -117,3 +117,12 @@ describe("thumbnails", () => {
     expect(cachedThumbnail("/r0.jpg", 28)).toBe("blob:1");
   });
 });
+
+describe("imageType", () => {
+  it("tells JPEG from PNG by the first bytes", async () => {
+    const { imageType } = await import("./thumbnails");
+    expect(imageType(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]).buffer)).toBe("image/jpeg");
+    expect(imageType(new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer)).toBe("image/png");
+    expect(imageType(new ArrayBuffer(0))).toBe("image/png");
+  });
+});

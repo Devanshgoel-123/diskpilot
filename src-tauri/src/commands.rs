@@ -457,7 +457,7 @@ pub fn open_owner_app(rule_id: String) -> AppResult<()> {
     )))
 }
 
-/// A Quick Look thumbnail (PNG bytes) of a file DiskPilot listed, so people
+/// A Quick Look thumbnail (JPEG or PNG bytes) of a file DiskPilot listed, so people
 /// can see a photo, video or document before deciding to remove it.
 ///
 /// Quick Look renders text, PDFs and documents legibly, so this must not be

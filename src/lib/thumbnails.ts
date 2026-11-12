@@ -26,6 +26,12 @@ let running = 0;
 const MAX_PARALLEL = 4;
 
 const keyOf = (path: string, size: number) => `${path}@${size}`;
+
+/** Opaque thumbnails arrive as JPEG, the rest as PNG. */
+export function imageType(bytes: ArrayBuffer): string {
+  const head = new Uint8Array(bytes, 0, Math.min(2, bytes.byteLength));
+  return head[0] === 0xff && head[1] === 0xd8 ? "image/jpeg" : "image/png";
+}
 const storeFor = (size: number) => (size >= LARGE_FROM ? large : small);
 
 function next() {
@@ -90,7 +96,7 @@ export function loadThumbnail(path: string, size: number): Promise<string | null
         api
           .fileThumbnail(path, size)
           .then((bytes) => {
-            const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
+            const url = URL.createObjectURL(new Blob([bytes], { type: imageType(bytes) }));
             remember(size, key, url);
             resolve(url);
           })
