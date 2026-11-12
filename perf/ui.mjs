@@ -163,9 +163,14 @@ for (let run = 0; run < RUNS; run++) {
         const s = window.__perf.useApp.getState();
         s.navigate("explorer");
         s.setStorageView("types");
+        const since = performance.now();
         const go = () => {
           const btns = document.querySelectorAll('main button[aria-label^="Preview "]');
           const btn = btns[Math.min(btns.length - 1, 7)];
+          // Never wait forever: a page that fails to show files gives a time
+          // that fails the gate instead of a job that hangs.
+          if (!btn && performance.now() - since > 10_000)
+            return resolve({ full: 5000, visual: 5000 });
           if (!btn) return requestAnimationFrame(go);
           const start = performance.now();
           btn.click();

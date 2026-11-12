@@ -6,10 +6,12 @@ import { HOME, makeFixture } from "./fixture";
 
 const t0 = performance.now();
 const fx = makeFixture();
-// As the engine sends it: file types carry totals, their files come on request.
+// File types carry their totals and listed count, and their files come on
+// request (get_file_kind_files). The files stay in the summary too, so CI can
+// run this harness against a base branch from before that change.
 const windowSummary = {
   ...fx.summary,
-  fileKinds: fx.summary.fileKinds.map(({ files, ...g }) => ({ ...g, listed: files.length })),
+  fileKinds: fx.summary.fileKinds.map((g) => ({ ...g, listed: g.files.length })),
 };
 (window as unknown as { isTauri: boolean }).isTauri = true;
 
