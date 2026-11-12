@@ -834,4 +834,12 @@ mod tests {
         let c = floored.classify_path(Path::new("/Users/test/Library/Caches/x/y"), true, &p);
         assert_eq!(c.category, Category::Unknown);
     }
+
+    #[test]
+    fn deno_cache_is_recognized() {
+        let p = FakeProbe::empty();
+        let c = dir("/Users/test/Library/Caches/deno", &p);
+        assert_eq!(c.rule_id, "deno.cache");
+        assert_eq!(c.category, Category::Cache);
+    }
 }

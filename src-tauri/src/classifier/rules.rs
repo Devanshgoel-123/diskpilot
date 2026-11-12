@@ -285,6 +285,14 @@ pub static DIR_RULES: &[DirRule] = &[
         "Bun's global package cache."
     ),
     leaf!(
+        "deno.cache",
+        HomeRelative(&["Library", "Caches", "deno"]),
+        Cache,
+        High,
+        "Deno cache",
+        "Downloaded modules, npm packages and compiled TypeScript cached by Deno. Deno downloads and compiles them again when a script runs."
+    ),
+    leaf!(
         "nvm.versions",
         HomeRelative(&[".nvm", "versions"]),
         DeveloperTools,
