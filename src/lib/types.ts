@@ -338,6 +338,18 @@ export interface TrashProgress {
   notRemoved: number[];
 }
 
+/** How far listing the Trash has got, before the preview is ready. */
+export interface TrashListing {
+  previewId: string;
+  /** Top-level items measured completely. */
+  entriesDone: number;
+  entriesTotal: number;
+  /** Size and files counted so far, including the item being measured. */
+  bytes: number;
+  files: number;
+  current: string | null;
+}
+
 export interface TrashResult {
   record: CleanupRecord;
   filesRemoved: number;

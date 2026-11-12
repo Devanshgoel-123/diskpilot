@@ -1081,13 +1081,20 @@ pub async fn get_trash_summary(state: State<'_, AppState>) -> AppResult<TrashSum
 }
 
 /// List the Trash as a single-use preview. Only the entries in it can be
-/// removed by [`empty_trash`]. Nothing is changed.
+/// removed by [`empty_trash`]. Nothing is changed. What has been measured so
+/// far is emitted as `trash://listing`.
 #[tauri::command]
-pub async fn preview_trash(state: State<'_, AppState>) -> AppResult<trash::TrashPreview> {
+pub async fn preview_trash(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> AppResult<trash::TrashPreview> {
     let dir = trash::trash_dir(&state.home);
     let now = now_ms();
     let preview = blocking(move || {
-        trash::inventory(&dir, unique_id("trash", now), now).map_err(|e| AppError::io(&dir, &e))
+        trash::inventory_with_progress(&dir, unique_id("trash", now), now, &mut |p| {
+            let _ = app.emit(trash::EVENT_TRASH_LISTING, p);
+        })
+        .map_err(|e| AppError::io(&dir, &e))
     })
     .await?;
     let mut slot = state.trash();

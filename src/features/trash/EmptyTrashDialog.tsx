@@ -3,10 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { api, errorMessage, onTrashProgress } from "@/lib/api";
+import { api, errorMessage, onTrashListing, onTrashProgress } from "@/lib/api";
 import { formatBytes, formatCount } from "@/lib/format";
 import { useApp } from "@/lib/store";
-import type { TrashPreview, TrashProgress, TrashResult } from "@/lib/types";
+import type { TrashListing, TrashPreview, TrashProgress, TrashResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 import "./trash.css";
@@ -43,6 +43,7 @@ function TrashFlow() {
   const [phase, setPhase] = useState<Phase>("loading");
   const [preview, setPreview] = useState<TrashPreview | null>(null);
   const [progress, setProgress] = useState<TrashProgress | null>(null);
+  const [listing, setListing] = useState<TrashListing | null>(null);
   const [result, setResult] = useState<TrashResult | null>(null);
   const [error, setError] = useState<{ title: string; message: string } | null>(null);
   const [fallen, setFallen] = useState(0);
@@ -53,6 +54,14 @@ function TrashFlow() {
   const cancelRef = useRef<HTMLButtonElement>(null);
 
   const [attempt, setAttempt] = useState(0);
+  // What has been measured so far, while the Trash is listed. Only the window
+  // lists the Trash with progress, so there is one listing at a time.
+  useEffect(() => {
+    if (!open || phase !== "loading") return;
+    const off = onTrashListing(setListing);
+    return () => void off.then((f) => f());
+  }, [open, phase]);
+
   useEffect(() => {
     if (!open) return;
     let live = true;
@@ -76,6 +85,7 @@ function TrashFlow() {
   /** List the Trash again from scratch (after a result, an error or granting access). */
   const load = () => {
     setPhase("loading");
+    setListing(null);
     setPreview(null);
     setProgress(null);
     setResult(null);
@@ -208,7 +218,7 @@ function TrashFlow() {
         />
 
         <div key={phase} className="tr-swap min-h-0 flex-1 overflow-y-auto px-6 pt-5 pb-5">
-          {phase === "loading" ? <Loading /> : null}
+          {phase === "loading" ? <Loading listing={listing} /> : null}
           {phase === "confirm" && preview ? (
             <Confirm preview={preview} showAll={showAll} onShowAll={() => setShowAll(true)} />
           ) : null}
@@ -313,7 +323,15 @@ function resultTitle(r: TrashResult): string {
 
 // ---- Bodies ----------------------------------------------------------------
 
-function Loading() {
+/**
+ * Listing the Trash can take a while when it holds big folders, so the
+ * numbers count up as items are measured, like a scan, instead of a spinner
+ * that looks stuck.
+ */
+function Loading({ listing }: { listing: TrashListing | null }) {
+  const bytes = useCountUp(listing?.bytes ?? 0, 420);
+  const total = listing?.entriesTotal ?? 0;
+  const fraction = total > 0 ? (listing?.entriesDone ?? 0) / total : 0;
   return (
     <>
       <DialogTitle className="text-[17px]">Looking in the Trash…</DialogTitle>
@@ -321,6 +339,43 @@ function Loading() {
         <Loader2 className="size-3.5 animate-spin" aria-hidden />
         Measuring every item so you can see exactly what will be deleted.
       </DialogDescription>
+
+      {listing && total > 0 ? (
+        <>
+          <p className="mt-4 flex items-baseline gap-2">
+            <span className="tabular text-[28px] leading-8 font-semibold tracking-[-0.02em]">
+              {formatBytes(bytes)}
+            </span>
+            <span className="tabular text-xs text-muted-foreground">
+              in {plural(listing.files, "file")} so far
+            </span>
+          </p>
+
+          <div
+            role="progressbar"
+            aria-label="Measuring the Trash"
+            aria-valuemin={0}
+            aria-valuemax={total}
+            aria-valuenow={listing.entriesDone}
+            aria-valuetext={`${formatCount(listing.entriesDone)} of ${plural(total, "item")} measured`}
+            className="mt-3 h-1 overflow-hidden rounded-full bg-track"
+          >
+            <div
+              className="tr-progress h-full rounded-full bg-accent"
+              style={{ transform: `scaleX(${fraction})` }}
+            />
+          </div>
+
+          <p className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+            <span className="min-w-0 truncate">
+              {listing.current ? `Measuring “${listing.current}”` : "Sorting by size…"}
+            </span>
+            <span className="tabular shrink-0">
+              {formatCount(listing.entriesDone)} of {plural(total, "item")}
+            </span>
+          </p>
+        </>
+      ) : null}
     </>
   );
 }

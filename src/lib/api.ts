@@ -41,6 +41,7 @@ import type {
   ScanRecord,
   ScanSummary,
   TrashPreview,
+  TrashListing,
   TrashProgress,
   CleanupProgress,
   TrashResult,
@@ -157,6 +158,10 @@ export function onCleanupProgress(cb: (p: CleanupProgress) => void): Promise<Unl
 
 export function onTrashProgress(cb: (p: TrashProgress) => void): Promise<UnlistenFn> {
   return listen<TrashProgress>("trash://progress", (e) => cb(e.payload));
+}
+
+export function onTrashListing(cb: (p: TrashListing) => void): Promise<UnlistenFn> {
+  return listen<TrashListing>("trash://listing", (e) => cb(e.payload));
 }
 
 export function onDuplicatesProgress(cb: (p: DuplicateProgress) => void): Promise<UnlistenFn> {
