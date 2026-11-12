@@ -575,7 +575,6 @@ h1 {
     color-mix(in srgb, var(--accent-solid) 20%, transparent),
     transparent
   );
-  filter: blur(40px);
 }
 
 /* ---------- New in 0.6 ---------- */
@@ -2087,17 +2086,18 @@ h1 {
 /* ---------- Motion ---------- */
 
 .hero h1,
-.hero .hero-row,
-.hero .shot {
-  animation: rise 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+.hero .hero-row {
+  animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
 .hero .hero-row {
-  animation-delay: 90ms;
+  animation-delay: 60ms;
 }
 
+/* The screenshot is the largest thing on the page: show it as soon as it
+   arrives and only slide it, so the page never waits on a fade. */
 .hero .shot {
-  animation-delay: 180ms;
+  animation: slide 420ms cubic-bezier(0.2, 0.7, 0.2, 1) 120ms both;
 }
 
 @keyframes rise {
@@ -2107,12 +2107,18 @@ h1 {
   }
 }
 
+@keyframes slide {
+  from {
+    transform: translateY(14px);
+  }
+}
+
 .js .reveal {
   opacity: 0;
   transform: translateY(18px);
   transition:
-    opacity 600ms ease,
-    transform 600ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    opacity 420ms ease,
+    transform 420ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 .js .reveal.in {
