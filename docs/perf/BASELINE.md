@@ -58,19 +58,54 @@ view, so compare them with each other rather than with the real app.
 
 ## Changes
 
-| Change                                                                             | Metric                                      | Before         | After                                 |
-| ---------------------------------------------------------------------------------- | ------------------------------------------- | -------------- | ------------------------------------- |
-| Opaque thumbnails as JPEG (6809c6c)                                                | Large preview, warm                         | 55 ms, 928 KB  | 14 ms, 138 KB                         |
-|                                                                                    | Large preview, first pass                   | 62 ms          | 26 ms                                 |
-|                                                                                    | Row thumbnail                               | 3.5 ms, 5.0 KB | 3.1 ms, 2.2 KB                        |
-| Storage table renders only visible rows                                            | Switch to Storage (1,000 rows)              | 187 ms         | 70 ms                                 |
-|                                                                                    | Long tasks per run                          | 6              | 2                                     |
-|                                                                                    | JS bundle                                   | 653 KB         | 667 KB (+2%, @tanstack/react-virtual) |
-| Row thumbnail as a placeholder in the preview                                      | Preview open to first image                 | 66 ms          | 39 ms                                 |
-|                                                                                    | Preview open to full image                  | 66 ms          | 66 ms (unchanged)                     |
-| Rarely used pages load on first use (Docker, Developer Tools, Settings, Assistant) | JavaScript at startup                       | 667 KB         | 585 KB (−12%)                         |
-|                                                                                    | First render (two sets of 7 runs)           | 157 / 149 ms   | 107 / 143 ms                          |
-|                                                                                    | Switch to those pages (preloaded once idle) | 2–5 ms         | 2–4 ms                                |
-| Previous scan loads in the background at startup | Main-thread time in setup (load + recommendations) | 138–191 ms | 0 ms |
-| | App setup finished (real app, 3 launches) | 277–285 ms | 137–245 ms |
-| | First scan summary in the UI (real app, Vite dev server) | 611–621 ms | 445–583 ms |
+| Change                                                                             | Metric                                                   | Before         | After                                 |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------- | -------------- | ------------------------------------- |
+| Opaque thumbnails as JPEG (6809c6c)                                                | Large preview, warm                                      | 55 ms, 928 KB  | 14 ms, 138 KB                         |
+|                                                                                    | Large preview, first pass                                | 62 ms          | 26 ms                                 |
+|                                                                                    | Row thumbnail                                            | 3.5 ms, 5.0 KB | 3.1 ms, 2.2 KB                        |
+| Storage table renders only visible rows                                            | Switch to Storage (1,000 rows)                           | 187 ms         | 70 ms                                 |
+|                                                                                    | Long tasks per run                                       | 6              | 2                                     |
+|                                                                                    | JS bundle                                                | 653 KB         | 667 KB (+2%, @tanstack/react-virtual) |
+| Row thumbnail as a placeholder in the preview                                      | Preview open to first image                              | 66 ms          | 39 ms                                 |
+|                                                                                    | Preview open to full image                               | 66 ms          | 66 ms (unchanged)                     |
+| Rarely used pages load on first use (Docker, Developer Tools, Settings, Assistant) | JavaScript at startup                                    | 667 KB         | 585 KB (−12%)                         |
+|                                                                                    | First render (two sets of 7 runs)                        | 157 / 149 ms   | 107 / 143 ms                          |
+|                                                                                    | Switch to those pages (preloaded once idle)              | 2–5 ms         | 2–4 ms                                |
+| Previous scan loads in the background at startup                                   | Main-thread time in setup (load + recommendations)       | 138–191 ms     | 0 ms                                  |
+|                                                                                    | App setup finished (real app, 3 launches)                | 277–285 ms     | 137–245 ms                            |
+|                                                                                    | First scan summary in the UI (real app, Vite dev server) | 611–621 ms     | 445–583 ms                            |
+
+## Before and after, same harness
+
+`main` at 999909e against this branch, measured one after the other with the
+same tools (`perf/ui.mjs`, best of 5 runs, CPU slowed 4x), as the CI job does:
+
+| Metric                         | main   | This branch | Change                                |
+| ------------------------------ | ------ | ----------- | ------------------------------------- |
+| JavaScript at startup          | 640 KB | 574 KB      | −10%                                  |
+| JavaScript, total              | 640 KB | 657 KB      | +3% (react-virtual, chunk overhead)   |
+| Switch to Storage (1,000 rows) | 170 ms | 55 ms       | −68%                                  |
+| Switch to Duplicates           | 42 ms  | 7 ms        | −84%                                  |
+| Preview open to first image    | 71 ms  | 50 ms       | −30%                                  |
+| Preview open to full image     | 71 ms  | 80 ms       | within noise (15 ms floor)            |
+| First render                   | 102 ms | 112 ms      | within noise (varies ~20% run to run) |
+| Long tasks per run             | 5      | 2           | −60%                                  |
+| Scrolling                      | 60 fps | 60 fps      |                                       |
+
+The harness's Quick Look stand-in answers in a fixed 15 ms, so the JPEG change
+does not show here; on real files it took large previews from 55 ms to 14 ms.
+
+## Tried and dropped
+
+- **Async for every read command.** Copying and serialising the scan summary
+  (1.2 MB of JSON) takes about 1.8 ms, so moving it off the main thread alone
+  is not measurable. It was kept only for the three commands that can wait on
+  the startup restore.
+- **Virtualizing the other lists.** Largest items, Files by type, Duplicates
+  and Cleanup already show 50–100 rows a page and scroll at 60 fps; only the
+  folder table drew up to 1,000 rows. No list in the app reaches 100,000
+  rows: the engine sends at most 1,000 entries per folder and 2,000 files per
+  type.
+- **Scanner tuning.** Not changed here: `scanner/mod.rs` and `listing.rs` are
+  being reworked on the Windows branch, and the home scan (16.6 s median,
+  partial results at 6 s) is limited by the file system.
