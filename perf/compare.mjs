@@ -21,7 +21,15 @@ if (!head) {
 // The floors come from measuring the same commit twice: first render varied
 // by up to ~20 ms (about 20%) between sets of runs, the other timings by a few ms.
 const METRICS = [
-  { key: "scanFixtureMs", label: "Scan of the generated tree", unit: "ms", floor: 15 },
+  // The same scanner measured 12% apart on the CI runner, so the scan needs a
+  // wider margin.
+  {
+    key: "scanFixtureMs",
+    label: "Scan of the generated tree",
+    unit: "ms",
+    tolerance: 0.15,
+    floor: 100,
+  },
   { key: "jsBytes", label: "JavaScript, total", unit: "B", tolerance: 0.05, floor: 2048 },
   { key: "entryJsBytes", label: "JavaScript at startup", unit: "B", tolerance: 0.05, floor: 2048 },
   { key: "firstRenderMs", label: "First render", unit: "ms", floor: 40 },
