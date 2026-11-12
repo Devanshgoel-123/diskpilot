@@ -15,21 +15,16 @@ use std::time::Instant;
 const PROJECT_DIRS: &[&str] = &["node_modules", "target", ".git", "build", "src", "dist"];
 
 fn make_tree(root: &Path, files: usize) {
-    let marker = root.join(format!(".fixture-v1-{files}"));
+    use rayon::prelude::*;
+    let marker = root.join(format!(".fixture-v2-{files}"));
     if marker.exists() {
         return;
     }
     let _ = fs::remove_dir_all(root);
-    let mut seed: u64 = 0x9E37_79B9_7F4A_7C15;
-    let mut next = || {
-        seed ^= seed << 13;
-        seed ^= seed >> 7;
-        seed ^= seed << 17;
-        seed
-    };
-    let buf = vec![b'x'; 4096];
+    // Small files (up to 255 bytes), written in parallel: making the tree is
+    // setup, not what is measured, and the scan's work is the same.
     let per_dir = 50;
-    for i in 0..files.div_ceil(per_dir) {
+    (0..files.div_ceil(per_dir)).into_par_iter().for_each(|i| {
         let area = match i % 4 {
             0 => format!(
                 "Projects/p{}/{}",
@@ -43,12 +38,12 @@ fn make_tree(root: &Path, files: usize) {
         let dir = root.join(area);
         fs::create_dir_all(&dir).unwrap();
         for j in 0..per_dir.min(files - i * per_dir) {
-            let len = (next() % 4096) as usize;
+            let len = (i * 31 + j * 17) % 256;
             let ext = ["js", "rs", "json", "png", "txt", "o"][j % 6];
             let mut f = fs::File::create(dir.join(format!("f{j}.{ext}"))).unwrap();
-            f.write_all(&buf[..len]).unwrap();
+            f.write_all(&[b'x'; 256][..len]).unwrap();
         }
-    }
+    });
     fs::write(marker, b"").unwrap();
 }
 
