@@ -80,6 +80,10 @@ const PAGES = [
   "overview",
 ];
 
+// One unrecorded load first, so every recorded run starts with the browser warm.
+await page.goto(url, { waitUntil: "load" });
+await page.waitForFunction(() => window.__perf, null, { polling: "raf", timeout: 20_000 });
+
 for (let run = 0; run < RUNS; run++) {
   await page.goto(url, { waitUntil: "load" });
   await page.evaluate(SETTLE);
