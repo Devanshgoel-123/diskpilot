@@ -27,6 +27,9 @@ if (!process.env.PERF_SKIP_BUILD)
     build: { outDir: "dist-perf", emptyOutDir: true, rollupOptions: { input: "perf/index.html" } },
   });
 const server = await preview({
+  // Serving needs no plugins, so a side without its own dependencies
+  // installed (a cached base build in CI) can still be served.
+  configFile: false,
   logLevel: "error",
   build: { outDir: "dist-perf" },
   preview: { port: 0, strictPort: false },

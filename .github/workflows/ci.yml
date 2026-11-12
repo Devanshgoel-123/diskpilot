@@ -106,16 +106,30 @@ jobs:
           cache-on-failure: true
       - name: Check out the base branch next to this one
         env:
-          BASE_REF: ${{ github.base_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          git worktree add ../base "origin/$BASE_REF"
+          git worktree add ../base "$BASE_SHA"
           # The measuring tools come from this pull request, so both sides run the same harness.
           rm -rf ../base/perf && cp -R perf ../base/perf
           cp src-tauri/examples/_bench_fixture.rs ../base/src-tauri/examples/
+      # The base side's builds depend only on the base commit and on the
+      # measuring tools, so later pushes to the pull request reuse them.
+      - name: Restore the base side's builds
+        id: base-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/base-build
+          key: perf-base-${{ github.event.pull_request.base.sha }}-${{ hashFiles('perf/**', 'src-tauri/examples/_bench_fixture.rs') }}
       - name: Install
+        env:
+          CACHED: ${{ steps.base-cache.outputs.cache-hit }}
         run: |
           pnpm install --frozen-lockfile
-          (cd ../base && pnpm install --frozen-lockfile)
+          if [ "$CACHED" = true ]; then
+            cp -R "$RUNNER_TEMP/base-build/dist" "$RUNNER_TEMP/base-build/dist-perf" ../base/
+          else
+            (cd ../base && pnpm install --frozen-lockfile)
+          fi
           mkdir -p dist ../base/dist
       - name: Scan benchmark
         env:
@@ -127,8 +141,14 @@ jobs:
             exit 0
           fi
           bin="$CARGO_TARGET_DIR/release/examples/_bench_fixture"
-          (cd ../base/src-tauri && cargo build --release --locked --example _bench_fixture)
-          cp "$bin" "$RUNNER_TEMP/bench-base"
+          mkdir -p "$RUNNER_TEMP/base-build"
+          if [ -x "$RUNNER_TEMP/base-build/bench" ]; then
+            echo "Base benchmark from the cache."
+          else
+            (cd ../base/src-tauri && cargo build --release --locked --example _bench_fixture)
+            cp "$bin" "$RUNNER_TEMP/base-build/bench"
+          fi
+          cp "$RUNNER_TEMP/base-build/bench" "$RUNNER_TEMP/bench-base"
           (cd src-tauri && cargo build --release --locked --example _bench_fixture)
           cp "$bin" "$RUNNER_TEMP/bench-head"
           # Alternate the two so a slower moment on the runner hits both.
@@ -143,11 +163,17 @@ jobs:
             cat "$RUNNER_TEMP/scan-$side.json"
           done
       - name: UI benchmark
+        env:
+          CACHED: ${{ steps.base-cache.outputs.cache-hit }}
         run: |
-          for side in base head; do
-            dir=$([ "$side" = head ] && echo . || echo ../base)
-            (cd "$dir" && pnpm build >/dev/null && PERF_RUNS=1 node "$GITHUB_WORKSPACE/perf/ui.mjs" "$RUNNER_TEMP/ui-$side-0.json")
-          done
+          if [ "$CACHED" = true ]; then
+            (cd ../base && PERF_RUNS=1 PERF_SKIP_BUILD=1 node "$GITHUB_WORKSPACE/perf/ui.mjs" "$RUNNER_TEMP/ui-base-0.json")
+          else
+            (cd ../base && pnpm build >/dev/null && PERF_RUNS=1 node "$GITHUB_WORKSPACE/perf/ui.mjs" "$RUNNER_TEMP/ui-base-0.json")
+            mkdir -p "$RUNNER_TEMP/base-build"
+            cp -R ../base/dist ../base/dist-perf "$RUNNER_TEMP/base-build/"
+          fi
+          pnpm build >/dev/null && PERF_RUNS=1 node perf/ui.mjs "$RUNNER_TEMP/ui-head-0.json"
           # Alternate further rounds, reusing each side's build.
           for round in 1 2; do
             for side in base head; do
