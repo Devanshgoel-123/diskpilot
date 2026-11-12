@@ -1,6 +1,6 @@
 [package]
 name = "diskpilot"
-version = "0.6.3"
+version = "0.6.4"
 description = "Open-source macOS storage intelligence"
 authors = ["DiskPilot contributors"]
 license = "MIT"
