@@ -215,14 +215,16 @@
               <picture>
                 <source
                   media="(max-width: 640px)"
-                  srcset="/shots/overview-m-dark.jpg"
+                  srcset="/shots/overview-m-dark.webp"
                   data-shot-m="overview"
                   width="1140"
                   height="600"
                 />
                 <img
                   data-shot="overview"
-                  src="/shots/overview-dark.jpg"
+                  src="/shots/overview-dark.webp"
+                  srcset="/shots/overview-dark-1200.webp 1200w, /shots/overview-dark.webp 2200w"
+                  sizes="(max-width: 1360px) 100vw, 1320px"
                   width="2200"
                   height="1375"
                   alt="DiskPilot's Overview: 130 GB used of 245 GB, a bar of usage by category, cleanup suggestions such as Rust build output (11.0 GB, likely safe) and a breakdown of where space goes."
@@ -251,10 +253,11 @@
               <div class="window">
                 <img
                   data-shot="new-bytype"
-                  src="/shots/new-bytype-dark.jpg"
+                  src="/shots/new-bytype-dark.webp"
                   width="1280"
                   height="800"
                   loading="lazy"
+                  decoding="async"
                   alt="The By type tab in Storage: Videos selected, 18.4 GB in 214 files, with three large videos ticked for review."
                 />
               </div>
@@ -269,10 +272,11 @@
               <div class="window">
                 <img
                   data-shot="new-cleared"
-                  src="/shots/new-cleared-dark.jpg"
+                  src="/shots/new-cleared-dark.webp"
                   width="1280"
                   height="800"
                   loading="lazy"
+                  decoding="async"
                   alt="History showing 47.7 GB cleared in 9 cleanups and a 6-week streak."
                 />
               </div>
@@ -286,10 +290,11 @@
               <div class="window">
                 <img
                   data-shot="new-docker"
-                  src="/shots/new-docker-dark.jpg"
+                  src="/shots/new-docker-dark.webp"
                   width="1280"
                   height="800"
                   loading="lazy"
+                  decoding="async"
                   alt="Removing a Docker container: the dialog lists docker stop, docker rm and docker volume rm, with the container's volumes as checkboxes."
                 />
               </div>
@@ -304,10 +309,11 @@
               <div class="window">
                 <img
                   data-shot="new-updates"
-                  src="/shots/new-updates-dark.jpg"
+                  src="/shots/new-updates-dark.webp"
                   width="1280"
                   height="800"
                   loading="lazy"
+                  decoding="async"
                   alt="The sidebar notice: DiskPilot 0.6.1 is available, with Update and restart and What's new buttons."
                 />
               </div>
@@ -579,17 +585,20 @@
               <picture>
                 <source
                   media="(max-width: 640px)"
-                  srcset="/shots/devtools-m-dark.jpg"
+                  srcset="/shots/devtools-m-dark.webp"
                   data-shot-m="devtools"
                   width="1140"
                   height="575"
                 />
                 <img
                   data-shot="devtools"
-                  src="/shots/devtools-dark.jpg"
+                  src="/shots/devtools-dark.webp"
+                  srcset="/shots/devtools-dark-1200.webp 1200w, /shots/devtools-dark.webp 2000w"
+                  sizes="(max-width: 1220px) 100vw, 1180px"
                   width="2000"
                   height="1250"
                   loading="lazy"
+                  decoding="async"
                   alt="DiskPilot's Developer Tools page: Rust 12.5 GB, Cursor 8.3 GB with 81 workspace folders for projects that no longer exist, Node.js 6.4 GB, Claude Code 1.6 GB with superseded versions, and a check for credentials in AI transcripts."
                 />
               </picture>
@@ -785,17 +794,20 @@
               <picture>
                 <source
                   media="(max-width: 640px)"
-                  srcset="/shots/cleanup-m-dark.jpg"
+                  srcset="/shots/cleanup-m-dark.webp"
                   data-shot-m="cleanup"
                   width="1140"
                   height="410"
                 />
                 <img
                   data-shot="cleanup"
-                  src="/shots/cleanup-dark.jpg"
+                  src="/shots/cleanup-dark.webp"
+                  srcset="/shots/cleanup-dark-1200.webp 1200w, /shots/cleanup-dark.webp 2000w"
+                  sizes="(max-width: 1220px) 100vw, 1180px"
                   width="2000"
                   height="691"
                   loading="lazy"
+                  decoding="async"
                   alt="DiskPilot's Cleanup page: tabs for Likely safe 23.2 GB, Review first 10.3 GB and Keep 11.7 GB, a note that every path is re-checked before anything happens, and selected items such as Rust build output and application caches."
                 />
               </picture>
@@ -1187,6 +1199,8 @@ gh attestation verify DiskPilot.dmg -R Devanshgoel-123/diskpilot</code></pre>
               width="190"
               height="52"
               alt="Listed on MacPip"
+              loading="lazy"
+              decoding="async"
             />
           </a>
           <a
@@ -1206,7 +1220,7 @@ gh attestation verify DiskPilot.dmg -R Devanshgoel-123/diskpilot</code></pre>
           </a>
           <a class="footer-badge" href="https://www.trymacapps.com" target="_blank" rel="noopener">
             <img
-              src="https://www.trymacapps.com/badge.png"
+              src="/badges/trymacapps.png"
               alt="Featured on TryMacApps"
               width="200"
               height="67"
