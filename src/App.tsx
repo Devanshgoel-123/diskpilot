@@ -1,5 +1,5 @@
 import { AlertCircle, MonitorX, X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -7,14 +7,10 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ApplicationsPage } from "@/features/applications/ApplicationsPage";
-import { AssistantPage } from "@/features/assistant/AssistantPage";
-import { DeveloperToolsPage } from "@/features/developer/DeveloperToolsPage";
-import { DockerPage } from "@/features/docker/DockerPage";
 import { DuplicatesPage } from "@/features/duplicates/DuplicatesPage";
 import { HistoryPage } from "@/features/history/HistoryPage";
 import { OverviewPage } from "@/features/overview/OverviewPage";
 import { RecommendationsPage } from "@/features/recommendations/RecommendationsPage";
-import { SettingsPage } from "@/features/settings/SettingsPage";
 import { StoragePage } from "@/features/storage/StoragePage";
 import { EmptyTrashDialog } from "@/features/trash/EmptyTrashDialog";
 import { useTrash } from "@/features/trash/trashStore";
@@ -26,7 +22,24 @@ import { runShortcut, useShortcutsDialog } from "@/lib/shortcuts";
 import { startUpdateChecks } from "@/lib/updates";
 import { playScanDone, startScanSound, stopScanSound } from "@/lib/sounds";
 
-const PAGES: Record<PageId, () => React.JSX.Element> = {
+// Pages most people open rarely load on first use, so the window starts with
+// less code to parse; they are fetched in the background once it has drawn.
+const loadAssistant = () => import("@/features/assistant/AssistantPage");
+const loadDeveloper = () => import("@/features/developer/DeveloperToolsPage");
+const loadDocker = () => import("@/features/docker/DockerPage");
+const loadSettings = () => import("@/features/settings/SettingsPage");
+const AssistantPage = lazy(() => loadAssistant().then((m) => ({ default: m.AssistantPage })));
+const DeveloperToolsPage = lazy(() =>
+  loadDeveloper().then((m) => ({ default: m.DeveloperToolsPage })),
+);
+const DockerPage = lazy(() => loadDocker().then((m) => ({ default: m.DockerPage })));
+const SettingsPage = lazy(() => loadSettings().then((m) => ({ default: m.SettingsPage })));
+
+function preloadPages() {
+  for (const load of [loadAssistant, loadDeveloper, loadDocker, loadSettings]) void load();
+}
+
+const PAGES: Record<PageId, React.ComponentType> = {
   assistant: AssistantPage,
   applications: ApplicationsPage,
   overview: OverviewPage,
@@ -95,6 +108,11 @@ export function App() {
     void init();
   }, [init]);
 
+  useEffect(() => {
+    const idle = window.requestIdleCallback ?? ((f: () => void) => setTimeout(f, 200));
+    idle(preloadPages);
+  }, []);
+
   // Look for a newer DiskPilot shortly after launch, then daily.
   useEffect(() => {
     if (inDesktopApp()) startUpdateChecks();
@@ -133,7 +151,9 @@ export function App() {
         <Sidebar />
         <main className="flex min-w-0 flex-1 flex-col">
           <StatusBanner />
-          <Page />
+          <Suspense fallback={null}>
+            <Page />
+          </Suspense>
         </main>
       </div>
       <ScanSounds />
