@@ -361,12 +361,14 @@ pub fn cancel_scan(state: State<'_, AppState>) -> bool {
     }
 }
 
-#[tauri::command]
+/// Async so the wait for the previous launch's results happens off the main thread.
+#[tauri::command(async)]
 pub fn is_scan_running(state: State<'_, AppState>) -> bool {
     state.slot().running.is_some()
 }
 
-#[tauri::command]
+/// Async so the wait for the previous launch's results happens off the main thread.
+#[tauri::command(async)]
 pub fn get_scan_summary(state: State<'_, AppState>) -> Option<ScanSummary> {
     state.slot().last.as_ref().map(|o| o.summary.clone())
 }
@@ -587,7 +589,8 @@ pub fn get_scan_history(
 
 // ---- Recommendations & cleanup -------------------------------------------
 
-#[tauri::command]
+/// Async so the wait for the previous launch's results happens off the main thread.
+#[tauri::command(async)]
 pub fn get_recommendations(state: State<'_, AppState>) -> Vec<Recommendation> {
     state.slot().all_recommendations()
 }

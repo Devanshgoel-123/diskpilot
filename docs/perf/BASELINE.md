@@ -71,3 +71,6 @@ view, so compare them with each other rather than with the real app.
 | Rarely used pages load on first use (Docker, Developer Tools, Settings, Assistant) | JavaScript at startup                       | 667 KB         | 585 KB (−12%)                         |
 |                                                                                    | First render (two sets of 7 runs)           | 157 / 149 ms   | 107 / 143 ms                          |
 |                                                                                    | Switch to those pages (preloaded once idle) | 2–5 ms         | 2–4 ms                                |
+| Previous scan loads in the background at startup | Main-thread time in setup (load + recommendations) | 138–191 ms | 0 ms |
+| | App setup finished (real app, 3 launches) | 277–285 ms | 137–245 ms |
+| | First scan summary in the UI (real app, Vite dev server) | 611–621 ms | 445–583 ms |
