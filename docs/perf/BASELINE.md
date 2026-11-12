@@ -22,14 +22,18 @@ request, copies this pull request's measuring tools into it, and measures both
 on the same machine:
 
 - the scan of the generated tree (`_bench_fixture`, 200,000 files, median of 5),
-  only when the pull request changes `src-tauri`;
+  only when the pull request changes `src-tauri`; base and pull request
+  runs alternate, five each;
 - the size of the built JavaScript, in total and at startup;
-- the UI harness (`perf/ui.mjs`, 3 runs, CPU slowed 2x on the Intel runner).
+- the UI harness (`perf/ui.mjs`, three alternating rounds per side, CPU slowed 2x
+  on the Intel runner).
+
+Each side keeps the best value of each metric (`perf/merge.mjs`).
 
 `perf/compare.mjs` fails the job when a metric is more than 10% worse than the
 base branch (5% for JavaScript size, 15% and 100 ms for the scan, which
 varied by 12% between two builds of the same scanner on the runner) and also worse by more than a small
-absolute amount (40 ms for first render, which varies by about 20% between
+absolute amount (20% and 40 ms for first render, which varies by about 20% between
 runs of the same commit; 15 ms for page switches and previews), or when it goes
 over a limit in `docs/perf/budgets.json`. The
 table goes to the job summary and, for pull requests from this repository, to

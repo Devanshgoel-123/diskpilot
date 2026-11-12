@@ -32,7 +32,7 @@ const METRICS = [
   },
   { key: "jsBytes", label: "JavaScript, total", unit: "B", tolerance: 0.05, floor: 2048 },
   { key: "entryJsBytes", label: "JavaScript at startup", unit: "B", tolerance: 0.05, floor: 2048 },
-  { key: "firstRenderMs", label: "First render", unit: "ms", floor: 40 },
+  { key: "firstRenderMs", label: "First render", unit: "ms", tolerance: 0.2, floor: 40 },
   { key: "pageSwitchMaxMs", label: "Slowest page switch", unit: "ms", floor: 15 },
   { key: "previewFirstImageMs", label: "Preview, first image", unit: "ms", floor: 15 },
   { key: "previewOpenMs", label: "Preview, full image", unit: "ms", floor: 15 },

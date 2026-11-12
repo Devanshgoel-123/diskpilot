@@ -20,10 +20,12 @@ const round = (x) => Math.round(x * 10) / 10;
 const best = (xs) => Math.min(...xs);
 
 // A production build of the harness, served like the app's own files.
-await build({
-  logLevel: "error",
-  build: { outDir: "dist-perf", emptyOutDir: true, rollupOptions: { input: "perf/index.html" } },
-});
+// PERF_SKIP_BUILD=1 reuses dist-perf from an earlier run.
+if (!process.env.PERF_SKIP_BUILD)
+  await build({
+    logLevel: "error",
+    build: { outDir: "dist-perf", emptyOutDir: true, rollupOptions: { input: "perf/index.html" } },
+  });
 const server = await preview({
   logLevel: "error",
   build: { outDir: "dist-perf" },

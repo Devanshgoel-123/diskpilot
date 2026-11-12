@@ -83,7 +83,6 @@ jobs:
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
       # One target folder for both sides, so the base build only recompiles DiskPilot itself.
       CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
-      PERF_RUNS: "3"
       # The Intel runner is already slower than a current Mac.
       PERF_CPU_THROTTLE: "2"
       CHROME: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
@@ -127,18 +126,37 @@ jobs:
             echo "No engine changes; scan benchmark skipped."
             exit 0
           fi
+          bin="$CARGO_TARGET_DIR/release/examples/_bench_fixture"
+          (cd ../base/src-tauri && cargo build --release --locked --example _bench_fixture)
+          cp "$bin" "$RUNNER_TEMP/bench-base"
+          (cd src-tauri && cargo build --release --locked --example _bench_fixture)
+          cp "$bin" "$RUNNER_TEMP/bench-head"
+          # Alternate the two so a slower moment on the runner hits both.
           fixture="$RUNNER_TEMP/perf-tree"
+          for round in 1 2 3 4 5; do
+            for side in base head; do
+              "$RUNNER_TEMP/bench-$side" "$fixture" 200000 1 > "$RUNNER_TEMP/scan-$side-$round.json"
+            done
+          done
           for side in base head; do
-            dir=$([ "$side" = head ] && echo . || echo ../base)
-            (cd "$dir/src-tauri" && cargo build --release --locked --example _bench_fixture)
-            "$CARGO_TARGET_DIR/release/examples/_bench_fixture" "$fixture" 200000 5 > "$RUNNER_TEMP/scan-$side.json"
+            node perf/merge.mjs "$RUNNER_TEMP/scan-$side.json" "$RUNNER_TEMP"/scan-$side-*.json
             cat "$RUNNER_TEMP/scan-$side.json"
           done
       - name: UI benchmark
         run: |
           for side in base head; do
             dir=$([ "$side" = head ] && echo . || echo ../base)
-            (cd "$dir" && pnpm build >/dev/null && node "$GITHUB_WORKSPACE/perf/ui.mjs" "$RUNNER_TEMP/ui-$side.json")
+            (cd "$dir" && pnpm build >/dev/null && PERF_RUNS=1 node "$GITHUB_WORKSPACE/perf/ui.mjs" "$RUNNER_TEMP/ui-$side-0.json")
+          done
+          # Alternate further rounds, reusing each side's build.
+          for round in 1 2; do
+            for side in base head; do
+              dir=$([ "$side" = head ] && echo . || echo ../base)
+              (cd "$dir" && PERF_RUNS=1 PERF_SKIP_BUILD=1 node "$GITHUB_WORKSPACE/perf/ui.mjs" "$RUNNER_TEMP/ui-$side-$round.json")
+            done
+          done
+          for side in base head; do
+            node perf/merge.mjs "$RUNNER_TEMP/ui-$side.json" "$RUNNER_TEMP"/ui-$side-*.json
           done
       - name: Compare
         id: compare
@@ -157,7 +175,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
-        run: gh pr comment "$PR" --body-file "$RUNNER_TEMP/perf.md" --edit-last --create-if-none
+        run: |
+          for try in 1 2 3; do
+            gh pr comment "$PR" --body-file "$RUNNER_TEMP/perf.md" --edit-last --create-if-none && exit 0
+            sleep 10
+          done
+          exit 1
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
