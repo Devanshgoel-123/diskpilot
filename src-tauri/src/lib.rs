@@ -31,6 +31,7 @@ pub mod snapshot;
 pub mod state;
 #[cfg(test)]
 pub mod test_support;
+pub mod thumbcache;
 pub mod trash;
 pub mod tray;
 pub mod tray_icon;
@@ -81,6 +82,13 @@ pub fn run() {
                 trash: std::sync::Mutex::default(),
                 duplicates: std::sync::Mutex::default(),
                 docker_reviews: std::sync::Mutex::default(),
+                // DiskPilot's own cache folder, e.g. ~/Library/Caches/dev.diskpilot.app.
+                thumbs: app
+                    .path()
+                    .app_cache_dir()
+                    .ok()
+                    .and_then(|dir| thumbcache::ThumbCache::open(dir.join("thumbnails")))
+                    .map(std::sync::Arc::new),
             });
             // Results from the previous launch, shown until the next scan. They
             // load in the background (about 150 ms for a home folder) so the

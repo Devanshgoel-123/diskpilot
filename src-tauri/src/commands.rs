@@ -531,11 +531,18 @@ pub async fn file_thumbnail(
     size: f64,
 ) -> AppResult<tauri::ipc::Response> {
     ensure_listed(&state, &path)?;
+    let cache = state.thumbs.clone();
     blocking(move || {
         let path = previewable_file(&path)?;
-        crate::preview::thumbnail_png(&path, size)
-            .map(tauri::ipc::Response::new)
-            .ok_or_else(|| AppError::Other("macOS could not make a preview of this file".into()))
+        if let Some(saved) = cache.as_ref().and_then(|c| c.get(&path, size)) {
+            return Ok(tauri::ipc::Response::new(saved));
+        }
+        let made = crate::preview::thumbnail_png(&path, size)
+            .ok_or_else(|| AppError::Other("macOS could not make a preview of this file".into()))?;
+        if let Some(c) = &cache {
+            c.put(&path, size, &made);
+        }
+        Ok(tauri::ipc::Response::new(made))
     })
     .await
 }

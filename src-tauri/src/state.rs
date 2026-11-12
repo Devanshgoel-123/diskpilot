@@ -112,6 +112,8 @@ pub struct AppState {
     /// Docker previews shown to the person, by id, with when they were made.
     /// Executing names one; it is single use and short-lived.
     pub docker_reviews: Mutex<HashMap<String, (crate::docker::actions::Reviewed, i64)>>,
+    /// Thumbnails saved between launches; `None` if the cache folder is unavailable.
+    pub thumbs: Option<Arc<crate::thumbcache::ThumbCache>>,
 }
 
 impl AppState {
