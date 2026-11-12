@@ -27,6 +27,7 @@ pub mod safety;
 pub mod scanner;
 pub mod schedule;
 pub mod secrets;
+pub mod signup;
 pub mod snapshot;
 pub mod state;
 #[cfg(test)]
@@ -106,11 +107,19 @@ pub fn run() {
                 }
                 state.restore.finish();
             });
+            // A signup saved while offline goes to diskpilot.live now.
+            if let Some(dir) = app.state::<AppState>().data_dir.clone() {
+                std::thread::spawn(move || {
+                    signup::send_pending(&dir, signup::send);
+                });
+            }
             schedule::spawn(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_environment,
+            commands::get_signup,
+            commands::submit_signup,
             commands::get_disk_info,
             commands::get_schedule,
             commands::set_schedule,

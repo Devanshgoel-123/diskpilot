@@ -93,6 +93,30 @@ pub fn get_environment(state: State<'_, AppState>) -> AppEnvironment {
     }
 }
 
+/// The email this Mac signed up with, if it has.
+#[tauri::command]
+pub fn get_signup(state: State<'_, AppState>) -> Option<crate::signup::Signup> {
+    state.data_dir.as_deref().and_then(crate::signup::load)
+}
+
+/// Sign up with an email: saved here, then sent to diskpilot.live with the
+/// app and macOS versions. Works offline; the email is sent later.
+#[tauri::command]
+pub async fn submit_signup(
+    state: State<'_, AppState>,
+    email: String,
+) -> AppResult<crate::signup::Signup> {
+    let dir = state
+        .data_dir
+        .clone()
+        .ok_or_else(|| AppError::Other("DiskPilot's data folder is unavailable.".into()))?;
+    blocking(move || {
+        crate::signup::submit(&dir, &email, crate::scanner::now_ms(), crate::signup::send)
+            .map_err(AppError::Other)
+    })
+    .await
+}
+
 /// An update replaces the app where it is. From the disk image (read-only),
 /// or from a copy macOS opened in a random read-only location because it was
 /// never moved out of Downloads (App Translocation), that cannot work.
