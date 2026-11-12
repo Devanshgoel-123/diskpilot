@@ -61,13 +61,13 @@ const TOOL_DEFS: { id: string; name: string; description: string; prefixes: stri
     id: "xcode",
     name: "Xcode & Apple tools",
     description: "DerivedData, archives, device support and simulators.",
-    prefixes: ["xcode.", "apple.", "cocoapods."],
+    prefixes: ["xcode.", "apple.", "cocoapods.", "swiftpm."],
   },
   {
     id: "node",
     name: "Node.js",
     description: "node_modules, package manager caches, framework builds and runtimes.",
-    prefixes: ["node.", "npm.", "pnpm.", "yarn.", "bun.", "nvm."],
+    prefixes: ["node.", "npm.", "pnpm.", "yarn.", "bun.", "deno.", "nvm.", "puppeteer."],
   },
   {
     id: "cursor",
@@ -126,8 +126,8 @@ const TOOL_DEFS: { id: string; name: string; description: string; prefixes: stri
   {
     id: "other",
     name: "Other developer storage",
-    description: "Gradle, Maven, Android, Homebrew, CLI caches and Git data.",
-    prefixes: ["gradle.", "maven.", "android.", "homebrew.", "xdg.", "git."],
+    description: "Gradle, Maven, NuGet, Android, Homebrew, CLI caches and Git data.",
+    prefixes: ["gradle.", "maven.", "nuget.", "android.", "homebrew.", "xdg.", "git."],
   },
 ];
 
