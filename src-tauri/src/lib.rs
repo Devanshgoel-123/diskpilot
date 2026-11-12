@@ -111,6 +111,7 @@ pub fn run() {
             commands::cancel_scan,
             commands::is_scan_running,
             commands::get_scan_summary,
+            commands::get_file_kind_files,
             commands::get_saved_scan_info,
             commands::clear_saved_scan,
             commands::list_directory,

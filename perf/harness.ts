@@ -6,6 +6,11 @@ import { HOME, makeFixture } from "./fixture";
 
 const t0 = performance.now();
 const fx = makeFixture();
+// As the engine sends it: file types carry totals, their files come on request.
+const windowSummary = {
+  ...fx.summary,
+  fileKinds: fx.summary.fileKinds.map(({ files, ...g }) => ({ ...g, listed: files.length })),
+};
 (window as unknown as { isTauri: boolean }).isTauri = true;
 
 // One small JPEG for every thumbnail, after a fixed delay standing in for
@@ -33,7 +38,9 @@ mockIPC(
       case "get_disk_info":
         return fx.disk;
       case "get_scan_summary":
-        return fx.summary;
+        return windowSummary;
+      case "get_file_kind_files":
+        return fx.summary.fileKinds.find((g) => g.kind === a.kind)?.files ?? [];
       case "is_scan_running":
         return false;
       case "get_saved_scan_info":

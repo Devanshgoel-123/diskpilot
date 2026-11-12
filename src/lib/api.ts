@@ -8,6 +8,8 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
+  FileEntry,
+  FileKind,
   AppBadge,
   AppStorageReport,
   AppEnvironment,
@@ -53,6 +55,8 @@ export const api = {
   cancelScan: () => invoke<boolean>("cancel_scan"),
   isScanRunning: () => invoke<boolean>("is_scan_running"),
   getScanSummary: () => invoke<ScanSummary | null>("get_scan_summary"),
+  /** The files the last scan listed for one type, largest first. */
+  getFileKindFiles: (kind: FileKind) => invoke<FileEntry[]>("get_file_kind_files", { kind }),
   getSavedScanInfo: () => invoke<SavedScanInfo>("get_saved_scan_info"),
   clearSavedScan: () => invoke<null>("clear_saved_scan"),
   listDirectory: (path?: string) =>

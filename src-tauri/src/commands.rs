@@ -367,10 +367,68 @@ pub fn is_scan_running(state: State<'_, AppState>) -> bool {
     state.slot().running.is_some()
 }
 
+/// One type's totals in the summary sent to the window, without its files.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileKindTotals {
+    pub kind: crate::filekinds::FileKind,
+    pub bytes: u64,
+    pub file_count: u64,
+    /// How many files the scan listed for this type (`get_file_kind_files`).
+    pub listed: usize,
+}
+
+/// The scan summary as the window receives it. The 2,000 largest files per
+/// type were most of its size (about 1.2 MB of JSON for a home folder), so
+/// each type carries its totals and the window asks for one type's files
+/// when it shows them.
+pub fn summary_for_window(summary: &ScanSummary) -> serde_json::Value {
+    let totals: Vec<FileKindTotals> = summary
+        .file_kinds
+        .iter()
+        .map(|g| FileKindTotals {
+            kind: g.kind,
+            bytes: g.bytes,
+            file_count: g.file_count,
+            listed: g.files.len(),
+        })
+        .collect();
+    let rest = ScanSummary {
+        file_kinds: Vec::new(),
+        ..summary.clone()
+    };
+    let mut value = serde_json::to_value(rest).unwrap_or(serde_json::Value::Null);
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert(
+            "fileKinds".into(),
+            serde_json::to_value(totals).unwrap_or_default(),
+        );
+    }
+    value
+}
+
 /// Async so the wait for the previous launch's results happens off the main thread.
 #[tauri::command(async)]
-pub fn get_scan_summary(state: State<'_, AppState>) -> Option<ScanSummary> {
-    state.slot().last.as_ref().map(|o| o.summary.clone())
+pub fn get_scan_summary(state: State<'_, AppState>) -> Option<serde_json::Value> {
+    let last = state.slot().last.clone()?;
+    Some(summary_for_window(&last.summary))
+}
+
+/// The files the last scan listed for one type, largest first.
+#[tauri::command(async)]
+pub fn get_file_kind_files(
+    state: State<'_, AppState>,
+    kind: crate::filekinds::FileKind,
+) -> Vec<crate::model::FileEntry> {
+    let Some(last) = state.slot().last.clone() else {
+        return Vec::new();
+    };
+    last.summary
+        .file_kinds
+        .iter()
+        .find(|g| g.kind == kind)
+        .map(|g| g.files.clone())
+        .unwrap_or_default()
 }
 
 fn last_scan(state: &AppState) -> AppResult<Arc<ScanOutcome>> {
@@ -1355,7 +1413,40 @@ fn unique_id(prefix: &str, now: i64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{opens_to_view, previewable_file};
+    use super::{opens_to_view, previewable_file, summary_for_window};
+
+    #[test]
+    fn the_window_gets_file_kind_totals_without_the_files() {
+        let cls = serde_json::json!({ "category": "userData", "label": "x", "explanation": "x",
+            "ruleId": "x", "confidence": "high", "matchedPath": "/Users/t" });
+        let file = |p: &str, b: u64| {
+            serde_json::json!({ "path": p, "name": p, "bytes": b,
+            "logicalBytes": b, "modifiedMs": 1, "classification": cls })
+        };
+        let summary: crate::model::ScanSummary = serde_json::from_value(serde_json::json!({
+            "id": "s", "root": "/Users/t", "startedAtMs": 0, "finishedAtMs": 1, "durationMs": 1,
+            "totalBytes": 300, "fileCount": 9, "dirCount": 1, "symlinkCount": 0,
+            "skippedVolumes": 0, "errorCount": 0, "errorSamples": [], "categories": [],
+            "largestFiles": [file("/Users/t/a.mov", 200)], "detectedLocations": [],
+            "heavyDirectories": [],
+            "fileKinds": [{ "kind": "videos", "bytes": 300, "fileCount": 7,
+                "files": [file("/Users/t/a.mov", 200), file("/Users/t/b.mov", 100)] }]
+        }))
+        .unwrap();
+        let v = summary_for_window(&summary);
+        let kinds = v["fileKinds"].as_array().unwrap();
+        assert_eq!(kinds.len(), 1);
+        assert_eq!(kinds[0]["kind"], "videos");
+        assert_eq!(kinds[0]["bytes"], 300);
+        assert_eq!(kinds[0]["fileCount"], 7);
+        assert_eq!(kinds[0]["listed"], 2);
+        assert!(kinds[0].get("files").is_none());
+        // Everything else is as the scanner made it.
+        assert_eq!(v["totalBytes"], 300);
+        assert_eq!(v["largestFiles"][0]["path"], "/Users/t/a.mov");
+        // The saved summary still has the files.
+        assert_eq!(summary.file_kinds[0].files.len(), 2);
+    }
 
     #[test]
     fn opens_photos_videos_and_documents_only() {

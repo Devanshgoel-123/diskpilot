@@ -118,18 +118,21 @@ export interface ScanSummary {
   largestFiles: FileEntry[];
   detectedLocations: DetectedLocation[];
   heavyDirectories: DirectorySize[];
-  /** Personal files by type, largest types first. Empty before 0.6 scans. */
-  fileKinds?: FileKindGroup[];
+  /**
+   * Personal files by type, largest types first, without the files
+   * themselves (`api.getFileKindFiles`). Empty before 0.6 scans.
+   */
+  fileKinds?: FileKindTotals[];
 }
 
 export type FileKind = "videos" | "images" | "audio" | "archives" | "installers" | "documents";
 
-export interface FileKindGroup {
+export interface FileKindTotals {
   kind: FileKind;
   bytes: number;
   fileCount: number;
-  /** Largest first, at most 2,000, each at least 25 KB. */
-  files: FileEntry[];
+  /** How many files the scan listed (largest first, at most 2,000, each at least 25 KB). */
+  listed: number;
 }
 
 export type EntryKind = "directory" | "file" | "symlink" | "other";
