@@ -513,6 +513,10 @@ mod tests {
             dir("/Users/test/.cache/puppeteer", &p).rule_id,
             "puppeteer.browsers"
         );
+        assert_eq!(
+            dir("/Users/test/.nuget/packages", &p).rule_id,
+            "nuget.packages"
+        );
         assert_eq!(dir("/Users/test/go/pkg/mod", &p).rule_id, "go.mod-cache");
         assert_eq!(
             dir("/Users/test/.asdf/installs", &p).rule_id,
