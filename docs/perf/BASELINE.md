@@ -47,3 +47,5 @@ view, so compare them with each other rather than with the real app.
 | Storage table renders only visible rows | Switch to Storage (1,000 rows) | 187 ms | 70 ms |
 | | Long tasks per run | 6 | 2 |
 | | JS bundle | 653 KB | 667 KB (+2%, @tanstack/react-virtual) |
+| Row thumbnail as a placeholder in the preview | Preview open to first image | 66 ms | 39 ms |
+| | Preview open to full image | 66 ms | 66 ms (unchanged) |

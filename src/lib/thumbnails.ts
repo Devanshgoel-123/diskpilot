@@ -78,6 +78,18 @@ export function cachedThumbnail(path: string, size: number): string | null | und
 }
 
 /**
+ * A row thumbnail already loaded for this file at any size, to show while
+ * the large preview loads. Does not change which entries are kept.
+ */
+export function anySmallThumbnail(path: string): string | undefined {
+  for (const size of [32, 28, 24]) {
+    const url = small.get(keyOf(path, size));
+    if (url) return url;
+  }
+  return undefined;
+}
+
+/**
  * Loads a Quick Look thumbnail, queued so long lists stay responsive. A large
  * preview someone just opened goes ahead of row thumbnails, and the newest
  * row thumbnails go first, so scrolling quickly fills the rows in view
