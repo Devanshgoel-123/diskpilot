@@ -134,3 +134,21 @@ Run [43185456429](https://github.com/Devanshgoel-123/diskpilot-dev/actions/runs/
 
 With a cold Rust cache the job took 18 minutes, almost all of it two release
 builds; the budgets above were set from this run.
+
+## Gate passing (alternating runs)
+
+Run [43191389538](https://github.com/Devanshgoel-123/diskpilot-dev/actions/runs/43191389538)
+passed in 13 minutes with a warm Rust cache: 6.5 minutes for the two scan
+benchmark builds (only on pull requests that change `src-tauri`), 4 minutes for
+the UI rounds, 2.5 minutes of setup.
+
+| Metric                     | main     | This branch             |
+| -------------------------- | -------- | ----------------------- |
+| Scan of the generated tree | 1,175 ms | 1,058 ms (same scanner) |
+| JavaScript at startup      | 640 KB   | 574 KB                  |
+| First render               | 361 ms   | 250 ms                  |
+| Slowest page switch        | 504 ms   | 161 ms                  |
+| Preview, first image       | 187 ms   | 82 ms                   |
+| Preview, full image        | 187 ms   | 140 ms                  |
+| Scrolling, slowest list    | 20.6 fps | 21.8 fps                |
+| Long tasks per run         | 15       | 12                      |
