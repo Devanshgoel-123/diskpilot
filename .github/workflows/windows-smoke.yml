@@ -1,0 +1,122 @@
+name: Windows smoke test
+
+# Installs a CI-built Windows installer on a clean runner, drives the app
+# through WebView2's DevTools port (scan, every page, the transcript check),
+# then uninstalls it. Screenshots, page text and logs are uploaded.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: CI run that built the installer
+        required: true
+  push:
+    branches: ["feat/windows"]
+    paths: [".github/workflows/windows-smoke.yml", ".github/smoke/**"]
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  INSTALLER_RUN: ${{ inputs.run_id || '42891476970' }}
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: DiskPilot-windows-x64-setup
+          path: installer
+          run-id: ${{ env.INSTALLER_RUN }}
+          github-token: ${{ github.token }}
+
+      - name: Make things for DiskPilot to find
+        shell: pwsh
+        run: |
+          $h = $env:USERPROFILE
+          $nm = "$h\Projects\old-app\node_modules\left-pad"
+          New-Item -ItemType Directory -Force $nm | Out-Null
+          Set-Content "$h\Projects\old-app\package.json" '{"name":"old-app","version":"1.0.0"}'
+          1..200 | ForEach-Object { fsutil file createnew "$nm\chunk$_.js" 262144 | Out-Null }
+          New-Item -ItemType Directory -Force "$h\Downloads", "$h\Videos" | Out-Null
+          fsutil file createnew "$h\Downloads\big-installer.msi" 314572800 | Out-Null
+          fsutil file createnew "$h\Videos\screen-recording.mp4" 209715200 | Out-Null
+          $bytes = [byte[]]::new(5MB); (New-Object Random 7).NextBytes($bytes)
+          [IO.File]::WriteAllBytes("$h\Downloads\photo.jpg", $bytes)
+          [IO.File]::WriteAllBytes("$h\Videos\photo (copy).jpg", $bytes)
+          # A made-up Anthropic-style key in an agent transcript.
+          $key = 'sk-' + 'ant-api03-' + (-join ((65..90) + (97..122) | Get-Random -Count 40 | ForEach-Object { [char]$_ }))
+          New-Item -ItemType Directory -Force "$h\.claude\projects\demo" | Out-Null
+          Set-Content "$h\.claude\projects\demo\session.jsonl" "{`"role`":`"user`",`"content`":`"my key is $key`"}"
+          Get-ChildItem $h -Force | Format-Table Name, Length
+
+      - name: Install
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem installer -Filter *-setup.exe | Select-Object -First 1
+          "Installer: $($setup.Name) $([math]::Round($setup.Length/1MB,1)) MB"
+          $p = Start-Process $setup.FullName -ArgumentList '/S' -Wait -PassThru
+          "Installer exit code: $($p.ExitCode)"
+          $exe = Get-ChildItem "$env:LOCALAPPDATA" -Recurse -Depth 3 -Filter DiskPilot.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw "DiskPilot.exe not found after install" }
+          "Installed: $($exe.FullName)"
+          "EXE=$($exe.FullName)" >> $env:GITHUB_ENV
+          Get-ChildItem $exe.DirectoryName | Format-Table Name, Length
+          Get-ChildItem HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall | Where-Object { $_.GetValue('DisplayName') -like '*DiskPilot*' } | ForEach-Object { $_.GetValue('DisplayName') + ' ' + $_.GetValue('DisplayVersion') }
+
+      - name: Run and drive the app
+        shell: pwsh
+        run: |
+          $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222'
+          $app = Start-Process $env:EXE -PassThru
+          Start-Sleep 5
+          "Running: $(-not $app.HasExited)"
+          node .github/smoke/windows-smoke.mjs smoke-results
+          $code = $LASTEXITCODE
+          "Still running after the test: $(-not (Get-Process -Id $app.Id -ErrorAction SilentlyContinue).HasExited)"
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object Drawing.Bitmap $b.Width, $b.Height
+          [Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("smoke-results\desktop.png")
+          exit $code
+
+      - name: Logs and crash reports
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force smoke-results | Out-Null
+          foreach ($d in "$env:APPDATA\dev.diskpilot.app", "$env:LOCALAPPDATA\dev.diskpilot.app") {
+            if (Test-Path $d) { Get-ChildItem $d -Recurse | Format-Table FullName, Length | Out-String | Add-Content smoke-results\app-data.txt
+              Get-ChildItem $d -Recurse -Include *.log | ForEach-Object { Copy-Item $_ smoke-results\ } }
+          }
+          Get-WinEvent -FilterHashtable @{LogName='Application'; Level=1,2; StartTime=(Get-Date).AddMinutes(-30)} -ErrorAction SilentlyContinue |
+            Where-Object { $_.Message -match 'DiskPilot|WebView' } | Format-List TimeCreated, ProviderName, Message | Out-File smoke-results\event-log.txt
+          Get-Process DiskPilot -ErrorAction SilentlyContinue | Stop-Process -Force
+
+      - name: Uninstall
+        if: always()
+        shell: pwsh
+        run: |
+          if (-not $env:EXE) { exit 0 }
+          $dir = Split-Path $env:EXE
+          $un = Get-ChildItem $dir -Filter 'uninstall*.exe' | Select-Object -First 1
+          $p = Start-Process $un.FullName -ArgumentList '/S' -Wait -PassThru
+          Start-Sleep 5
+          "Uninstaller exit code: $($p.ExitCode)" | Tee-Object -Append smoke-results\log.txt
+          "App removed: $(-not (Test-Path $env:EXE))" | Tee-Object -Append smoke-results\log.txt
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: windows-smoke-results
+          path: smoke-results
+          retention-days: 14
