@@ -24,7 +24,13 @@ export default defineConfig(async () => {
               .filter((f) => /geist(-mono)?-latin-wght-normal-[^/]+\.woff2$/.test(f))
               .map((f) => ({
                 tag: "link",
-                attrs: { rel: "preload", href: `/${f}`, as: "font", type: "font/woff2", crossorigin: "" },
+                attrs: {
+                  rel: "preload",
+                  href: `/${f}`,
+                  as: "font",
+                  type: "font/woff2",
+                  crossorigin: "",
+                },
                 injectTo: "head",
               }));
           },
