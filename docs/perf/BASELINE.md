@@ -156,3 +156,18 @@ the UI rounds, 2.5 minutes of setup.
 | Preview, full image        | 187 ms   | 140 ms                  |
 | Scrolling, slowest list    | 20.6 fps | 21.8 fps                |
 | Long tasks per run         | 15       | 12                      |
+
+## Shorter gate (after 0.6.4)
+
+| Change                                                             | Measured where         | Before                                                                                  | After                                                                              |
+| ------------------------------------------------------------------ | ---------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Benchmark tree with small files, written in parallel               | CI runner              | 116 s to make the tree                                                                  | 81 s                                                                               |
+|                                                                    | Locally                | 11.5 s                                                                                  | 7.7 s                                                                              |
+| Base side's builds cached by base commit and tool versions         | CI runner              | 2 × 2 min Rust builds and 65–74 s app and harness build for the base side on every push | Not measured: the private repository's Actions spending limit stopped the next run |
+| DiskPilot's crate built at opt-level 1 for the benchmark (dropped) | Locally, crate rebuild | 28 s                                                                                    | 32 s, no gain                                                                      |
+
+Expected job time with the base cache hit, from the step times of the last runs:
+about 5–6 minutes for a pull request that does not touch `src-tauri` (setup
+2.5 min, UI rounds about 3 min) and about 9 minutes for one that does (plus one
+Rust build of about 1.5–2 min, the tree in 1.4 min and the scans in 0.5 min).
+The first push after `main` moves still builds both sides (about 13 minutes).
