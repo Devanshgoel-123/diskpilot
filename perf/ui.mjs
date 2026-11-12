@@ -60,6 +60,7 @@ const results = {
   pageSwitchMs: {},
   scrollFps: {},
   previewOpenMs: [],
+  previewFirstImageMs: [],
   longTasks: [],
 };
 const PAGES = [
@@ -156,13 +157,18 @@ for (let run = 0; run < RUNS; run++) {
           if (!btn) return requestAnimationFrame(go);
           const start = performance.now();
           btn.click();
+          let visual = null;
           const wait = () => {
+            const shown = [...document.querySelectorAll('[role="dialog"] img')].some(
+              (i) => i.complete && i.naturalWidth > 0,
+            );
+            if (shown && visual === null) visual = performance.now() - start;
             const img = document.querySelector('[role="dialog"] img[alt^="Preview of"]');
             if (img && img.complete && img.naturalWidth > 0) {
-              resolve(performance.now() - start);
+              resolve({ full: performance.now() - start, visual });
               return;
             }
-            if (performance.now() - start > 5000) resolve(5000);
+            if (performance.now() - start > 5000) resolve({ full: 5000, visual });
             else requestAnimationFrame(wait);
           };
           requestAnimationFrame(wait);
@@ -170,7 +176,8 @@ for (let run = 0; run < RUNS; run++) {
         setTimeout(go, 300);
       }),
   );
-  results.previewOpenMs.push(open);
+  results.previewOpenMs.push(open.full);
+  results.previewFirstImageMs.push(open.visual ?? open.full);
   results.longTasks.push(await page.evaluate(() => window.__longTasks.length));
   await page.keyboard.press("Escape");
 }
@@ -190,6 +197,7 @@ const summary = {
     Object.entries(results.scrollFps).map(([k, v]) => [k, round(median(v))]),
   ),
   previewOpenMs: round(median(results.previewOpenMs)),
+  previewFirstImageMs: round(median(results.previewFirstImageMs)),
   longTasksPerRun: median(results.longTasks),
 };
 writeFileSync(OUT, JSON.stringify(summary, null, 2) + "\n");
