@@ -821,8 +821,12 @@
       <section class="section privacy" id="privacy" aria-labelledby="privacy-title">
         <div class="wrap">
           <div class="head">
-            <h2 id="privacy-title">Nothing leaves your Mac unless you ask.</h2>
-            <p>No account, no telemetry. Scanning, analysis and cleanup all run on this Mac.</p>
+            <h2 id="privacy-title">Your files never leave your Mac.</h2>
+            <p>
+              Scanning, analysis and cleanup all run on this Mac. DiskPilot asks for your email when
+              it first opens, so you hear about updates.
+              <a href="/privacy">What is sent, and why</a>.
+            </p>
           </div>
           <div class="privacy-grid">
             <div class="ledger">
@@ -845,6 +849,14 @@
                 <li>Your question and the storage data it needs: names, paths and sizes</li>
                 <li>Sent straight from your Mac to the provider you chose</li>
                 <li>Read-only: it can't delete, move or run anything</li>
+              </ul>
+            </div>
+            <div class="ledger">
+              <h3>Sent once, when you sign up</h3>
+              <ul>
+                <li>Your email, for news about updates and the occasional feedback request</li>
+                <li>The DiskPilot and macOS versions, and Apple silicon or Intel</li>
+                <li>Never anything about your files. Ask to change or delete it any time</li>
               </ul>
             </div>
             <div class="ledger">
@@ -1063,10 +1075,12 @@ gh attestation verify DiskPilot.dmg -R Devanshgoel-123/diskpilot</code></pre>
                 Does the app send any data?<svg aria-hidden="true"><use href="#i-plus" /></svg>
               </summary>
               <p>
-                No. There is no account and no telemetry. Once a day the app asks GitHub whether a
-                newer version exists, sending nothing about you; you can turn that off in Settings.
-                The optional assistant uses the network only when you ask it something, and it never
-                sends file contents.
+                Only a little, and never anything about your files. When DiskPilot first opens it
+                asks for your email and sends it to diskpilot.live with the app and macOS versions,
+                so you hear about updates. Once a day it asks GitHub whether a newer version exists;
+                you can turn that off in Settings. The optional assistant uses the network only when
+                you ask it something, and it never sends file contents.
+                <a href="/privacy">Privacy details</a>.
               </p>
             </details>
             <details>
@@ -1173,7 +1187,9 @@ gh attestation verify DiskPilot.dmg -R Devanshgoel-123/diskpilot</code></pre>
         >
         <span
           >This website counts visits with Vercel Web Analytics, which uses no cookies, and shows
-          directory badges loaded from those directories. The app itself sends nothing.</span
+          directory badges loaded from those directories. The app sends your signup email and its
+          version to diskpilot.live, and nothing about your files.
+          <a href="/privacy">Privacy</a>.</span
         >
         <div class="footer-badges" aria-label="Listed on">
           <a

@@ -27,7 +27,7 @@ We make DiskPilot, so we have a bias. CleanMyMac, from MacPaw, is a well-known s
 | Developer storage          | Docker, Xcode, Node, Rust, Python, Gradle, editors, AI tools    | General system junk, some developer items |
 | App uninstaller            | No; shows data left by apps you already removed                 | Yes                                       |
 | Malware scanning           | No                                                              | Yes                                       |
-| Network                    | The app sends nothing; no account                               | See MacPaw's privacy policy               |
+| Network                    | Your signup email and app version; nothing about your files     | See MacPaw's privacy policy               |
 
 ## CleanMyMac is better if
 
@@ -39,4 +39,4 @@ We make DiskPilot, so we have a bias. CleanMyMac, from MacPaw, is a well-known s
 
 - Your space is going to **developer tools**: Docker images and volumes, Xcode simulators, `node_modules`, build output, editor and AI tool data.
 - You want to **see the reason** before anything is removed, and have it go to the Trash first.
-- You want a tool that is **free, open source and sends nothing** from your Mac.
+- You want a tool that is **free, open source and never sends anything about your files** from your Mac.

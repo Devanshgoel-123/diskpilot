@@ -4,6 +4,7 @@
 //   content/guides/*.md, content/compare/*.md  ->  /guides/<name>, /compare/<name>
 //   ../docs/releases/v*.md                      ->  /changelog
 //   ../src/lib/shortcuts.json                   ->  /shortcuts (released shortcuts only)
+//   content/privacy.md                          ->  /privacy
 //   GitHub releases and repository              ->  download count and stars
 //
 // Every page reuses the header, footer and icons of index.html. The pages are
@@ -30,6 +31,7 @@ const SNAPSHOT = join(siteDir, "stats-snapshot.json");
 const GENERATED = [
   "changelog.html",
   "shortcuts.html",
+  "privacy.html",
   "guides.html",
   "compare.html",
   "404.html",
@@ -502,6 +504,32 @@ function shortcutsPage(groups, parts) {
   );
 }
 
+function privacyPage(parts) {
+  const { meta, body: md } = frontMatter(
+    readFileSync(join(siteDir, "content", "privacy.md"), "utf8"),
+  );
+  const { html } = renderMarkdown(md);
+  const updated = meta.updated
+    ? `<p class="doc-meta">Updated ${esc(formatDate(meta.updated))}</p>`
+    : "";
+  const body = `<header class="doc-head">
+          <h1>${esc(meta.h1)}</h1>
+          <p class="lede">${esc(meta.description)}</p>
+          ${updated}
+        </header>
+        <div class="prose">${html}</div>`;
+  return page(
+    {
+      path: "/privacy",
+      title: meta.title,
+      description: meta.description,
+      body,
+      crumbs: [{ name: "Privacy", path: "/privacy" }],
+    },
+    parts,
+  );
+}
+
 function notFoundPage(parts, guides) {
   const body = `<header class="doc-head">
           <h1>That page isn't here</h1>
@@ -551,7 +579,7 @@ function footerLinks(guides, compares) {
         ${col("Help", [
           ["Report a problem", `${GITHUB}/issues/new`],
           ["Ask a question", `${GITHUB}/discussions`],
-          ["Privacy", "/#privacy"],
+          ["Privacy", "/privacy"],
           ["Updates on X", "https://x.com/0xgoel"],
         ])}
       </nav>`;
@@ -645,6 +673,7 @@ export async function generate() {
   );
   files.set("changelog.html", changelogPage(releaseNotes(stats), parts));
   files.set("shortcuts.html", shortcutsPage(shortcuts(latest), parts));
+  files.set("privacy.html", privacyPage(parts));
   files.set("404.html", notFoundPage(parts, guides));
 
   for (const [rel, html] of files) {
@@ -657,6 +686,7 @@ export async function generate() {
     { path: "/", lastmod: stats.releases[0]?.published },
     { path: "/changelog", lastmod: stats.releases[0]?.published },
     { path: "/shortcuts" },
+    { path: "/privacy" },
     { path: "/guides" },
     ...guides.map((g) => ({ path: g.path, lastmod: g.updated })),
     { path: "/compare" },
