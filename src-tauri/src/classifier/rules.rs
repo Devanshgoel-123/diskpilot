@@ -742,6 +742,17 @@ pub static DIR_RULES: &[DirRule] = &[
         "Chrome builds downloaded by Puppeteer, one folder per browser version. `npx puppeteer browsers install` downloads them again."
     ),
     leaf!(
+        "adobe.media-cache",
+        HomeRelativeAny(&[
+            &["Library", "Application Support", "Adobe", "Common", "Media Cache Files"],
+            &["Library", "Application Support", "Adobe", "Common", "Media Cache"],
+        ]),
+        Cache,
+        High,
+        "Adobe media cache",
+        "Conformed audio, peak files and media indexes created by Premiere Pro, After Effects and other Adobe apps. Adobe apps rebuild them when a project is opened."
+    ),
+    leaf!(
         "asdf.installs",
         HomeRelativeAny(&[&[".asdf", "installs"], &[".local", "share", "mise", "installs"]]),
         DeveloperTools,

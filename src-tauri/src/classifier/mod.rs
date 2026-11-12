@@ -517,6 +517,22 @@ mod tests {
             dir("/Users/test/.nuget/packages", &p).rule_id,
             "nuget.packages"
         );
+        assert_eq!(
+            dir(
+                "/Users/test/Library/Application Support/Adobe/Common/Media Cache Files",
+                &p
+            )
+            .rule_id,
+            "adobe.media-cache"
+        );
+        assert_eq!(
+            dir(
+                "/Users/test/Library/Application Support/Adobe/Common/Media Cache",
+                &p
+            )
+            .rule_id,
+            "adobe.media-cache"
+        );
         assert_eq!(dir("/Users/test/go/pkg/mod", &p).rule_id, "go.mod-cache");
         assert_eq!(
             dir("/Users/test/.asdf/installs", &p).rule_id,
