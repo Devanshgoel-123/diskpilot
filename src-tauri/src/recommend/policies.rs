@@ -231,7 +231,7 @@ pub static POLICIES: &[Policy] = &[
         safe_because: "`dotnet restore` downloads packages again when a project builds.",
         risks: "The next restore or build needs network access and is slower while packages are fetched again.",
         proposed_action: "Clear the NuGet package cache",
-        alternative: Some("dotnet nuget locals all --clear"),
+        alternative: Some("dotnet nuget locals global-packages --clear"),
         expand: Whole,
         min_bytes: 50 * MB,
         before_you_start: None,
