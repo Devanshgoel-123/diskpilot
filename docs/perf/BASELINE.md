@@ -21,9 +21,10 @@ The `perf` job in `.github/workflows/ci.yml` runs on every pull request on a
 request, copies this pull request's measuring tools into it, and measures both
 on the same machine:
 
-- the scan of the generated tree (`_bench_fixture`, 200,000 files, median of 5);
+- the scan of the generated tree (`_bench_fixture`, 200,000 files, median of 5),
+  only when the pull request changes `src-tauri`;
 - the size of the built JavaScript, in total and at startup;
-- the UI harness (`perf/ui.mjs`, 3 runs).
+- the UI harness (`perf/ui.mjs`, 3 runs, CPU slowed 2x on the Intel runner).
 
 `perf/compare.mjs` fails the job when a metric is more than 10% worse than the
 base branch (5% for JavaScript size) and also worse by more than a small

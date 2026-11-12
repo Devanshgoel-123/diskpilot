@@ -71,7 +71,9 @@ jobs:
     # one after the other on the same runner, so runner speed cancels out.
     if: github.event_name == 'pull_request'
     runs-on: macos-15-intel
-    timeout-minutes: 15
+    # A cold Rust cache needs two release builds (about 13 minutes); with the
+    # cache warm the job takes a few minutes.
+    timeout-minutes: 30
     permissions:
       contents: read
       pull-requests: write
@@ -82,6 +84,8 @@ jobs:
       # One target folder for both sides, so the base build only recompiles DiskPilot itself.
       CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
       PERF_RUNS: "3"
+      # The Intel runner is already slower than a current Mac.
+      PERF_CPU_THROTTLE: "2"
       CHROME: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -100,6 +104,7 @@ jobs:
         with:
           workspaces: src-tauri
           key: perf
+          cache-on-failure: true
       - name: Check out the base branch next to this one
         env:
           BASE_REF: ${{ github.base_ref }}
@@ -114,7 +119,14 @@ jobs:
           (cd ../base && pnpm install --frozen-lockfile)
           mkdir -p dist ../base/dist
       - name: Scan benchmark
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
+          # The scanner only changes with the engine; skip the two builds otherwise.
+          if git diff --quiet "origin/$BASE_REF...HEAD" -- src-tauri; then
+            echo "No engine changes; scan benchmark skipped."
+            exit 0
+          fi
           fixture="$RUNNER_TEMP/perf-tree"
           for side in base head; do
             dir=$([ "$side" = head ] && echo . || echo ../base)
@@ -132,7 +144,7 @@ jobs:
         id: compare
         run: |
           for side in base head; do
-            node -e 'const [a,b,o]=process.argv.slice(1);const fs=require("fs");const s=JSON.parse(fs.readFileSync(a));const u=JSON.parse(fs.readFileSync(b));fs.writeFileSync(o,JSON.stringify({...u,scanFixtureMs:s.scanMs},null,2))' \
+            node -e 'const [a,b,o]=process.argv.slice(1);const fs=require("fs");const s=fs.existsSync(a)?JSON.parse(fs.readFileSync(a)):{};const u=JSON.parse(fs.readFileSync(b));fs.writeFileSync(o,JSON.stringify({...u,scanFixtureMs:s.scanMs},null,2))' \
               "$RUNNER_TEMP/scan-$side.json" "$RUNNER_TEMP/ui-$side.json" "$RUNNER_TEMP/perf-$side.json"
           done
           set +e
