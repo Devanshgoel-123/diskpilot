@@ -139,19 +139,22 @@ export function Sidebar() {
   const assistantEnabled = useApp((s) => s.assistantEnabled);
   const cleanupCount = recommendations.filter((r) => r.methods.length > 0).length;
 
-  // Find where the space went, then get it back in one place.
-  const analyze: NavItem[] = [
+  // What most people come for first: the summary and the one place to get
+  // space back. Then where the space went, then tools for developers.
+  const main: NavItem[] = [
+    { id: "overview", label: "Overview", icon: Gauge },
+    { id: "recommendations", label: "Cleanup", icon: Sparkles, count: cleanupCount },
+    ...(assistantEnabled ? [{ id: "assistant" as const, label: "Assistant", icon: Bot }] : []),
+  ];
+  const findSpace: NavItem[] = [
     { id: "explorer", label: "Storage", icon: FolderTree },
     { id: "duplicates", label: "Duplicates", icon: Copy },
     { id: "applications", label: "Applications", icon: AppWindow },
-    { id: "developer", label: "Developer Tools", icon: Code2 },
-    { id: "agents", label: "AI Agents", icon: Blocks },
-    { id: "docker", label: "Docker", icon: Box },
-    ...(assistantEnabled ? [{ id: "assistant" as const, label: "Assistant", icon: Bot }] : []),
   ];
-  const cleanUp: NavItem[] = [
-    { id: "recommendations", label: "Cleanup", icon: Sparkles, count: cleanupCount },
-    { id: "history", label: "History", icon: History },
+  const developers: NavItem[] = [
+    { id: "agents", label: "AI Agents", icon: Blocks },
+    { id: "developer", label: "Developer Tools", icon: Code2 },
+    { id: "docker", label: "Docker", icon: Box },
   ];
 
   return (
@@ -166,13 +169,14 @@ export function Sidebar() {
         <span className="pointer-events-none text-[13px] font-semibold">DiskPilot</span>
       </div>
       <div className="flex-1 space-y-4 overflow-y-auto px-2.5 pb-2">
-        <Section items={[{ id: "overview", label: "Overview", icon: Gauge }]} />
-        <Section title="Analyze" items={analyze} />
-        <Section title="Clean up" items={cleanUp} />
+        <Section items={main} />
+        <Section title="Find space" items={findSpace} />
+        <Section title="For developers" items={developers} />
       </div>
       <div className="space-y-1 border-t border-border px-2.5 pt-2 pb-2.5">
         <UpdateBanner />
         <ScanStatus />
+        <NavButton item={{ id: "history", label: "History", icon: History }} />
         <NavButton item={{ id: "settings", label: "Settings", icon: Settings }} />
       </div>
     </nav>
