@@ -238,9 +238,25 @@ pub fn cleanup_items(report: &ToolReport) -> Vec<ToolItem> {
     let mut items: Vec<ToolItem> = report
         .sections
         .iter()
-        .flat_map(|s| s.items.iter())
-        .filter(|i| i.recommendation_id.is_some())
-        .cloned()
+        .flat_map(|s| {
+            // Labels like a version number need their section to make sense.
+            let prefix = match s.title.as_str() {
+                "Cleanable data" | "History and settings" | "Caches and logs" => None,
+                t if t.ends_with(" versions") => Some("Old version".to_string()),
+                "Extensions" => Some("Leftover extension".to_string()),
+                t => Some(t.to_string()),
+            };
+            s.items
+                .iter()
+                .filter(|i| i.recommendation_id.is_some())
+                .map(move |i| ToolItem {
+                    label: match &prefix {
+                        Some(p) => format!("{p} · {}", i.label),
+                        None => i.label.clone(),
+                    },
+                    ..i.clone()
+                })
+        })
         .collect();
     items.sort_by_key(|i| std::cmp::Reverse(i.bytes));
     items
