@@ -54,13 +54,14 @@ const isLight = () => document.documentElement.dataset.theme === "light";
 
 function syncTheme() {
   const theme = isLight() ? "light" : "dark";
-  for (const img of $$("img[data-shot]")) {
-    const src = `/shots/${img.dataset.shot}-${theme}.jpg`;
-    if (img.getAttribute("src") !== src) img.setAttribute("src", src);
-  }
-  for (const source of $$("source[data-shot-m]")) {
-    const src = `/shots/${source.dataset.shotM}-m-${theme}.jpg`;
-    if (source.getAttribute("srcset") !== src) source.setAttribute("srcset", src);
+  // Screenshots are named name-dark.webp / name-dark-1200.webp; swap the
+  // theme word in src and srcset so the responsive sizes keep working.
+  const swap = (value) => value.replace(/-(dark|light)(?=[.-])/g, `-${theme}`);
+  for (const el of $$("img[data-shot], source[data-shot-m]")) {
+    for (const attr of ["src", "srcset"]) {
+      const value = el.getAttribute(attr);
+      if (value && swap(value) !== value) el.setAttribute(attr, swap(value));
+    }
   }
   toggle.setAttribute("aria-label", isLight() ? "Switch to dark theme" : "Switch to light theme");
   $('meta[name="theme-color"]').content = isLight() ? "#f7f7f5" : "#121316";
