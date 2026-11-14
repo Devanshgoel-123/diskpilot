@@ -31,7 +31,8 @@ export function inAppNotes(markdown: string): string {
 /** Notes for a version such as "0.5.1", or null if none were bundled. */
 export function releaseNotes(version: string): string | null {
   const entry = Object.entries(files).find(([path]) => path.endsWith(`/v${version}.md`));
-  return entry ? inAppNotes(entry[1]) : null;
+  // A Windows checkout may have turned the files' line endings into CRLF.
+  return entry ? inAppNotes(entry[1].replace(/\r\n/g, "\n")) : null;
 }
 
 /** Whether version `a` (such as "0.6.1") is newer than `b`, comparing numbers. */
