@@ -855,15 +855,15 @@ pub async fn agent_set_plugin(
 }
 
 #[tauri::command]
-pub async fn agent_remove_permission(
+pub async fn agent_remove_permissions(
     app: AppHandle,
     agent: String,
-    id: String,
+    ids: Vec<String>,
 ) -> AgentsReportResult {
     blocking(move || {
         agent_change(&app.state::<AppState>(), |input| match agent.as_str() {
-            agents::claude::ID => agents::claude::remove_permission(input, &id),
-            agents::cursor::ID => agents::cursor::remove_permission(input, &id),
+            agents::claude::ID => agents::claude::remove_permissions(input, &ids),
+            agents::cursor::ID => agents::cursor::remove_permissions(input, &ids),
             _ => Err(AppError::Other(
                 "Change this setting in the agent itself.".into(),
             )),

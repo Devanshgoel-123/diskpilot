@@ -167,35 +167,47 @@ pub fn disconnect(input: &Input, id: &str) -> Result<(), AppError> {
     disconnect_json_mcp(input, ID, &mcp_files(input.ctx), id)
 }
 
-pub fn remove_permission(input: &Input, id: &str) -> Result<(), AppError> {
-    let mut parts = id.splitn(3, '|');
-    let (Some(ID), Some(key @ ("allow" | "deny")), Some(rule)) =
-        (parts.next(), parts.next(), parts.next())
-    else {
-        return Err(AppError::Other("Unknown rule.".into()));
-    };
+/// Remove rules from `cli-config.json` by id, in one edit.
+pub fn remove_permissions(input: &Input, ids: &[String]) -> Result<(), AppError> {
+    let mut rules: Vec<(&str, &str)> = Vec::new();
+    for id in ids {
+        let mut parts = id.splitn(3, '|');
+        let (Some(ID), Some(key @ ("allow" | "deny")), Some(rule)) =
+            (parts.next(), parts.next(), parts.next())
+        else {
+            return Err(AppError::Other("Unknown rule.".into()));
+        };
+        rules.push((key, rule));
+    }
     let changed = super::edit::edit_json(
         &input.ctx.home_path(CLI_CONFIG),
         input.data_dir,
         ID,
         &|doc| {
-            let Some(list) = doc
-                .pointer_mut(&format!("/permissions/{key}"))
-                .and_then(Value::as_array_mut)
-            else {
-                return Ok(false);
-            };
-            let before = list.len();
-            list.retain(|v| v.as_str() != Some(rule));
-            Ok(before != list.len())
+            let mut any = false;
+            for (key, rule) in &rules {
+                if let Some(list) = doc
+                    .pointer_mut(&format!("/permissions/{key}"))
+                    .and_then(Value::as_array_mut)
+                {
+                    let before = list.len();
+                    list.retain(|v| v.as_str() != Some(rule));
+                    any |= before != list.len();
+                }
+            }
+            Ok(any)
         },
     )?;
     if !changed {
         return Err(AppError::Other(
-            "That rule is no longer in the settings.".into(),
+            "Those rules are no longer in the settings.".into(),
         ));
     }
     Ok(())
+}
+
+pub fn remove_permission(input: &Input, id: &str) -> Result<(), AppError> {
+    remove_permissions(input, &[id.to_string()])
 }
 
 #[cfg(test)]

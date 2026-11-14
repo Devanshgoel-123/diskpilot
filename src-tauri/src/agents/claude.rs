@@ -529,35 +529,52 @@ pub fn set_plugin(input: &Input, plugin_id: &str, enabled: bool) -> Result<(), A
     .map(|_| ())
 }
 
-pub fn remove_permission(input: &Input, id: &str) -> Result<(), AppError> {
+/// Remove permission rules by id, one edit (and one backup) per file.
+pub fn remove_permissions(input: &Input, ids: &[String]) -> Result<(), AppError> {
     let ctx = input.ctx;
-    let mut parts = id.splitn(4, '|');
-    let (Some(ID), Some(rel), Some(key), Some(rule)) =
-        (parts.next(), parts.next(), parts.next(), parts.next())
-    else {
-        return Err(AppError::Other("Unknown rule.".into()));
-    };
-    if !SETTINGS.contains(&rel) || !matches!(key, "allow" | "ask" | "deny") {
-        return Err(AppError::Other("Unknown rule.".into()));
-    }
-    let changed = super::edit::edit_json(&ctx.home_path(rel), input.data_dir, ID, &|doc| {
-        let Some(list) = doc
-            .get_mut("permissions")
-            .and_then(|p| p.get_mut(key))
-            .and_then(Value::as_array_mut)
+    let mut by_file: std::collections::BTreeMap<&str, Vec<(&str, &str)>> = Default::default();
+    for id in ids {
+        let mut parts = id.splitn(4, '|');
+        let (Some(ID), Some(rel), Some(key), Some(rule)) =
+            (parts.next(), parts.next(), parts.next(), parts.next())
         else {
-            return Ok(false);
+            return Err(AppError::Other("Unknown rule.".into()));
         };
-        let before = list.len();
-        list.retain(|v| v.as_str() != Some(rule));
-        Ok(list.len() != before)
-    })?;
+        let Some(rel) = SETTINGS.iter().find(|s| **s == rel) else {
+            return Err(AppError::Other("Unknown rule.".into()));
+        };
+        if !matches!(key, "allow" | "ask" | "deny") {
+            return Err(AppError::Other("Unknown rule.".into()));
+        }
+        by_file.entry(rel).or_default().push((key, rule));
+    }
+    let mut changed = false;
+    for (rel, rules) in by_file {
+        changed |= super::edit::edit_json(&ctx.home_path(rel), input.data_dir, ID, &|doc| {
+            let Some(perms) = doc.get_mut("permissions").and_then(Value::as_object_mut) else {
+                return Ok(false);
+            };
+            let mut any = false;
+            for (key, rule) in &rules {
+                if let Some(list) = perms.get_mut(*key).and_then(Value::as_array_mut) {
+                    let before = list.len();
+                    list.retain(|v| v.as_str() != Some(rule));
+                    any |= list.len() != before;
+                }
+            }
+            Ok(any)
+        })?;
+    }
     if !changed {
         return Err(AppError::Other(
-            "That rule is no longer in the settings.".into(),
+            "Those rules are no longer in the settings.".into(),
         ));
     }
     Ok(())
+}
+
+pub fn remove_permission(input: &Input, id: &str) -> Result<(), AppError> {
+    remove_permissions(input, &[id.to_string()])
 }
 
 #[cfg(test)]
@@ -734,6 +751,14 @@ mod tests {
         };
 
         remove_permission(&input, &format!("{ID}|.claude/settings.json|allow|Bash(*)")).unwrap();
+        assert!(
+            remove_permissions(
+                &input,
+                &[format!("{ID}|.claude/settings.json|allow|Bash(*)")]
+            )
+            .is_err(),
+            "removing a rule that is gone is reported"
+        );
         set_plugin(&input, "tools@mk", false).unwrap();
         assert!(set_plugin(&input, "nope@mk", false).is_err());
         disconnect(&input, &format!("{ID}|user|gh")).unwrap();

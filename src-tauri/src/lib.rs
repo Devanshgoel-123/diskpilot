@@ -168,7 +168,7 @@ pub fn run() {
             commands::agent_reconnect,
             commands::agent_forget_disconnected,
             commands::agent_set_plugin,
-            commands::agent_remove_permission,
+            commands::agent_remove_permissions,
             commands::assistant_status,
             commands::assistant_set_key,
             commands::assistant_clear_key,

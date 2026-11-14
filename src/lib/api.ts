@@ -118,8 +118,8 @@ export const api = {
     invoke<AgentsReport>("agent_forget_disconnected", { id }),
   agentSetPlugin: (agent: string, id: string, enabled: boolean) =>
     invoke<AgentsReport>("agent_set_plugin", { agent, id, enabled }),
-  agentRemovePermission: (agent: string, id: string) =>
-    invoke<AgentsReport>("agent_remove_permission", { agent, id }),
+  agentRemovePermissions: (agent: string, ids: string[]) =>
+    invoke<AgentsReport>("agent_remove_permissions", { agent, ids }),
 
   assistantStatus: () => invoke<AssistantStatus>("assistant_status"),
   assistantSetKey: (provider: AssistantProvider, key: string) =>
