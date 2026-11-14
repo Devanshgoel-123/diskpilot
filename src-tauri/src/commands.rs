@@ -25,6 +25,7 @@ use crate::docker::{self, actions, cli::DockerCli, DockerOverview, DockerState};
 use crate::duplicates::{self, DuplicateReport};
 use crate::error::{AppError, AppResult};
 use crate::explorer;
+use crate::keyfiles;
 use crate::model::{
     AppEnvironment, CleanupMethod, CleanupPlan, CleanupRecord, DirectoryListing, DiskInfo,
     ItemDetails, ItemStatus, Recommendation, ScanFinished, ScanRecord, ScanStatus, ScanSummary,
@@ -270,6 +271,11 @@ fn run_scan(app: AppHandle, opts: ScanOptions, cancel: Arc<AtomicBool>) {
                 state.plans().clear();
             }
             saved = Some(outcome);
+            // Keep the key files this scan found in the encrypted list, so
+            // they are there after a restart (the saved scan never has them).
+            if let Err(e) = keys_run(&state, |_, _| Ok(())) {
+                eprintln!("keys: could not update the encrypted list: {e}");
+            }
             (ScanStatus::Completed, None, record)
         }
         Err(err) => {
@@ -867,6 +873,96 @@ pub async fn agent_remove_permissions(
             _ => Err(AppError::Other(
                 "Change this setting in the agent itself.".into(),
             )),
+        })
+    })
+    .await
+}
+
+// ---- Keys & secrets ------------------------------------------------------------
+
+/// One change to the encrypted key list at a time.
+static KEYS_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Load the encrypted list, bring it up to date with the latest scan, apply
+/// `change`, save it if anything changed and report the files as they are.
+fn keys_run(
+    state: &AppState,
+    change: impl FnOnce(&mut keyfiles::Store, &std::path::Path) -> AppResult<()>,
+) -> AppResult<keyfiles::KeysReport> {
+    let _guard = KEYS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = state
+        .data_dir
+        .clone()
+        .ok_or_else(|| AppError::Other("DiskPilot's data folder is unavailable.".into()))?;
+    let home = state.home.clone();
+    let mut store = keyfiles::load(&dir, &keyfiles::Keychain)?;
+    let before = store.clone();
+    if let Some(last) = state.slot().last.clone() {
+        if let Some(found) = &last.key_files {
+            keyfiles::merge_scan(
+                &mut store,
+                &last.summary.id,
+                last.summary.finished_at_ms,
+                found.clone(),
+            );
+        }
+    }
+    change(&mut store, &home)?;
+    let (report, kept) = keyfiles::report(
+        &store.files,
+        &store.labels,
+        &home,
+        now_ms(),
+        store.scanned_at_ms,
+    );
+    store.files = kept;
+    keyfiles::prune_labels(&mut store);
+    if store != before && (!store.files.is_empty() || dir.join("keyfiles.bin").exists()) {
+        keyfiles::save(&dir, &keyfiles::Keychain, &store)?;
+    }
+    Ok(report)
+}
+
+#[tauri::command]
+pub async fn keys_report(app: AppHandle) -> AppResult<keyfiles::KeysReport> {
+    blocking(move || keys_run(&app.state::<AppState>(), |_, _| Ok(()))).await
+}
+
+#[tauri::command]
+pub fn keys_providers() -> Vec<&'static str> {
+    keyfiles::PROVIDERS.to_vec()
+}
+
+#[tauri::command]
+pub async fn keys_set_label(
+    app: AppHandle,
+    path: String,
+    provider: String,
+    note: String,
+) -> AppResult<keyfiles::KeysReport> {
+    blocking(move || {
+        keys_run(&app.state::<AppState>(), |store, _| {
+            keyfiles::set_label(store, &path, Some(keyfiles::Label { provider, note }))
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn keys_make_private(app: AppHandle, path: String) -> AppResult<keyfiles::KeysReport> {
+    blocking(move || {
+        keys_run(&app.state::<AppState>(), |store, _| {
+            keyfiles::make_private(store, &path)
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn keys_move_to_trash(app: AppHandle, path: String) -> AppResult<keyfiles::KeysReport> {
+    blocking(move || {
+        keys_run(&app.state::<AppState>(), |store, home| {
+            keyfiles::move_to_trash(store, &path, home)
         })
     })
     .await
