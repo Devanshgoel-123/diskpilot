@@ -178,6 +178,11 @@ jobs:
         shell: pwsh
         run: |
           $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222'
+          # The app's own browser arguments can win over the variable; the
+          # per-app WebView2 policy applies either way.
+          $policy = 'HKCU:\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments'
+          New-Item -Path $policy -Force | Out-Null
+          New-ItemProperty -Path $policy -Name (Split-Path $env:EXE -Leaf) -Value '--remote-debugging-port=9222' -PropertyType String -Force | Out-Null
           $app = Start-Process $env:EXE -PassThru
           Start-Sleep 5
           "Running: $(-not $app.HasExited)"
