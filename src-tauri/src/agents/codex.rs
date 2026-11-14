@@ -249,6 +249,27 @@ fn plugins(ctx: &Ctx, doc: Option<&DocumentMut>) -> Vec<Plugin> {
         .collect()
 }
 
+/// Codex is installed when its app or command is, or it has been used. A
+/// `~/.codex/skills` folder alone (left by a skill installer) does not count.
+pub fn installed(ctx: &Ctx) -> bool {
+    const BINARIES: &[&str] = &[
+        "/opt/homebrew/bin/codex",
+        "/usr/local/bin/codex",
+        "/Applications/Codex.app",
+    ];
+    const HOME: &[&str] = &[
+        ".local/bin/codex",
+        ".npm-global/bin/codex",
+        ".codex/config.toml",
+        ".codex/auth.json",
+        ".codex/sessions",
+        "Applications/Codex.app",
+    ];
+    // `Path::exists` follows links, so a launcher left pointing at an
+    // uninstalled Codex does not count.
+    BINARIES.iter().any(|p| Path::new(p).exists()) || HOME.iter().any(|p| ctx.home_path(p).exists())
+}
+
 pub fn analyze(input: &Input) -> (AgentReport, Vec<Recommendation>) {
     let ctx = input.ctx;
     let doc = read_config(ctx);
@@ -285,7 +306,7 @@ pub fn analyze(input: &Input) -> (AgentReport, Vec<Recommendation>) {
     super::push_skill_cleanup(&mut cleanup, &skills_out);
     recs.extend(tool_recs);
 
-    let detected = exists(&ctx.home_path(".codex")) || tool.detected;
+    let detected = installed(ctx);
     (
         AgentReport {
             id: ID.into(),
@@ -373,6 +394,41 @@ mod tests {
     fn write(path: &Path, text: &str) {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
+    }
+
+    #[test]
+    fn a_skills_folder_alone_is_not_an_install() {
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        write(
+            &home.join(".codex/skills/x/SKILL.md"),
+            "---\nname: x\n---\n",
+        );
+        let c = ctx(&home);
+        let input = Input {
+            ctx: &c,
+            data_dir: None,
+            tools: &[],
+        };
+        if !Path::new("/opt/homebrew/bin/codex").exists()
+            && !Path::new("/usr/local/bin/codex").exists()
+            && !Path::new("/Applications/Codex.app").exists()
+        {
+            assert!(!analyze(&input).0.detected);
+        }
+        std::fs::create_dir_all(home.join(".local/bin")).unwrap();
+        std::os::unix::fs::symlink(home.join("gone/codex"), home.join(".local/bin/codex")).unwrap();
+        if !Path::new("/opt/homebrew/bin/codex").exists()
+            && !Path::new("/usr/local/bin/codex").exists()
+            && !Path::new("/Applications/Codex.app").exists()
+        {
+            assert!(
+                !analyze(&input).0.detected,
+                "a dangling launcher is not an install"
+            );
+        }
+        write(&home.join(".codex/config.toml"), "");
+        assert!(analyze(&input).0.detected);
     }
 
     #[test]
