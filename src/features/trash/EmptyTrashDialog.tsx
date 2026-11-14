@@ -359,7 +359,7 @@ function Loading({ listing }: { listing: TrashListing | null }) {
 
           <div
             role="progressbar"
-            aria-label="Measuring the Trash"
+            aria-label={`Measuring the ${words().trash}`}
             aria-valuemin={0}
             aria-valuemax={total}
             aria-valuenow={listing.entriesDone}

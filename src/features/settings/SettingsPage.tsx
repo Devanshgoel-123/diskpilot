@@ -267,12 +267,12 @@ function PrivacyNote() {
   }, []);
   return (
     <>
-      Scanning, analysis and cleanup run on this Mac, and nothing about your files is sent anywhere.{" "}
-      {signup ? `You signed up as ${signup.email}. ` : ""}DiskPilot sent that email with its
-      version, your macOS version and your kind of Mac to diskpilot.live, to tell you about updates
-      and ask for feedback. To change or delete it, write to {CONTACT_EMAIL}. Once a day DiskPilot
-      asks GitHub whether a new version is out. The optional assistant sends questions to the AI
-      provider you choose, only when you ask one.{" "}
+      Scanning, analysis and cleanup run on this {words().computer}, and nothing about your files is
+      sent anywhere. {signup ? `You signed up as ${signup.email}. ` : ""}DiskPilot sent that email
+      with its version, your {words().os} version and your kind of {words().computer} to
+      diskpilot.live, to tell you about updates and ask for feedback. To change or delete it, write
+      to {CONTACT_EMAIL}. Once a day DiskPilot asks GitHub whether a new version is out. The
+      optional assistant sends questions to the AI provider you choose, only when you ask one.{" "}
       <button
         type="button"
         className="underline underline-offset-2 hover:text-foreground"

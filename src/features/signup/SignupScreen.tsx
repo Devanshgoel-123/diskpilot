@@ -5,6 +5,7 @@ import { type FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, errorMessage } from "@/lib/api";
+import { isWindows, words } from "@/lib/platform";
 import type { Signup } from "@/lib/types";
 
 import { CONTACT_EMAIL, looksLikeEmail, PRIVACY_URL } from "./signup";
@@ -83,9 +84,12 @@ export function SignupScreen({ onDone }: { onDone: (s: Signup) => void }) {
         </Button>
 
         <p id="signup-note" className="mt-4 text-xs leading-relaxed text-subtle-foreground">
-          DiskPilot sends your email, its version, your macOS version and whether this Mac has Apple
-          silicon or Intel to diskpilot.live. Nothing about your files, folders or scans is sent. To
-          change or delete your email, write to {CONTACT_EMAIL}.{" "}
+          DiskPilot sends your email, its version, your {words().os} version and{" "}
+          {isWindows()
+            ? "whether this PC has an x64 or an Arm processor"
+            : "whether this Mac has Apple silicon or Intel"}{" "}
+          to diskpilot.live. Nothing about your files, folders or scans is sent. To change or delete
+          your email, write to {CONTACT_EMAIL}.{" "}
           <button
             type="button"
             className="underline underline-offset-2 hover:text-foreground"
