@@ -1,10 +1,15 @@
 // POST /api/signup: stores the email DiskPilot asks for on first launch,
 // with the app version, macOS version and CPU architecture. Nothing else is
-// accepted. The table is created on first use. See /privacy.
+// accepted. The table is created on first use. The address only counts once
+// its owner clicks the confirmation link (see lib/confirm.js). See /privacy.
 import { resolveMx } from "node:dns/promises";
 import { neon } from "@neondatabase/serverless";
 
-const EMAIL = /^[^\s@]{1,64}@[^\s@.][^\s@]*\.[^\s@.]+$/;
+import { migrate, startConfirmation } from "../lib/confirm.js";
+
+// Plain address characters only, so nothing that looks like markup or a
+// spreadsheet formula is ever stored.
+const EMAIL = /^[a-z0-9._%+-]{1,64}@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,63}$/;
 const VERSION = /^[0-9A-Za-z.+-]{1,32}$/;
 const ARCH = new Set(["aarch64", "x86_64", "arm64", "x64"]);
 // A signup is under 300 bytes; anything much bigger is not from the app.
@@ -62,11 +67,19 @@ export function notReal(email) {
 
 /** False only when DNS says the domain takes no mail; a slow or failed lookup lets it through. */
 export async function takesMail(domain, lookup = resolveMx) {
+  let timer;
   try {
-    const mx = await Promise.race([lookup(domain), new Promise((_, no) => setTimeout(() => no(new Error("slow")), 1500))]);
+    const slow = new Promise((_, no) => {
+      timer = setTimeout(() => no(Object.assign(new Error("slow"), { code: "ETIMEOUT" })), 1500);
+    });
+    const mx = await Promise.race([lookup(domain), slow]);
     return Array.isArray(mx) && mx.length > 0;
   } catch (e) {
+    // Only a definite "no such domain" fails; a slow DNS server lets the
+    // address through, and the confirmation email is the real check.
     return !(e && (e.code === "ENOTFOUND" || e.code === "ENODATA"));
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -95,7 +108,9 @@ export default async function handler(req, res) {
   if (!/^DiskPilot\//.test(req.headers["user-agent"] ?? "")) {
     return res.status(403).json({ error: "Sign up from the DiskPilot app." });
   }
-  if (Number(req.headers["content-length"] ?? 0) > MAX_BODY) {
+  // The app always sends a small body with its length; anything else is not the app.
+  const length = Number(req.headers["content-length"]);
+  if (req.headers["transfer-encoding"] || !Number.isFinite(length) || length > MAX_BODY) {
     return res.status(413).json({ error: "Too large." });
   }
   const ip =
@@ -137,6 +152,7 @@ export default async function handler(req, res) {
       last_seen timestamptz NOT NULL DEFAULT now(),
       times integer NOT NULL DEFAULT 1
     )`;
+      await migrate(sql);
       tableReady = true;
     }
     await sql`INSERT INTO signups (email, app_version, os_version, arch)
@@ -147,9 +163,17 @@ export default async function handler(req, res) {
         arch = EXCLUDED.arch,
         last_seen = now(),
         times = signups.times + 1`;
+    // The address only counts once its owner confirms it. A failed email
+    // doesn't fail the signup: the app sends again on its next launch.
+    try {
+      await startConfirmation(sql, s.email);
+    } catch (e) {
+      console.error("confirmation email failed", e?.code ?? e?.message?.slice(0, 40) ?? "error");
+    }
     return res.status(204).end();
   } catch (e) {
-    console.error("signup failed", e);
+    // Only the error code: messages can carry the email address.
+    console.error("signup failed", e?.code ?? e?.name ?? "error");
     return res.status(500).json({ error: "Could not save the signup. Try again later." });
   }
 }
