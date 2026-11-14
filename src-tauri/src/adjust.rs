@@ -27,6 +27,17 @@ pub struct Removal {
     pub trashed: bool,
 }
 
+/// Key files the scan found, minus those inside anything removed.
+fn carry(outcome: &ScanOutcome, removals: &[Removal]) -> Option<Vec<crate::keyfiles::Found>> {
+    outcome.key_files.as_ref().map(|files| {
+        files
+            .iter()
+            .filter(|f| !removals.iter().any(|r| f.path.starts_with(&r.path)))
+            .cloned()
+            .collect()
+    })
+}
+
 /// `outcome` with `removals` taken out. The index is copied once per call,
 /// so pass every item of a cleanup together.
 pub fn apply(outcome: &ScanOutcome, removals: &[Removal], home: &Path) -> ScanOutcome {
@@ -104,7 +115,11 @@ pub fn apply(outcome: &ScanOutcome, removals: &[Removal], home: &Path) -> ScanOu
         gone.insert(r.path.clone());
     }
     if gone.is_empty() {
-        return ScanOutcome { summary, index };
+        return ScanOutcome {
+            summary,
+            index,
+            key_files: carry(outcome, removals),
+        };
     }
 
     let under_gone = |p: &Path| p.ancestors().any(|a| gone.contains(a));
@@ -138,7 +153,11 @@ pub fn apply(outcome: &ScanOutcome, removals: &[Removal], home: &Path) -> ScanOu
     summary
         .detected_locations
         .sort_by_key(|l| std::cmp::Reverse(l.bytes));
-    ScanOutcome { summary, index }
+    ScanOutcome {
+        summary,
+        index,
+        key_files: carry(outcome, removals),
+    }
 }
 
 fn subtract_from_ancestors(

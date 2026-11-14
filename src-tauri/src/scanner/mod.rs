@@ -101,6 +101,10 @@ pub type DirIndex = HashMap<PathBuf, DirStats>;
 pub struct ScanOutcome {
     pub summary: ScanSummary,
     pub index: DirIndex,
+    /// Key and credential files found by name. Kept in memory only and
+    /// never saved with the scan; see [`crate::keyfiles`]. `None` for a scan
+    /// loaded from disk.
+    pub key_files: Option<Vec<crate::keyfiles::Found>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -188,6 +192,7 @@ struct Shared<'a> {
     deferred_parent_names: Mutex<Option<std::sync::Arc<HashSet<OsString>>>>,
     containers_total: AtomicU64,
     containers_done: AtomicU64,
+    key_files: Mutex<Vec<crate::keyfiles::Found>>,
 }
 
 /// Probe that answers from directory listings the scanner already has.
@@ -370,6 +375,12 @@ impl Shared<'_> {
                 .is_some_and(|home| filekinds::personal_dir(path, home));
         let mut kind_bytes = [0u64; FileKind::COUNT];
         let mut kind_files = [0u64; FileKind::COUNT];
+        // Keys are looked for by name in folders a person keeps things in.
+        let keys_wanted = self
+            .home
+            .as_deref()
+            .is_some_and(|home| crate::keyfiles::dir_wanted(path, home));
+        let mut keys_here: Vec<crate::keyfiles::Found> = Vec::new();
 
         let mut agg = Agg {
             bytes: own_bytes,
@@ -416,6 +427,14 @@ impl Shared<'_> {
             local_bytes[cat.index()] += bytes;
             local_files[cat.index()] += 1;
 
+            if stat.kind == Kind::File && keys_wanted {
+                if let Some(kind) = crate::keyfiles::classify(&name, path.file_name()) {
+                    keys_here.push(crate::keyfiles::Found {
+                        path: child.clone(),
+                        kind,
+                    });
+                }
+            }
             if stat.kind == Kind::File {
                 let modified = stat.modified_ms;
                 let kind = if personal {
@@ -474,6 +493,12 @@ impl Shared<'_> {
         }
 
         let direct_bytes = agg.bytes;
+        if !keys_here.is_empty() {
+            self.key_files
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .append(&mut keys_here);
+        }
         let children: Vec<Agg> = subdirs
             .par_iter()
             .map(|(p, b, empty)| self.scan_dir(p, *b, *empty, ctx.clone(), Some(&names)))
@@ -671,6 +696,7 @@ pub fn scan_with_partial(
         deferred_parent_names: Mutex::new(None),
         containers_total: AtomicU64::new(0),
         containers_done: AtomicU64::new(0),
+        key_files: Mutex::new(Vec::new()),
     };
 
     // Workers spend most of their time waiting on the filesystem rather than
@@ -896,7 +922,13 @@ fn build_outcome(
         heavy_directories,
         file_kinds,
     };
-    ScanOutcome { summary, index }
+    let key_files =
+        std::mem::take(&mut *shared.key_files.lock().unwrap_or_else(|e| e.into_inner()));
+    ScanOutcome {
+        summary,
+        index,
+        key_files: Some(key_files),
+    }
 }
 
 /// Folders that hold most of their data directly (in their own files rather

@@ -155,7 +155,11 @@ pub fn decode(r: impl Read) -> io::Result<ScanOutcome> {
         );
         prev = path;
     }
-    Ok(ScanOutcome { summary, index })
+    Ok(ScanOutcome {
+        summary,
+        index,
+        key_files: None,
+    })
 }
 
 /// Save atomically: write a private temporary file, then rename it.
