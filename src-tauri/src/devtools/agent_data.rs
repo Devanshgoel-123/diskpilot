@@ -317,6 +317,46 @@ pub const WINDSURF_EXTRA: Agent = Agent {
     entries: &[],
 };
 
+/// Google Antigravity: the editor caches in [`super::editors`] cover its
+/// app folder; these are the extra locations.
+pub const ANTIGRAVITY_EXTRA: Agent = Agent {
+    id: "antigravity",
+    name: "Antigravity",
+    quit: "Quit Antigravity first.",
+    entries: &[
+        e(
+            "Graphics cache",
+            "Library/Application Support/Antigravity/DawnGraphiteCache",
+            Cache,
+            "WebGPU shader cache.",
+        ),
+        e(
+            "WebGPU cache",
+            "Library/Application Support/Antigravity/DawnWebGPUCache",
+            Cache,
+            "WebGPU pipeline cache.",
+        ),
+        e(
+            "State database backup",
+            "Library/Application Support/Antigravity/User/globalStorage/state.vscdb.backup",
+            Backup,
+            "A copy of Antigravity's state database, used only to recover from corruption.",
+        ),
+        e(
+            "Agent conversations",
+            ".gemini/antigravity/conversations",
+            History,
+            "Your Antigravity agent conversations.",
+        ),
+        e(
+            "Agent artifacts",
+            ".gemini/antigravity/brain",
+            History,
+            "Plans, task lists and walkthroughs the agent wrote.",
+        ),
+    ],
+};
+
 /// Cleanable data in VS Code beyond the editor caches in [`super::editors`].
 pub const VSCODE_EXTRA: Agent = Agent {
     id: "vscode",

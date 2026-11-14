@@ -299,6 +299,7 @@ pub fn analyze(ctx: &Ctx) -> (DevToolsReport, Vec<Recommendation>) {
         editors::cursor(ctx),
         editors::vscode(ctx),
         editors::windsurf(ctx),
+        editors::antigravity(ctx),
         agent_data::claude_code(ctx),
         agent_data::claude_desktop(ctx),
         agent_data::codex(ctx),

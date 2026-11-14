@@ -64,6 +64,20 @@ pub fn windsurf(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
     )
 }
 
+pub fn antigravity(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
+    analyze(
+        ctx,
+        EditorPaths {
+            id: "antigravity",
+            extras: &agent_data::ANTIGRAVITY_EXTRA,
+            name: "Antigravity",
+            app_bundle: PathBuf::from("/Applications/Antigravity.app"),
+            app_support: ctx.home_path("Library/Application Support/Antigravity"),
+            extensions: ctx.home_path(".antigravity/extensions"),
+        },
+    )
+}
+
 const CACHE_DIRS: &[&str] = &[
     "Cache",
     "CachedData",
