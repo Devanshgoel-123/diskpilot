@@ -277,7 +277,8 @@ pub static POLICIES: &[Policy] = &[
         alternative: Some("dotnet nuget locals global-packages --clear"),
         expand: Whole,
         min_bytes: 50 * MB,
-        before_you_start: None,
+        // Shared with Windows, where Visual Studio holds packages open.
+        before_you_start: Some("Close Visual Studio or Rider and stop running dotnet builds first."),
     },
     Policy {
         rule_id: "node.next-build",
@@ -1362,18 +1363,6 @@ pub static WINDOWS_POLICIES: &[Policy] = &[
         before_you_start: None,
     },
     // ---- Package managers -------------------------------------------------------
-    Policy {
-        rule_id: "nuget.packages",
-        tier: LikelySafe,
-        methods: TRASH_OR_DELETE,
-        safe_because: "NuGet restores packages again on the next build.",
-        risks: "The next restore of each project downloads its packages again and needs network access.",
-        proposed_action: "Clear NuGet's global packages folder",
-        alternative: Some("dotnet nuget locals global-packages --clear"),
-        expand: Whole,
-        min_bytes: 100 * MB,
-        before_you_start: Some("Close Visual Studio and stop running dotnet builds first."),
-    },
     Policy {
         rule_id: "nuget.http-cache",
         tier: LikelySafe,
