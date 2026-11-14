@@ -13,6 +13,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
@@ -20,6 +21,10 @@ use crate::model::{ActionStatus, CleanupItemResult, CleanupRecord, ItemStatus};
 use crate::scanner::{measure, now_ms};
 
 pub const EVENT_TRASH_PROGRESS: &str = "trash://progress";
+/// Emitted while the Recycle Bin is being listed and measured, before the preview.
+pub const EVENT_TRASH_LISTING: &str = "trash://listing";
+/// How often listing progress is reported at most.
+const PROGRESS_EVERY: Duration = Duration::from_millis(40);
 /// A preview can be executed for this long after it was made.
 pub const PREVIEW_TTL_MS: i64 = 15 * 60 * 1000;
 
@@ -74,6 +79,22 @@ pub struct TrashProgress {
     pub not_removed: Vec<usize>,
 }
 
+/// How far listing the Recycle Bin has got: what has been measured so far.
+/// The same shape as the macOS Trash's.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashListing {
+    pub preview_id: String,
+    /// Top-level items measured completely.
+    pub entries_done: usize,
+    pub entries_total: usize,
+    /// Size and files counted so far.
+    pub bytes: u64,
+    pub files: u64,
+    /// The item being measured now.
+    pub current: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrashResult {
@@ -119,21 +140,51 @@ fn measure_item(path: &Path) -> (u64, u64, bool) {
 }
 
 /// List the Recycle Bin on every drive.
-pub fn inventory(_trash: &Path, id: String, now: i64) -> io::Result<TrashPreview> {
+pub fn inventory(trash: &Path, id: String, now: i64) -> io::Result<TrashPreview> {
+    inventory_with_progress(trash, id, now, &mut |_| {})
+}
+
+/// [`inventory`], reporting what has been measured so far after each item
+/// (at most every 40 ms, plus once at the start and once at the end).
+pub fn inventory_with_progress(
+    _trash: &Path,
+    id: String,
+    now: i64,
+    report: &mut dyn FnMut(&TrashListing),
+) -> io::Result<TrashPreview> {
     let items = trash::os_limited::list().map_err(other)?;
-    let mut entries: Vec<TrashEntry> = items
-        .into_iter()
-        .map(|item| {
-            let (bytes, files, is_dir) = measure_item(Path::new(&item.id));
-            TrashEntry {
-                name: item.original_path().display().to_string(),
-                bytes,
-                files,
-                is_dir,
-                id: item.id,
-            }
-        })
-        .collect();
+    let mut listing = TrashListing {
+        preview_id: id.clone(),
+        entries_done: 0,
+        entries_total: items.len(),
+        bytes: 0,
+        files: 0,
+        current: None,
+    };
+    report(&listing);
+    let mut last = Instant::now();
+    let mut entries: Vec<TrashEntry> = Vec::with_capacity(items.len());
+    for item in items {
+        let name = item.original_path().display().to_string();
+        listing.current = Some(name.clone());
+        let (bytes, files, is_dir) = measure_item(Path::new(&item.id));
+        listing.entries_done += 1;
+        listing.bytes += bytes;
+        listing.files += files;
+        if last.elapsed() >= PROGRESS_EVERY {
+            last = Instant::now();
+            report(&listing);
+        }
+        entries.push(TrashEntry {
+            name,
+            bytes,
+            files,
+            is_dir,
+            id: item.id,
+        });
+    }
+    listing.current = None;
+    report(&listing);
     entries.sort_by(|a, b| b.bytes.cmp(&a.bytes).then(a.name.cmp(&b.name)));
     Ok(TrashPreview {
         id,
