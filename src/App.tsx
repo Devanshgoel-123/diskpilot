@@ -27,17 +27,20 @@ import { playScanDone, startScanSound, stopScanSound } from "@/lib/sounds";
 // less code to parse; they are fetched in the background once it has drawn.
 const loadAssistant = () => import("@/features/assistant/AssistantPage");
 const loadDeveloper = () => import("@/features/developer/DeveloperToolsPage");
+const loadAgents = () => import("@/features/agents/AgentsPage");
 const loadDocker = () => import("@/features/docker/DockerPage");
 const loadSettings = () => import("@/features/settings/SettingsPage");
 const AssistantPage = lazy(() => loadAssistant().then((m) => ({ default: m.AssistantPage })));
 const DeveloperToolsPage = lazy(() =>
   loadDeveloper().then((m) => ({ default: m.DeveloperToolsPage })),
 );
+const AgentsPage = lazy(() => loadAgents().then((m) => ({ default: m.AgentsPage })));
 const DockerPage = lazy(() => loadDocker().then((m) => ({ default: m.DockerPage })));
 const SettingsPage = lazy(() => loadSettings().then((m) => ({ default: m.SettingsPage })));
 
 function preloadPages() {
-  for (const load of [loadAssistant, loadDeveloper, loadDocker, loadSettings]) void load();
+  for (const load of [loadAssistant, loadDeveloper, loadAgents, loadDocker, loadSettings])
+    void load();
 }
 
 const PAGES: Record<PageId, React.ComponentType> = {
@@ -48,6 +51,7 @@ const PAGES: Record<PageId, React.ComponentType> = {
   recommendations: RecommendationsPage,
   docker: DockerPage,
   developer: DeveloperToolsPage,
+  agents: AgentsPage,
   duplicates: DuplicatesPage,
   history: HistoryPage,
   settings: SettingsPage,

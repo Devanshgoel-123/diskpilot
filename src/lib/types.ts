@@ -710,3 +710,86 @@ export interface Signup {
   /** Whether diskpilot.live has received it (it is sent later when offline). */
   sent: boolean;
 }
+
+// ---- AI agents ---------------------------------------------------------------
+
+export type PermissionKind = "mode" | "allow" | "ask" | "deny" | "trust" | "hook";
+
+export interface AgentPermission {
+  /** Set when DiskPilot can remove the rule. */
+  id: string | null;
+  kind: PermissionKind;
+  label: string;
+  value: string;
+  source: string;
+  /** Why it deserves a look, if it does. */
+  risk: string | null;
+}
+
+export interface AgentConnection {
+  id: string;
+  name: string;
+  transport: string;
+  target: string;
+  scope: string;
+  enabled: boolean;
+  source: string;
+}
+
+export interface AgentPlugin {
+  id: string;
+  name: string;
+  publisher: string | null;
+  version: string | null;
+  /** null when DiskPilot cannot tell or change it. */
+  enabled: boolean | null;
+  bytes: number;
+  lastUsedMs: number | null;
+  path: string | null;
+  kind: "plugin" | "extension";
+}
+
+export type SkillOrigin = "user" | "plugin" | "builtIn";
+export type SkillState = "active" | "inactive" | "unknown";
+
+export interface AgentSkill {
+  id: string;
+  name: string;
+  description: string;
+  path: string;
+  bytes: number;
+  origin: SkillOrigin;
+  plugin: string | null;
+  lastUsedMs: number | null;
+  uses: number | null;
+  state: SkillState;
+  recommendationId: string | null;
+}
+
+export interface AgentReport {
+  id: string;
+  name: string;
+  detected: boolean;
+  version: string | null;
+  permissions: AgentPermission[];
+  connections: AgentConnection[];
+  plugins: AgentPlugin[];
+  skills: AgentSkill[];
+  cleanup: ToolItem[];
+  usageNote: string;
+  totalBytes: number;
+}
+
+export interface DisconnectedServer {
+  id: string;
+  agent: string;
+  name: string;
+  scope: string;
+  atMs: number;
+}
+
+export interface AgentsReport {
+  generatedAtMs: number;
+  agents: AgentReport[];
+  disconnected: DisconnectedServer[];
+}

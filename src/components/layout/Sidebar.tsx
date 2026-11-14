@@ -1,4 +1,5 @@
 import {
+  Blocks,
   AppWindow,
   Bot,
   Box,
@@ -144,6 +145,7 @@ export function Sidebar() {
     { id: "duplicates", label: "Duplicates", icon: Copy },
     { id: "applications", label: "Applications", icon: AppWindow },
     { id: "developer", label: "Developer Tools", icon: Code2 },
+    { id: "agents", label: "AI Agents", icon: Blocks },
     { id: "docker", label: "Docker", icon: Box },
     ...(assistantEnabled ? [{ id: "assistant" as const, label: "Assistant", icon: Bot }] : []),
   ];

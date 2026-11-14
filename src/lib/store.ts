@@ -37,6 +37,7 @@ export type PageId =
   | "applications"
   | "docker"
   | "developer"
+  | "agents"
   | "duplicates"
   | "history"
   | "settings";
