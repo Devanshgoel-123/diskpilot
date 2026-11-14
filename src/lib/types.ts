@@ -793,3 +793,47 @@ export interface AgentsReport {
   agents: AgentReport[];
   disconnected: DisconnectedServer[];
 }
+
+// ---- Keys & secrets (src-tauri/src/keyfiles.rs) --------------------------------
+
+export type KeyKind =
+  | "sshKey"
+  | "privateKey"
+  | "keyBundle"
+  | "certificate"
+  | "envFile"
+  | "cloudCredentials"
+  | "passwordDatabase";
+
+export type KeyRiskKind = "othersCanRead" | "easyToShare" | "inGitProject" | "copies" | "old";
+
+export interface KeyRisk {
+  kind: KeyRiskKind;
+  text: string;
+  /** Worth fixing, as opposed to good to know. */
+  serious: boolean;
+}
+
+export interface KeyLabel {
+  provider: string;
+  note: string;
+}
+
+export interface KeyFile {
+  path: string;
+  name: string;
+  kind: KeyKind;
+  kindLabel: string;
+  bytes: number;
+  modifiedMs: number | null;
+  label: KeyLabel | null;
+  risks: KeyRisk[];
+  canFixPermissions: boolean;
+}
+
+export interface KeysReport {
+  generatedAtMs: number;
+  files: KeyFile[];
+  scanned: boolean;
+  scannedAtMs: number | null;
+}

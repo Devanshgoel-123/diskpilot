@@ -21,6 +21,7 @@ import type {
   CleanupPlan,
   CleanupRecord,
   AgentsReport,
+  KeysReport,
   DevToolsReport,
   DiagnosticFinding,
   DockerAction,
@@ -120,6 +121,13 @@ export const api = {
     invoke<AgentsReport>("agent_set_plugin", { agent, id, enabled }),
   agentRemovePermissions: (agent: string, ids: string[]) =>
     invoke<AgentsReport>("agent_remove_permissions", { agent, ids }),
+
+  keysReport: () => invoke<KeysReport>("keys_report"),
+  keysProviders: () => invoke<string[]>("keys_providers"),
+  keysSetLabel: (path: string, provider: string, note: string) =>
+    invoke<KeysReport>("keys_set_label", { path, provider, note }),
+  keysMakePrivate: (path: string) => invoke<KeysReport>("keys_make_private", { path }),
+  keysMoveToTrash: (path: string) => invoke<KeysReport>("keys_move_to_trash", { path }),
 
   assistantStatus: () => invoke<AssistantStatus>("assistant_status"),
   assistantSetKey: (provider: AssistantProvider, key: string) =>

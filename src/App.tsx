@@ -28,6 +28,7 @@ import { playScanDone, startScanSound, stopScanSound } from "@/lib/sounds";
 const loadAssistant = () => import("@/features/assistant/AssistantPage");
 const loadDeveloper = () => import("@/features/developer/DeveloperToolsPage");
 const loadAgents = () => import("@/features/agents/AgentsPage");
+const loadKeys = () => import("@/features/keys/KeysPage");
 const loadDocker = () => import("@/features/docker/DockerPage");
 const loadSettings = () => import("@/features/settings/SettingsPage");
 const AssistantPage = lazy(() => loadAssistant().then((m) => ({ default: m.AssistantPage })));
@@ -35,11 +36,12 @@ const DeveloperToolsPage = lazy(() =>
   loadDeveloper().then((m) => ({ default: m.DeveloperToolsPage })),
 );
 const AgentsPage = lazy(() => loadAgents().then((m) => ({ default: m.AgentsPage })));
+const KeysPage = lazy(() => loadKeys().then((m) => ({ default: m.KeysPage })));
 const DockerPage = lazy(() => loadDocker().then((m) => ({ default: m.DockerPage })));
 const SettingsPage = lazy(() => loadSettings().then((m) => ({ default: m.SettingsPage })));
 
 function preloadPages() {
-  for (const load of [loadAssistant, loadDeveloper, loadAgents, loadDocker, loadSettings])
+  for (const load of [loadAssistant, loadDeveloper, loadAgents, loadKeys, loadDocker, loadSettings])
     void load();
 }
 
@@ -52,6 +54,7 @@ const PAGES: Record<PageId, React.ComponentType> = {
   docker: DockerPage,
   developer: DeveloperToolsPage,
   agents: AgentsPage,
+  keys: KeysPage,
   duplicates: DuplicatesPage,
   history: HistoryPage,
   settings: SettingsPage,

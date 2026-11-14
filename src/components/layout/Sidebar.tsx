@@ -8,6 +8,7 @@ import {
   FolderTree,
   Gauge,
   History,
+  KeyRound,
   Settings,
   Sparkles,
   type LucideIcon,
@@ -153,6 +154,7 @@ export function Sidebar() {
   ];
   const developers: NavItem[] = [
     { id: "agents", label: "AI Agents", icon: Blocks },
+    { id: "keys", label: "Keys & secrets", icon: KeyRound },
     { id: "developer", label: "Developer Tools", icon: Code2 },
     { id: "docker", label: "Docker", icon: Box },
   ];

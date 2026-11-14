@@ -41,6 +41,7 @@ export type PageId =
   | "docker"
   | "developer"
   | "agents"
+  | "keys"
   | "duplicates"
   | "history"
   | "settings";
