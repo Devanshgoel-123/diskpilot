@@ -533,6 +533,13 @@ mod tests {
             .rule_id,
             "adobe.media-cache"
         );
+        assert_eq!(dir("/Users/test/.ivy2/cache", &p).rule_id, "ivy.cache");
+        assert_eq!(
+            dir("/Users/test/Library/Caches/Coursier/v1", &p).rule_id,
+            "coursier.cache"
+        );
+        assert_eq!(dir("/Users/test/.sbt/boot", &p).rule_id, "sbt.boot");
+        assert_eq!(dir("/Users/test/.sbt", &p).rule_id, "sbt.home");
         assert_eq!(dir("/Users/test/go/pkg/mod", &p).rule_id, "go.mod-cache");
         assert_eq!(
             dir("/Users/test/.asdf/installs", &p).rule_id,

@@ -358,6 +358,39 @@ pub static DIR_RULES: &[DirRule] = &[
         "Downloaded .NET packages cached by NuGet. `dotnet restore` downloads them again on the next build."
     ),
     leaf!(
+        "ivy.cache",
+        HomeRelative(&[".ivy2", "cache"]),
+        Cache,
+        High,
+        "Ivy dependency cache",
+        "Downloaded Scala and Java dependencies cached by Apache Ivy. sbt and Ivy download them again on the next build."
+    ),
+    leaf!(
+        "coursier.cache",
+        HomeRelative(&["Library", "Caches", "Coursier", "v1"]),
+        Cache,
+        High,
+        "Coursier cache",
+        "Downloaded Scala and JVM artifacts cached by Coursier and sbt. Coursier downloads them again on the next build. JVMs installed with `cs java` are kept in a separate folder and are not part of this."
+    ),
+    leaf!(
+        "sbt.boot",
+        HomeRelative(&[".sbt", "boot"]),
+        Cache,
+        High,
+        "sbt boot files",
+        "Scala and sbt jars the sbt launcher downloads for each sbt version. sbt downloads them again on the next run."
+    ),
+    container!(
+        "sbt.home",
+        HomeRelative(&[".sbt"]),
+        DeveloperTools,
+        High,
+        false,
+        "sbt home",
+        "Global sbt settings, plugins and credentials, plus the launcher's boot files."
+    ),
+    leaf!(
         "go.mod-cache",
         HomeRelative(&["go", "pkg", "mod"]),
         Cache,
