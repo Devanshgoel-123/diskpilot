@@ -1,11 +1,11 @@
 //! The email signup DiskPilot asks for on first launch.
 //!
-//! The email, DiskPilot's version, the macOS version and the kind of Mac are
-//! sent to diskpilot.live, so the maker can tell people about updates (many
-//! early copies are out of date) and ask for feedback. Nothing about files,
-//! folders or scans is sent. A copy is kept in the app's data folder so the
-//! window does not ask again; if the Mac is offline it is sent on a later
-//! launch.
+//! The email, DiskPilot's version, the system's version (macOS or Windows)
+//! and the processor architecture are sent to diskpilot.live, so the maker
+//! can tell people about updates (many early copies are out of date) and ask
+//! for feedback. Nothing about files, folders or scans is sent. A copy is
+//! kept in the app's data folder so the window does not ask again; if the
+//! computer is offline it is sent on a later launch.
 
 use std::fs;
 use std::io::Write;
@@ -166,8 +166,23 @@ pub fn save(dir: &Path, signup: &Signup) -> std::io::Result<()> {
     fs::rename(tmp, path(dir))
 }
 
-/// macOS's version, such as "15.1", from the kernel.
+/// The system's version: macOS's such as "15.1", from the kernel, or
+/// Windows' build such as "10.0.26100", from the registry.
 pub fn os_version() -> String {
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::Registry::{HKEY_LOCAL_MACHINE, REG_SAM_FLAGS};
+        let build = crate::winshell::RegKey::open(
+            HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Windows NT\CurrentVersion",
+            REG_SAM_FLAGS(0),
+        )
+        .and_then(|k| k.string("CurrentBuild"))
+        .filter(|b| !b.trim().is_empty());
+        if let Some(build) = build {
+            return format!("10.0.{}", build.trim());
+        }
+    }
     #[cfg(target_os = "macos")]
     {
         if let Ok(out) = std::process::Command::new("/usr/sbin/sysctl")
