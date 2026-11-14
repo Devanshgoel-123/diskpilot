@@ -84,8 +84,9 @@ export function SignupScreen({ onDone }: { onDone: (s: Signup) => void }) {
 
         <p id="signup-note" className="mt-4 text-xs leading-relaxed text-subtle-foreground">
           DiskPilot sends your email, its version, your macOS version and whether this Mac has Apple
-          silicon or Intel to diskpilot.live. Nothing about your files, folders or scans is sent. To
-          change or delete your email, write to {CONTACT_EMAIL}.{" "}
+          silicon or Intel to diskpilot.live. Nothing about your files, folders or scans is sent.
+          You'll get one email with a link to confirm the address. To change or delete it, write to
+          {CONTACT_EMAIL}.{" "}
           <button
             type="button"
             className="underline underline-offset-2 hover:text-foreground"

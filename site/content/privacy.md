@@ -22,7 +22,9 @@ It is sent once, when you sign up. If the Mac is offline at that moment, DiskPil
 
 **What it is not used for:** it is not sold, shared or used for advertising, and it is not joined with anything about your files or how you use the app, because DiskPilot never sends that.
 
-**Where it is kept:** in a database on Vercel, the host of diskpilot.live, which only the maker of DiskPilot can read. It is kept until you ask for it to be deleted.
+**Confirming it:** diskpilot.live then emails that address a link to confirm it. Only confirmed addresses are ever emailed again, so nobody can sign someone else up. The link works for two days, and an address gets at most one such email a day. The email is sent through [Resend](https://resend.com), which delivers it and keeps nothing else about you.
+
+**Where it is kept:** in a database on Vercel, the host of diskpilot.live, which only the maker of DiskPilot can read. An address that is never confirmed is deleted after 30 days. A confirmed one is kept until you ask for it to be deleted.
 
 **Changing or deleting it:** write to [devanshgoel.dev@gmail.com](mailto:devanshgoel.dev@gmail.com) from that address, and it will be changed or deleted. Every email also says how to stop receiving them.
 
