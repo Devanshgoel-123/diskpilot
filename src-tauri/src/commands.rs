@@ -12,6 +12,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::adjust;
+use crate::agents;
 use crate::assistant::{
     self, keychain, provider::Provider, tools::ToolContext, AssistantReply, AssistantStatus,
     ModelInfo,
@@ -722,6 +723,153 @@ pub async fn analyze_dev_tools(state: State<'_, AppState>) -> AppResult<DevTools
 #[tauri::command]
 pub fn get_dev_tools_report(state: State<'_, AppState>) -> Option<DevToolsReport> {
     state.slot().devtools.as_ref().map(|r| r.as_ref().clone())
+}
+
+// ---- AI agents -------------------------------------------------------------
+
+/// Read every agent's settings, connections, plugins and skills.
+fn run_agents(state: &AppState) -> AgentsReportResult {
+    let outcome = state.slot().last.clone();
+    let home = state.home.clone();
+    let data_dir = state.data_dir.clone();
+    let ctx = devtools::Ctx {
+        home: &home,
+        index: outcome.as_ref().map(|o| &o.index),
+        summary: outcome.as_ref().map(|o| &o.summary),
+        classifier: Classifier::new(&home),
+        now_ms: now_ms(),
+    };
+    let tools = state
+        .slot()
+        .devtools
+        .as_ref()
+        .map(|d| d.tools.clone())
+        .unwrap_or_default();
+    let (report, recs) = agents::analyze(&agents::Input {
+        ctx: &ctx,
+        data_dir: data_dir.as_deref(),
+        tools: &tools,
+    });
+    let mut slot = state.slot();
+    slot.agents = Some(Arc::new(report.clone()));
+    slot.agents_recommendations = Arc::new(recs);
+    Ok(report)
+}
+
+type AgentsReportResult = AppResult<agents::AgentsReport>;
+
+/// Run a config change, then read everything again so the page shows the
+/// files as they are now.
+fn agent_change(
+    state: &AppState,
+    change: impl FnOnce(&agents::Input) -> AppResult<()>,
+) -> AgentsReportResult {
+    let home = state.home.clone();
+    let data_dir = state.data_dir.clone();
+    let ctx = devtools::Ctx {
+        home: &home,
+        index: None,
+        summary: None,
+        classifier: Classifier::new(&home),
+        now_ms: now_ms(),
+    };
+    change(&agents::Input {
+        ctx: &ctx,
+        data_dir: data_dir.as_deref(),
+        tools: &[],
+    })?;
+    run_agents(state)
+}
+
+#[tauri::command]
+pub async fn analyze_agents(app: AppHandle) -> AgentsReportResult {
+    blocking(move || run_agents(&app.state::<AppState>())).await
+}
+
+#[tauri::command]
+pub fn get_agents_report(state: State<'_, AppState>) -> Option<agents::AgentsReport> {
+    state.slot().agents.as_ref().map(|r| r.as_ref().clone())
+}
+
+/// Disconnect (or, for Codex, turn back on) an MCP server. Only ids from
+/// the report are accepted; the server is looked up in the agent's own
+/// config file again.
+#[tauri::command]
+pub async fn agent_set_connection(
+    app: AppHandle,
+    agent: String,
+    id: String,
+    enabled: bool,
+) -> AgentsReportResult {
+    blocking(move || {
+        agent_change(&app.state::<AppState>(), |input| {
+            match (agent.as_str(), enabled) {
+                (agents::codex::ID, _) => agents::codex::set_connection(input, &id, enabled),
+                (agents::claude::ID, false) => agents::claude::disconnect(input, &id),
+                (agents::cursor::ID, false) => agents::cursor::disconnect(input, &id),
+                (agents::antigravity::ID, false) => agents::antigravity::disconnect(input, &id),
+                _ => Err(AppError::Other(
+                    "Reconnect it from the list of disconnected servers.".into(),
+                )),
+            }
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn agent_reconnect(app: AppHandle, id: String) -> AgentsReportResult {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        agent_change(&state, |input| agents::edit::reconnect(input.data_dir, &id))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn agent_forget_disconnected(app: AppHandle, id: String) -> AgentsReportResult {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        agent_change(&state, |input| agents::edit::forget(input.data_dir, &id))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn agent_set_plugin(
+    app: AppHandle,
+    agent: String,
+    id: String,
+    enabled: bool,
+) -> AgentsReportResult {
+    blocking(move || {
+        agent_change(&app.state::<AppState>(), |input| match agent.as_str() {
+            agents::claude::ID => agents::claude::set_plugin(input, &id, enabled),
+            agents::codex::ID => agents::codex::set_plugin(input, &id, enabled),
+            _ => Err(AppError::Other(
+                "Turn extensions on or off in the editor itself.".into(),
+            )),
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn agent_remove_permission(
+    app: AppHandle,
+    agent: String,
+    id: String,
+) -> AgentsReportResult {
+    blocking(move || {
+        agent_change(&app.state::<AppState>(), |input| match agent.as_str() {
+            agents::claude::ID => agents::claude::remove_permission(input, &id),
+            agents::cursor::ID => agents::cursor::remove_permission(input, &id),
+            _ => Err(AppError::Other(
+                "Change this setting in the agent itself.".into(),
+            )),
+        })
+    })
+    .await
 }
 
 /// Build a previewable plan. Paths come from the engine's recommendations,

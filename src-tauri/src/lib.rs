@@ -6,6 +6,7 @@
 //! read from the UI or removed. Docker changes go through `docker::actions`.
 
 pub mod adjust;
+pub mod agents;
 pub mod apps;
 pub mod assistant;
 pub mod classifier;
@@ -161,6 +162,13 @@ pub fn run() {
             commands::plan_file_kind_cleanup,
             commands::analyze_dev_tools,
             commands::get_dev_tools_report,
+            commands::analyze_agents,
+            commands::get_agents_report,
+            commands::agent_set_connection,
+            commands::agent_reconnect,
+            commands::agent_forget_disconnected,
+            commands::agent_set_plugin,
+            commands::agent_remove_permission,
             commands::assistant_status,
             commands::assistant_set_key,
             commands::assistant_clear_key,

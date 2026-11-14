@@ -22,6 +22,9 @@ pub struct ScanSlot {
     /// Latest developer-tools analysis and the recommendations it produced.
     pub devtools: Option<Arc<DevToolsReport>>,
     pub devtools_recommendations: Arc<Vec<Recommendation>>,
+    /// Latest AI agents report and the recommendations it produced.
+    pub agents: Option<Arc<crate::agents::AgentsReport>>,
+    pub agents_recommendations: Arc<Vec<Recommendation>>,
 }
 
 impl ScanSlot {
@@ -34,6 +37,7 @@ impl ScanSlot {
         let combined: Vec<Recommendation> = self
             .devtools_recommendations
             .iter()
+            .chain(self.agents_recommendations.iter())
             .chain(self.recommendations.iter())
             .filter(|r| seen.insert(r.id.clone()))
             .cloned()
@@ -55,6 +59,7 @@ impl ScanSlot {
         };
         self.recommendations = keep(&self.recommendations);
         self.devtools_recommendations = keep(&self.devtools_recommendations);
+        self.agents_recommendations = keep(&self.agents_recommendations);
     }
 }
 
