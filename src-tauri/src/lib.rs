@@ -20,6 +20,7 @@ pub mod error;
 pub mod explorer;
 pub mod filekinds;
 pub mod history;
+pub mod keyfiles;
 pub mod model;
 pub mod preview;
 pub mod privacy;
@@ -169,6 +170,11 @@ pub fn run() {
             commands::agent_forget_disconnected,
             commands::agent_set_plugin,
             commands::agent_remove_permissions,
+            commands::keys_report,
+            commands::keys_providers,
+            commands::keys_set_label,
+            commands::keys_make_private,
+            commands::keys_move_to_trash,
             commands::assistant_status,
             commands::assistant_set_key,
             commands::assistant_clear_key,
