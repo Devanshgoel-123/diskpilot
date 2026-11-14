@@ -330,6 +330,14 @@ pub static DIR_RULES: &[DirRule] = &[
         "Bun's global package cache."
     ),
     leaf!(
+        "deno.cache",
+        HomeRelative(&["Library", "Caches", "deno"]),
+        Cache,
+        High,
+        "Deno cache",
+        "Downloaded modules, npm packages and compiled TypeScript cached by Deno. Deno downloads and compiles them again when a script runs."
+    ),
+    leaf!(
         "nvm.versions",
         HomeRelative(&[".nvm", "versions"]),
         DeveloperTools,
@@ -355,6 +363,14 @@ pub static DIR_RULES: &[DirRule] = &[
         "Downloaded crate sources and index. Cargo re-downloads them when needed."
     ),
     leaf!(
+        "swiftpm.cache",
+        HomeRelative(&["Library", "Caches", "org.swift.swiftpm"]),
+        Cache,
+        High,
+        "Swift Package Manager cache",
+        "Downloaded package repositories and manifests cached by Swift Package Manager. SwiftPM downloads them again on the next build."
+    ),
+    leaf!(
         "rustup.toolchains",
         HomeRelative(&[".rustup", "toolchains"]),
         DeveloperTools,
@@ -377,6 +393,14 @@ pub static DIR_RULES: &[DirRule] = &[
         High,
         "Maven repository",
         "Downloaded Java dependencies. Maven re-downloads them on the next build."
+    ),
+    leaf!(
+        "nuget.packages",
+        HomeRelative(&[".nuget", "packages"]),
+        Cache,
+        High,
+        "NuGet package cache",
+        "Downloaded .NET packages cached by NuGet. `dotnet restore` downloads them again on the next build."
     ),
     leaf!(
         "go.mod-cache",
@@ -500,11 +524,12 @@ pub static DIR_RULES: &[DirRule] = &[
         "Gemini CLI data",
         "Gemini CLI configuration and session data."
     ),
-    leaf!(
+    container!(
         "xdg.cache",
         HomeRelative(&[".cache"]),
         Cache,
         Medium,
+        false,
         "CLI tool caches",
         "Cache folder shared by many command-line tools (pip, Hugging Face, pre-commit and others). Some tools keep large downloads here, such as ML models, that are slow to fetch again."
     ),
@@ -752,6 +777,25 @@ pub static DIR_RULES: &[DirRule] = &[
         High,
         "Playwright browsers",
         "Browser builds downloaded by Playwright for automated testing, one folder per browser version. `npx playwright install` downloads them again."
+    ),
+    leaf!(
+        "puppeteer.browsers",
+        HomeRelative(&[".cache", "puppeteer"]),
+        DeveloperTools,
+        High,
+        "Puppeteer browsers",
+        "Chrome builds downloaded by Puppeteer, one folder per browser version. `npx puppeteer browsers install` downloads them again."
+    ),
+    leaf!(
+        "adobe.media-cache",
+        HomeRelativeAny(&[
+            &["Library", "Application Support", "Adobe", "Common", "Media Cache Files"],
+            &["Library", "Application Support", "Adobe", "Common", "Media Cache"],
+        ]),
+        Cache,
+        High,
+        "Adobe media cache",
+        "Conformed audio, peak files and media indexes created by Premiere Pro, After Effects and other Adobe apps. Adobe apps rebuild them when a project is opened."
     ),
     leaf!(
         "asdf.installs",

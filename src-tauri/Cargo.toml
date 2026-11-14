@@ -1,6 +1,6 @@
 [package]
 name = "diskpilot"
-version = "0.6.3"
+version = "0.6.5"
 description = "Open-source macOS storage intelligence"
 authors = ["DiskPilot contributors"]
 license = "MIT"
@@ -83,7 +83,7 @@ tauri-plugin-single-instance = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSDictionary", "NSGeometry", "NSURL", "NSError"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSDictionary", "NSGeometry", "NSURL", "NSError", "NSValue"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-graphics", "NSWorkspace", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSGraphicsContext"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGImage"] }
 objc2-quick-look-thumbnailing = { version = "0.3", default-features = false, features = ["std", "block2", "QLThumbnailGenerator", "QLThumbnailGenerationRequest", "QLThumbnailRepresentation", "objc2-core-graphics", "objc2-core-foundation"] }

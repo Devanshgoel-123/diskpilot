@@ -10,6 +10,9 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { isWindows } from "./platform";
 
 import type {
+  Signup,
+  FileEntry,
+  FileKind,
   AppBadge,
   AppStorageReport,
   AppEnvironment,
@@ -42,6 +45,7 @@ import type {
   ScanRecord,
   ScanSummary,
   TrashPreview,
+  TrashListing,
   TrashProgress,
   CleanupProgress,
   TrashResult,
@@ -57,6 +61,8 @@ export const inDesktopApp = (): boolean => isTauri();
 
 export const api = {
   getEnvironment: () => invoke<AppEnvironment>("get_environment"),
+  getSignup: () => invoke<Signup | null>("get_signup"),
+  submitSignup: (email: string) => invoke<Signup>("submit_signup", { email }),
   getDiskInfo: () => invoke<DiskInfo>("get_disk_info"),
   /** Windows system areas with the tool that reclaims each; empty on macOS. */
   getSystemExtras: () => invoke<SystemExtra[]>("get_system_extras"),
@@ -75,6 +81,8 @@ export const api = {
   cancelScan: () => invoke<boolean>("cancel_scan"),
   isScanRunning: () => invoke<boolean>("is_scan_running"),
   getScanSummary: () => invoke<ScanSummary | null>("get_scan_summary"),
+  /** The files the last scan listed for one type, largest first. */
+  getFileKindFiles: (kind: FileKind) => invoke<FileEntry[]>("get_file_kind_files", { kind }),
   getSavedScanInfo: () => invoke<SavedScanInfo>("get_saved_scan_info"),
   clearSavedScan: () => invoke<null>("clear_saved_scan"),
   listDirectory: (path?: string) =>
@@ -83,7 +91,7 @@ export const api = {
   /** Shows the item in Finder or File Explorer. */
   revealInFinder: (path: string) => invoke<null>("reveal_in_finder", { path }),
   openOwnerApp: (ruleId: string) => invoke<null>("open_owner_app", { ruleId }),
-  /** PNG bytes of a system thumbnail (Quick Look on macOS); files inside the last scan only. */
+  /** JPEG or PNG bytes of a system thumbnail (Quick Look on macOS); files inside the last scan only. */
   fileThumbnail: (path: string, size: number) =>
     invoke<ArrayBuffer>("file_thumbnail", { path, size }),
   /** Opens a listed file in its default app; apps and scripts are refused. */
@@ -193,6 +201,10 @@ export function onCleanupProgress(cb: (p: CleanupProgress) => void): Promise<Unl
 
 export function onTrashProgress(cb: (p: TrashProgress) => void): Promise<UnlistenFn> {
   return listen<TrashProgress>("trash://progress", (e) => cb(e.payload));
+}
+
+export function onTrashListing(cb: (p: TrashListing) => void): Promise<UnlistenFn> {
+  return listen<TrashListing>("trash://listing", (e) => cb(e.payload));
 }
 
 export function onDuplicatesProgress(cb: (p: DuplicateProgress) => void): Promise<UnlistenFn> {

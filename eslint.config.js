@@ -5,7 +5,18 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "src-tauri/target", "src-tauri/gen", "node_modules"] },
+  {
+    // dist-perf is the perf harness build; src/__preview.ts is the local,
+    // gitignored visual-check harness.
+    ignores: [
+      "dist",
+      "dist-perf",
+      "src-tauri/target",
+      "src-tauri/gen",
+      "node_modules",
+      "src/__preview.ts",
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.strict],
     files: ["**/*.{ts,tsx}"],
@@ -16,6 +27,11 @@ export default tseslint.config(
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
     },
+  },
+  {
+    // Measurement harness: synthetic data whose shape is known.
+    files: ["perf/**/*.ts"],
+    rules: { "@typescript-eslint/no-non-null-assertion": "off" },
   },
   {
     files: ["src/components/ui/**/*.tsx"],

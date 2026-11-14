@@ -28,11 +28,13 @@ pub mod safety;
 pub mod scanner;
 pub mod schedule;
 pub mod secrets;
+pub mod signup;
 pub mod snapshot;
 pub mod state;
 pub mod system_extras;
 #[cfg(test)]
 pub mod test_support;
+pub mod thumbcache;
 #[cfg(unix)]
 pub mod trash;
 #[cfg(windows)]
@@ -83,12 +85,6 @@ pub fn run() {
                     .map_err(|e| eprintln!("diskpilot: history unavailable: {e}"))
                     .ok()
             });
-            // Results from the previous launch, shown until the next scan.
-            let slot = data_dir
-                .as_deref()
-                .and_then(snapshot::load)
-                .map(|outcome| commands::restored_slot(&home, outcome))
-                .unwrap_or_default();
             tray::install(app.handle(), home.clone())?;
             if std::env::args().any(|a| a == schedule::STARTED_AT_LOGIN) {
                 if let Some(w) = app.get_webview_window("main") {
@@ -97,7 +93,8 @@ pub fn run() {
             }
             app.manage(AppState {
                 home,
-                scan: std::sync::Mutex::new(slot),
+                scan: std::sync::Mutex::default(),
+                restore: state::Restore::default(),
                 plans: std::sync::Mutex::new(std::collections::HashMap::new()),
                 history: history.map(std::sync::Arc::new),
                 assistant: std::sync::Mutex::new(assistant::Conversation::default()),
@@ -106,12 +103,43 @@ pub fn run() {
                 duplicates: std::sync::Mutex::default(),
                 docker_reviews: std::sync::Mutex::default(),
                 wsl_reviews: std::sync::Mutex::default(),
+                // DiskPilot's own cache folder, e.g. ~/Library/Caches/dev.diskpilot.app.
+                thumbs: app
+                    .path()
+                    .app_cache_dir()
+                    .ok()
+                    .and_then(|dir| thumbcache::ThumbCache::open(dir.join("thumbnails")))
+                    .map(std::sync::Arc::new),
             });
+            // Results from the previous launch, shown until the next scan. They
+            // load in the background (about 150 ms for a home folder) so the
+            // window opens without waiting; reading them waits instead.
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                let state = handle.state::<AppState>();
+                let restored = state
+                    .data_dir
+                    .as_deref()
+                    .and_then(snapshot::load)
+                    .map(|outcome| commands::restored_slot(&state.home, outcome));
+                if let Some(slot) = restored {
+                    *state.scan.lock().unwrap_or_else(|e| e.into_inner()) = slot;
+                }
+                state.restore.finish();
+            });
+            // A signup saved while offline goes to diskpilot.live now.
+            if let Some(dir) = app.state::<AppState>().data_dir.clone() {
+                std::thread::spawn(move || {
+                    signup::send_pending(&dir, signup::send);
+                });
+            }
             schedule::spawn(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_environment,
+            commands::get_signup,
+            commands::submit_signup,
             commands::get_disk_info,
             commands::list_drives,
             commands::get_schedule,
@@ -123,6 +151,7 @@ pub fn run() {
             commands::cancel_scan,
             commands::is_scan_running,
             commands::get_scan_summary,
+            commands::get_file_kind_files,
             commands::get_saved_scan_info,
             commands::clear_saved_scan,
             commands::list_directory,

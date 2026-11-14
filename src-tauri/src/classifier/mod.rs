@@ -734,6 +734,34 @@ mod tests {
             dir("/Users/test/Library/Caches/ms-playwright", &p).rule_id,
             "playwright.browsers"
         );
+        assert_eq!(
+            dir("/Users/test/Library/Caches/org.swift.swiftpm", &p).rule_id,
+            "swiftpm.cache"
+        );
+        assert_eq!(
+            dir("/Users/test/.cache/puppeteer", &p).rule_id,
+            "puppeteer.browsers"
+        );
+        assert_eq!(
+            dir("/Users/test/.nuget/packages", &p).rule_id,
+            "nuget.packages"
+        );
+        assert_eq!(
+            dir(
+                "/Users/test/Library/Application Support/Adobe/Common/Media Cache Files",
+                &p
+            )
+            .rule_id,
+            "adobe.media-cache"
+        );
+        assert_eq!(
+            dir(
+                "/Users/test/Library/Application Support/Adobe/Common/Media Cache",
+                &p
+            )
+            .rule_id,
+            "adobe.media-cache"
+        );
         assert_eq!(dir("/Users/test/go/pkg/mod", &p).rule_id, "go.mod-cache");
         assert_eq!(
             dir("/Users/test/.asdf/installs", &p).rule_id,
@@ -1062,6 +1090,14 @@ mod tests {
         let floored = Classifier::macos("/Users/test").with_floor("/Users/test/Library/Caches/x");
         let c = floored.classify_path(Path::new("/Users/test/Library/Caches/x/y"), true, &p);
         assert_eq!(c.category, Category::Unknown);
+    }
+
+    #[test]
+    fn deno_cache_is_recognized() {
+        let p = FakeProbe::empty();
+        let c = dir("/Users/test/Library/Caches/deno", &p);
+        assert_eq!(c.rule_id, "deno.cache");
+        assert_eq!(c.category, Category::Cache);
     }
 }
 

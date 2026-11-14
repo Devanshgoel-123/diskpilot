@@ -24,6 +24,9 @@
           "url": "ms-settings:*"
         },
         {
+          "url": "https://diskpilot.live/privacy"
+        },
+        {
           "url": "https://console.anthropic.com/settings/keys"
         },
         {

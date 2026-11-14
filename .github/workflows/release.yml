@@ -115,10 +115,40 @@ jobs:
               exit 1
             fi
             echo "UPDATER=1" >> "$GITHUB_ENV"
-            pnpm tauri build --target universal-apple-darwin --config '{"bundle":{"createUpdaterArtifacts":true}}'
+            pnpm tauri build --target universal-apple-darwin --bundles app --config '{"bundle":{"createUpdaterArtifacts":true}}'
           else
             echo "No updater key: building without an update archive."
-            pnpm tauri build --target universal-apple-darwin
+            pnpm tauri build --target universal-apple-darwin --bundles app
+          fi
+      # Tauri lays out its disk image window through Finder, which it skips on
+      # CI, so the window came out unarranged. dmgbuild writes the layout
+      # (app on the left, Applications on the right, background) directly.
+      - name: Make the disk image
+        run: |
+          bundle=src-tauri/target/universal-apple-darwin/release/bundle
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          dmg="$bundle/dmg/DiskPilot_${version}_universal.dmg"
+          mkdir -p "$bundle/dmg"
+          python3 -m venv "$RUNNER_TEMP/dmgbuild"
+          "$RUNNER_TEMP/dmgbuild/bin/pip" install --quiet dmgbuild==1.6.5
+          "$RUNNER_TEMP/dmgbuild/bin/dmgbuild" -s scripts/dmg/settings.py \
+            -D app="$bundle/macos/DiskPilot.app" -D background="$PWD/scripts/dmg/background.tiff" \
+            DiskPilot "$dmg"
+          if [ "${NOTARIZE:-}" = "1" ]; then
+            # Tauri removes its signing keychain after the build; sign the
+            # disk image from a keychain of our own.
+            kc="$RUNNER_TEMP/dmg-signing.keychain-db"
+            pw=$(openssl rand -hex 16)
+            security create-keychain -p "$pw" "$kc"
+            security set-keychain-settings -lut 900 "$kc"
+            security unlock-keychain -p "$pw" "$kc"
+            printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/dmg-cert.p12"
+            security import "$RUNNER_TEMP/dmg-cert.p12" -k "$kc" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+            rm -f "$RUNNER_TEMP/dmg-cert.p12"
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$pw" "$kc" > /dev/null
+            security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+            codesign --sign "$APPLE_SIGNING_IDENTITY" --timestamp --keychain "$kc" "$dmg"
+            codesign --verify --verbose=2 "$dmg"
           fi
       # Tauri notarizes the app inside; the disk image people download is
       # notarized and stapled too, so opening it never shows a warning.

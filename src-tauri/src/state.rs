@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::time::Duration;
 
 use crate::assistant::Conversation;
 use crate::devtools::DevToolsReport;
@@ -57,9 +58,45 @@ impl ScanSlot {
     }
 }
 
+/// Whether the scan saved by the previous launch has been loaded. It loads on
+/// a background thread so the window can open first; reading the scan slot
+/// waits for it.
+#[derive(Default)]
+pub struct Restore {
+    done: Mutex<bool>,
+    ready: Condvar,
+}
+
+impl Restore {
+    /// Longest a reader waits for the saved scan before going on without it.
+    const LIMIT: Duration = Duration::from_secs(10);
+
+    pub fn finished() -> Self {
+        Restore {
+            done: Mutex::new(true),
+            ready: Condvar::new(),
+        }
+    }
+
+    pub fn finish(&self) {
+        *self.done.lock().unwrap_or_else(|e| e.into_inner()) = true;
+        self.ready.notify_all();
+    }
+
+    pub fn wait(&self) {
+        let done = self.done.lock().unwrap_or_else(|e| e.into_inner());
+        let _ = self
+            .ready
+            .wait_timeout_while(done, Self::LIMIT, |done| !*done)
+            .unwrap_or_else(|e| e.into_inner());
+    }
+}
+
 pub struct AppState {
     pub home: PathBuf,
     pub scan: Mutex<ScanSlot>,
+    /// Set once the previous launch's scan is in `scan` (or there was none).
+    pub restore: Restore,
     /// Previewed, not yet executed cleanup plans (single use, short-lived).
     pub plans: Mutex<HashMap<String, CleanupPlan>>,
     /// `None` if the history database could not be opened; the app still works.
@@ -78,10 +115,14 @@ pub struct AppState {
     /// Virtual-disk compaction previews shown to the person, by id, with when
     /// they were made. Single use and short-lived, like Docker's.
     pub wsl_reviews: Mutex<HashMap<String, (crate::wsl::compact::Reviewed, i64)>>,
+    /// Thumbnails saved between launches; `None` if the cache folder is unavailable.
+    pub thumbs: Option<Arc<crate::thumbcache::ThumbCache>>,
 }
 
 impl AppState {
+    /// The scan slot, once the previous launch's results have loaded.
     pub fn slot(&self) -> MutexGuard<'_, ScanSlot> {
+        self.restore.wait();
         self.scan.lock().unwrap_or_else(|e| e.into_inner())
     }
 
@@ -181,5 +222,30 @@ mod tests {
 
         slot.remove_paths(&["/h/a".to_string()].into_iter().collect());
         assert!(!slot.all_recommendations().iter().any(|r| r.path == "/h/a"));
+    }
+}
+
+#[cfg(test)]
+mod restore_tests {
+    use super::Restore;
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn readers_wait_until_the_saved_scan_is_in() {
+        let r = Arc::new(Restore::default());
+        let r2 = Arc::clone(&r);
+        let t = Instant::now();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            r2.finish();
+        });
+        r.wait();
+        assert!(t.elapsed() >= Duration::from_millis(40));
+        // Once finished, waiting returns at once.
+        let t = Instant::now();
+        r.wait();
+        assert!(t.elapsed() < Duration::from_millis(20));
+        Restore::finished().wait();
     }
 }

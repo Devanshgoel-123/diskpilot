@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { api, errorMessage } from "@/lib/api";
 import { formatBytes, formatRelative, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
-import { cachedThumbnail, loadThumbnail } from "@/lib/thumbnails";
+import { anySmallThumbnail, cachedThumbnail, loadThumbnail } from "@/lib/thumbnails";
 import { basename, parentOf } from "@/lib/paths";
 import { modifierHeld, words } from "@/lib/platform";
 import { keysText } from "@/lib/shortcuts";
@@ -54,6 +54,7 @@ export function FilePreview({
   const [loaded, setLoaded] = useState<{ path: string; url: string | null } | null>(null);
   const cached = file ? cachedThumbnail(file.path, LARGE) : undefined;
   const url = cached !== undefined ? cached : loaded?.path === file?.path ? loaded?.url : undefined;
+  const placeholder = file && url === undefined ? anySmallThumbnail(file.path) : undefined;
   const [openError, setOpenError] = useState<{ path: string; message: string } | null>(null);
   const canSelect = !!onToggleSelect && !!file && file.selectable !== false;
 
@@ -131,6 +132,17 @@ export function FilePreview({
                   <File className="size-10 text-subtle-foreground" aria-hidden />
                   {words().os} has no preview for this kind of file.
                 </div>
+              ) : placeholder ? (
+                // The row's small thumbnail, enlarged and softened, until the
+                // full preview arrives a moment later.
+                <span role="status" aria-label="Loading preview">
+                  <img
+                    src={placeholder}
+                    alt=""
+                    className="size-[min(420px,50vh)] scale-105 object-contain opacity-70 blur-md"
+                    draggable={false}
+                  />
+                </span>
               ) : (
                 <Loader2
                   className="size-5 animate-spin text-subtle-foreground"

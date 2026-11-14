@@ -1,0 +1,173 @@
+# Performance baseline
+
+Measured on the development Mac (Apple silicon, 8 GB) on 12 Nov 2026, against
+`main` at 4789d0c. Each change is measured again after its commit; see
+[Changes](#changes).
+
+## How to measure
+
+| What                     | Command                                                          | Notes                                                                                                                                                                                                                              |
+| ------------------------ | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Home-folder scan         | `cargo run --release --example _bench_scan -- ~ 3`               | Read-only. Real disk, so it varies with what else runs.                                                                                                                                                                            |
+| Scan of a generated tree | `cargo run --release --example _bench_fixture -- <dir> 200000 5` | Deterministic tree (175k files counted, 3.7k folders), median of 5 after a warm-up. Used by CI.                                                                                                                                    |
+| Thumbnails               | `cargo run --release --example _preview_thumbs -- 512 <files>`   | Local probe (gitignored). 40 real photos, screenshots, PDFs and videos.                                                                                                                                                            |
+| Saved scan load          | `cargo run --release --example _preview_snapshot`                | Local probe (gitignored). Loads `last-scan.bin` and serialises the summary the UI receives.                                                                                                                                        |
+| UI                       | `pnpm perf:ui`                                                   | Production build of the app against synthetic data (`perf/fixture.ts`), headless Chrome, CPU slowed 4x. The baseline and the first rows below used the median of 5 runs; the CI gate uses the best of the runs, which is steadier. |
+
+## CI gate
+
+The `perf` job in `.github/workflows/ci.yml` runs on every pull request on a
+`macos-15-intel` runner. It checks out the base branch next to the pull
+request, copies this pull request's measuring tools into it, and measures both
+on the same machine:
+
+- the scan of the generated tree (`_bench_fixture`, 200,000 files, median of 5),
+  only when the pull request changes `src-tauri`; base and pull request
+  runs alternate, five each;
+- the size of the built JavaScript, in total and at startup;
+- the UI harness (`perf/ui.mjs`, three alternating rounds per side, CPU slowed 2x
+  on the Intel runner).
+
+Each side keeps the best value of each metric (`perf/merge.mjs`).
+
+`perf/compare.mjs` fails the job when a metric is more than 10% worse than the
+base branch (5% for JavaScript size, 15% and 100 ms for the scan, which
+varied by 12% between two builds of the same scanner on the runner) and also worse by more than a small
+absolute amount (20% and 40 ms for first render, which varies by about 20% between
+runs of the same commit; 15 ms for page switches and previews), or when it goes
+over a limit in `docs/perf/budgets.json`. The
+table goes to the job summary and, for pull requests from this repository, to
+a comment on the pull request.
+
+## Baseline
+
+| Metric                                                       | Value                                            |
+| ------------------------------------------------------------ | ------------------------------------------------ |
+| Home scan, full (986k files, 166k folders)                   | 15.3 s / 16.6 s / 20.1 s (median 16.6 s)         |
+| Home scan, first partial results                             | 5.8–6.2 s                                        |
+| Generated tree scan (175k files)                             | 622 ms                                           |
+| Saved scan load (`last-scan.bin`, 1.6 MB)                    | 84 ms                                            |
+| Scan summary sent to the UI                                  | 1,249 KB JSON, 1.5 ms to serialise               |
+| Large preview (512 pt), Quick Look cache warm                | 55 ms, 928 KB per image                          |
+| Large preview, first pass                                    | 62–154 ms                                        |
+| Row thumbnail (32 pt)                                        | 3.5 ms, 5.0 KB                                   |
+| JS bundle                                                    | 653 KB (197 KB gzip), one chunk                  |
+| UI: first render (navigation to Overview with results)       | 130 ms                                           |
+| UI: page switch, slowest (Storage, 1,000 rows)               | 187 ms                                           |
+| UI: page switch, others                                      | 4–43 ms (Duplicates 43, Cleanup 17, Settings 14) |
+| UI: scrolling Storage and Files by type                      | 60 fps                                           |
+| UI: preview open to image shown (15 ms simulated Quick Look) | 85 ms                                            |
+| UI: long tasks (> 50 ms) per run                             | 6                                                |
+
+The UI numbers come from Chrome with the CPU slowed 4x, not the app's WebKit
+view, so compare them with each other rather than with the real app.
+
+## Changes
+
+| Change                                                                                                        | Metric                                                                    | Before                | After                                 |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | --------------------- | ------------------------------------- |
+| Opaque thumbnails as JPEG (6809c6c)                                                                           | Large preview, warm                                                       | 55 ms, 928 KB         | 14 ms, 138 KB                         |
+|                                                                                                               | Large preview, first pass                                                 | 62 ms                 | 26 ms                                 |
+|                                                                                                               | Row thumbnail                                                             | 3.5 ms, 5.0 KB        | 3.1 ms, 2.2 KB                        |
+| Storage table renders only visible rows                                                                       | Switch to Storage (1,000 rows)                                            | 187 ms                | 70 ms                                 |
+|                                                                                                               | Long tasks per run                                                        | 6                     | 2                                     |
+|                                                                                                               | JS bundle                                                                 | 653 KB                | 667 KB (+2%, @tanstack/react-virtual) |
+| Row thumbnail as a placeholder in the preview                                                                 | Preview open to first image                                               | 66 ms                 | 39 ms                                 |
+|                                                                                                               | Preview open to full image                                                | 66 ms                 | 66 ms (unchanged)                     |
+| Rarely used pages load on first use (Docker, Developer Tools, Settings, Assistant)                            | JavaScript at startup                                                     | 667 KB                | 585 KB (−12%)                         |
+|                                                                                                               | First render (two sets of 7 runs)                                         | 157 / 149 ms          | 107 / 143 ms                          |
+|                                                                                                               | Switch to those pages (preloaded once idle)                               | 2–5 ms                | 2–4 ms                                |
+| Previous scan loads in the background at startup                                                              | Main-thread time in setup (load + recommendations)                        | 138–191 ms            | 0 ms                                  |
+|                                                                                                               | App setup finished (real app, 3 launches)                                 | 277–285 ms            | 137–245 ms                            |
+|                                                                                                               | First scan summary in the UI (real app, Vite dev server)                  | 611–621 ms            | 445–583 ms                            |
+| Files by type sent on request, not with every summary                                                         | Scan summary sent to the window (startup, each partial result, each scan) | 1,249 KB              | 503 KB (−60%)                         |
+|                                                                                                               | One type's files, fetched when that type is shown                         | —                     | up to 707 KB, once per type per scan  |
+| Thumbnails kept on disk, by path, size, modification time and thumbnail size (48 MB, least recently used out) | Large preview seen before, also after a restart                           | 14–31 ms (Quick Look) | 0.06 ms                               |
+|                                                                                                               | Row thumbnail seen before                                                 | 3.6 ms                | 0.04 ms                               |
+
+## Before and after, same harness
+
+`main` at 999909e against this branch, measured one after the other with the
+same tools (`perf/ui.mjs`, best of 5 runs, CPU slowed 4x), as the CI job does:
+
+| Metric                         | main   | This branch | Change                                |
+| ------------------------------ | ------ | ----------- | ------------------------------------- |
+| JavaScript at startup          | 640 KB | 574 KB      | −10%                                  |
+| JavaScript, total              | 640 KB | 657 KB      | +3% (react-virtual, chunk overhead)   |
+| Switch to Storage (1,000 rows) | 170 ms | 55 ms       | −68%                                  |
+| Switch to Duplicates           | 42 ms  | 7 ms        | −84%                                  |
+| Preview open to first image    | 71 ms  | 50 ms       | −30%                                  |
+| Preview open to full image     | 71 ms  | 80 ms       | within noise (15 ms floor)            |
+| First render                   | 102 ms | 112 ms      | within noise (varies ~20% run to run) |
+| Long tasks per run             | 5      | 2           | −60%                                  |
+| Scrolling                      | 60 fps | 60 fps      |                                       |
+
+The harness's Quick Look stand-in answers in a fixed 15 ms, so the JPEG change
+does not show here; on real files it took large previews from 55 ms to 14 ms.
+
+## Tried and dropped
+
+- **Async for every read command.** Copying and serialising the scan summary
+  (1.2 MB of JSON) takes about 1.8 ms, so moving it off the main thread alone
+  is not measurable. It was kept only for the three commands that can wait on
+  the startup restore.
+- **Virtualizing the other lists.** Largest items, Files by type, Duplicates
+  and Cleanup already show 50–100 rows a page and scroll at 60 fps; only the
+  folder table drew up to 1,000 rows. No list in the app reaches 100,000
+  rows: the engine sends at most 1,000 entries per folder and 2,000 files per
+  type.
+- **Scanner tuning.** Not changed here: `scanner/mod.rs` and `listing.rs` are
+  being reworked on the Windows branch, and the home scan (16.6 s median,
+  partial results at 6 s) is limited by the file system.
+
+## First CI run (macos-15-intel)
+
+Run [43185456429](https://github.com/Devanshgoel-123/diskpilot-dev/actions/runs/43185456429),
+`main` against this branch on the same runner (UI with the CPU slowed 2x):
+
+| Metric                        | main     | This branch                         |
+| ----------------------------- | -------- | ----------------------------------- |
+| Scan of the generated tree    | 988 ms   | 866 ms (same scanner: runner noise) |
+| JavaScript at startup         | 640 KB   | 574 KB                              |
+| First render                  | 377 ms   | 270 ms                              |
+| Slowest page switch (Storage) | 352 ms   | 119 ms                              |
+| Preview, first image          | 197 ms   | 89 ms                               |
+| Preview, full image           | 197 ms   | 145 ms                              |
+| Scrolling, slowest list       | 17.7 fps | 23.5 fps                            |
+| Long tasks per run            | 28       | 10                                  |
+
+With a cold Rust cache the job took 18 minutes, almost all of it two release
+builds; the budgets above were set from this run.
+
+## Gate passing (alternating runs)
+
+Run [43191389538](https://github.com/Devanshgoel-123/diskpilot-dev/actions/runs/43191389538)
+passed in 13 minutes with a warm Rust cache: 6.5 minutes for the two scan
+benchmark builds (only on pull requests that change `src-tauri`), 4 minutes for
+the UI rounds, 2.5 minutes of setup.
+
+| Metric                     | main     | This branch             |
+| -------------------------- | -------- | ----------------------- |
+| Scan of the generated tree | 1,175 ms | 1,058 ms (same scanner) |
+| JavaScript at startup      | 640 KB   | 574 KB                  |
+| First render               | 361 ms   | 250 ms                  |
+| Slowest page switch        | 504 ms   | 161 ms                  |
+| Preview, first image       | 187 ms   | 82 ms                   |
+| Preview, full image        | 187 ms   | 140 ms                  |
+| Scrolling, slowest list    | 20.6 fps | 21.8 fps                |
+| Long tasks per run         | 15       | 12                      |
+
+## Shorter gate (after 0.6.4)
+
+| Change                                                             | Measured where         | Before                                                                                  | After                                                                              |
+| ------------------------------------------------------------------ | ---------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Benchmark tree with small files, written in parallel               | CI runner              | 116 s to make the tree                                                                  | 81 s                                                                               |
+|                                                                    | Locally                | 11.5 s                                                                                  | 7.7 s                                                                              |
+| Base side's builds cached by base commit and tool versions         | CI runner              | 2 × 2 min Rust builds and 65–74 s app and harness build for the base side on every push | Not measured: the private repository's Actions spending limit stopped the next run |
+| DiskPilot's crate built at opt-level 1 for the benchmark (dropped) | Locally, crate rebuild | 28 s                                                                                    | 32 s, no gain                                                                      |
+
+Expected job time with the base cache hit, from the step times of the last runs:
+about 5–6 minutes for a pull request that does not touch `src-tauri` (setup
+2.5 min, UI rounds about 3 min) and about 9 minutes for one that does (plus one
+Rust build of about 1.5–2 min, the tree in 1.4 min and the scans in 0.5 min).
+The first push after `main` moves still builds both sides (about 13 minutes).

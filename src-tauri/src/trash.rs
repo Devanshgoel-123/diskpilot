@@ -26,6 +26,8 @@ use crate::model::{ActionStatus, CleanupItemResult, CleanupRecord, ItemStatus};
 use crate::scanner::{allocated_bytes, now_ms};
 
 pub const EVENT_TRASH_PROGRESS: &str = "trash://progress";
+/// Emitted while the Trash is being listed and measured, before the preview.
+pub const EVENT_TRASH_LISTING: &str = "trash://listing";
 /// A preview can be executed for this long after it was made.
 pub const PREVIEW_TTL_MS: i64 = 15 * 60 * 1000;
 /// Finder's own bookkeeping file. It is not shown and never counted.
@@ -87,6 +89,21 @@ pub struct TrashProgress {
     pub not_removed: Vec<usize>,
 }
 
+/// How far listing the Trash has got: what has been measured so far.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashListing {
+    pub preview_id: String,
+    /// Top-level items measured completely.
+    pub entries_done: usize,
+    pub entries_total: usize,
+    /// Size and files counted so far, including the item being measured.
+    pub bytes: u64,
+    pub files: u64,
+    /// The item being measured now.
+    pub current: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrashResult {
@@ -115,8 +132,9 @@ fn freed_bytes(meta: &Metadata) -> u64 {
     }
 }
 
-/// Size and file count of one entry, without following links or leaving its volume.
-fn measure_entry(path: &Path, meta: &Metadata) -> (u64, u64) {
+/// Size and file count of one entry, without following links or leaving its
+/// volume. `tick` gets the running totals as files are counted.
+fn measure_entry(path: &Path, meta: &Metadata, tick: &mut dyn FnMut(u64, u64)) -> (u64, u64) {
     if !meta.is_dir() {
         return (freed_bytes(meta), 1);
     }
@@ -137,12 +155,24 @@ fn measure_entry(path: &Path, meta: &Metadata) -> (u64, u64) {
                 files += 1;
             }
         }
+        tick(bytes, files);
     }
     (bytes, files)
 }
 
 /// List the Trash. A missing Trash folder is an empty Trash.
 pub fn inventory(trash: &Path, id: String, now: i64) -> io::Result<TrashPreview> {
+    inventory_with_progress(trash, id, now, &mut |_| {})
+}
+
+/// [`inventory`], reporting what has been measured so far as it goes (at most
+/// every 40 ms, plus once at the start and once at the end).
+pub fn inventory_with_progress(
+    trash: &Path,
+    id: String,
+    now: i64,
+    report: &mut dyn FnMut(&TrashListing),
+) -> io::Result<TrashPreview> {
     let mut preview = TrashPreview {
         id,
         created_at_ms: now,
@@ -169,13 +199,43 @@ pub fn inventory(trash: &Path, id: String, now: i64) -> io::Result<TrashPreview>
         }
         Err(e) => return Err(e),
     };
-    for entry in rd.flatten() {
+    let items: Vec<_> = rd
+        .flatten()
+        .filter(|e| e.file_name() != FINDER_METADATA)
+        .collect();
+    let mut listing = TrashListing {
+        preview_id: preview.id.clone(),
+        entries_done: 0,
+        entries_total: items.len(),
+        bytes: 0,
+        files: 0,
+        current: None,
+    };
+    report(&listing);
+    let mut last = Instant::now();
+    for entry in items {
         let name = entry.file_name();
-        if name == FINDER_METADATA {
+        let Ok(meta) = entry.metadata() else {
+            listing.entries_done += 1;
             continue;
+        };
+        listing.current = Some(name.to_string_lossy().into_owned());
+        let (base_bytes, base_files) = (listing.bytes, listing.files);
+        let (bytes, files) = measure_entry(&entry.path(), &meta, &mut |b, f| {
+            if last.elapsed() >= PROGRESS_EVERY {
+                last = Instant::now();
+                listing.bytes = base_bytes + b;
+                listing.files = base_files + f;
+                report(&listing);
+            }
+        });
+        listing.entries_done += 1;
+        listing.bytes = base_bytes + bytes;
+        listing.files = base_files + files;
+        if last.elapsed() >= PROGRESS_EVERY {
+            last = Instant::now();
+            report(&listing);
         }
-        let Ok(meta) = entry.metadata() else { continue };
-        let (bytes, files) = measure_entry(&entry.path(), &meta);
         preview.entries.push(TrashEntry {
             name: name.to_string_lossy().into_owned(),
             bytes,
@@ -189,6 +249,8 @@ pub fn inventory(trash: &Path, id: String, now: i64) -> io::Result<TrashPreview>
         .sort_by(|a, b| b.bytes.cmp(&a.bytes).then(a.name.cmp(&b.name)));
     preview.total_bytes = preview.entries.iter().map(|e| e.bytes).sum();
     preview.total_files = preview.entries.iter().map(|e| e.files).sum();
+    listing.current = None;
+    report(&listing);
     Ok(preview)
 }
 
@@ -573,6 +635,27 @@ mod tests {
         assert_eq!(names, ["Installer.dmg", "Old Project"]);
         assert_eq!(p.total_files, 3);
         assert!(p.total_bytes >= 85_000);
+    }
+
+    #[test]
+    fn listing_reports_what_was_measured_so_far() {
+        let (_d, trash) = fixture();
+        let mut seen: Vec<TrashListing> = Vec::new();
+        let p =
+            inventory_with_progress(&trash, "p".into(), 0, &mut |l| seen.push(l.clone())).unwrap();
+        let first = seen.first().unwrap();
+        assert_eq!(
+            (first.entries_done, first.entries_total, first.files),
+            (0, 2, 0)
+        );
+        let last = seen.last().unwrap();
+        assert_eq!((last.entries_done, last.entries_total), (2, 2));
+        assert_eq!((last.bytes, last.files), (p.total_bytes, p.total_files));
+        assert_eq!(last.current, None);
+        assert!(seen
+            .windows(2)
+            .all(|w| w[0].files <= w[1].files && w[0].bytes <= w[1].bytes));
+        assert!(seen.iter().all(|l| l.preview_id == "p"));
     }
 
     #[test]

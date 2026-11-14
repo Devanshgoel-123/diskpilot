@@ -21,11 +21,13 @@ import { Pager } from "@/components/shared/Pager";
 import { usePage, useScrollTopOnPage } from "@/lib/usePage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { CleanupDialog } from "@/features/recommendations/CleanupDialog";
 import { StorageTabs } from "@/features/storage/StorageTabs";
 import { api } from "@/lib/api";
 import { formatBytes, formatCount, formatRelative, tildify } from "@/lib/format";
 import { listedNote } from "./listedNote";
+import { useKindFiles } from "./useKindFiles";
 import { useApp } from "@/lib/store";
 import type { CleanupRecord, FileEntry, FileKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -89,9 +91,13 @@ function FileKindsView() {
   const [now] = useState(() => Date.now());
 
   const group = groups.find((g) => g.kind === kind) ?? null;
+  // Files of the types shown so far; the current type's arrive a moment
+  // after it is picked.
+  const loaded = useKindFiles(summary, kind);
+  const groupFiles = kind ? loaded.get(kind) : undefined;
   const files: FileEntry[] = useMemo(
-    () => (group?.files ?? []).filter((f) => !gone.has(f.path)),
-    [group, gone],
+    () => (groupFiles ?? []).filter((f) => !gone.has(f.path)),
+    [groupFiles, gone],
   );
   const folders = useMemo(
     () => [...new Set(files.map((f) => topFolder(f.path, home)).filter(Boolean))].sort(),
@@ -115,8 +121,8 @@ function FileKindsView() {
   useScrollTopOnPage(listRef, page.page);
 
   const sizes = useMemo(
-    () => new Map(groups.flatMap((g) => g.files.map((f) => [f.path, f.bytes] as const))),
-    [groups],
+    () => new Map([...loaded.values()].flatMap((fs) => fs.map((f) => [f.path, f.bytes] as const))),
+    [loaded],
   );
   // Only files the current scan still lists and that were not removed.
   const chosen = useMemo(
@@ -127,11 +133,11 @@ function FileKindsView() {
   const removed = useMemo(() => {
     const out = new Map<FileKind, { bytes: number; count: number }>();
     for (const g of groups) {
-      const r = g.files.filter((f) => gone.has(f.path));
+      const r = (loaded.get(g.kind) ?? []).filter((f) => gone.has(f.path));
       out.set(g.kind, { bytes: r.reduce((a, f) => a + f.bytes, 0), count: r.length });
     }
     return out;
-  }, [groups, gone]);
+  }, [groups, loaded, gone]);
   const shownPaths = useMemo(() => new Set(visible.map((f) => f.path)), [visible]);
   const hiddenChosen = chosen.filter((p) => !shownPaths.has(p)).length;
   const chosenBytes = chosen.reduce((a, p) => a + (sizes.get(p) ?? 0), 0);
@@ -293,7 +299,7 @@ function FileKindsView() {
           {group ? (
             <div className="flex shrink-0 items-center gap-3 border-b border-border/60 px-4 py-1.5">
               <p className="min-w-0 flex-1 text-2xs text-muted-foreground">
-                {listedNote(group.files.length, group.fileCount)}
+                {listedNote(group.listed, group.fileCount)}
               </p>
               <Pager page={page} label="files" />
             </div>
@@ -364,7 +370,13 @@ function FileKindsView() {
               </ul>
             ) : null}
             <Pager page={page} label="files" className="px-4 py-3" />
-            {visible.length === 0 ? (
+            {group && !groupFiles ? (
+              <div className="space-y-2 p-4" aria-label="Loading files">
+                {Array.from({ length: 8 }, (_, i) => (
+                  <Skeleton key={i} className="h-7 w-full" />
+                ))}
+              </div>
+            ) : visible.length === 0 ? (
               <p className="px-4 py-6 text-xs text-muted-foreground">No files match the filter.</p>
             ) : null}
           </div>

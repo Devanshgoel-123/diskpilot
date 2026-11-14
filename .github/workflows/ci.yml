@@ -128,3 +128,155 @@ jobs:
           path: src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe
           if-no-files-found: error
           retention-days: 14
+
+  perf:
+    name: Performance (scan, bundle, UI)
+    # Pull requests only: the base branch and the pull request are measured
+    # one after the other on the same runner, so runner speed cancels out.
+    if: github.event_name == 'pull_request'
+    runs-on: macos-15-intel
+    # A cold Rust cache needs two release builds (about 13 minutes); with the
+    # cache warm the job takes a few minutes.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      # A faster release build for timing: same opt-level, no LTO.
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+      # One target folder for both sides, so the base build only recompiles DiskPilot itself.
+      CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
+      # The Intel runner is already slower than a current Mac.
+      PERF_CPU_THROTTLE: "2"
+      CHROME: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: 1.99.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: src-tauri
+          key: perf
+          cache-on-failure: true
+      - name: Check out the base branch next to this one
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git worktree add ../base "$BASE_SHA"
+          # The measuring tools come from this pull request, so both sides run the same harness.
+          rm -rf ../base/perf && cp -R perf ../base/perf
+          cp src-tauri/examples/_bench_fixture.rs ../base/src-tauri/examples/
+      # The base side's builds depend only on the base commit and on the
+      # measuring tools, so later pushes to the pull request reuse them.
+      - name: Restore the base side's builds
+        id: base-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/base-build
+          key: perf-base-${{ github.event.pull_request.base.sha }}-${{ hashFiles('perf/**', 'src-tauri/examples/_bench_fixture.rs') }}
+      - name: Install
+        env:
+          CACHED: ${{ steps.base-cache.outputs.cache-hit }}
+        run: |
+          pnpm install --frozen-lockfile
+          if [ "$CACHED" = true ]; then
+            cp -R "$RUNNER_TEMP/base-build/dist" "$RUNNER_TEMP/base-build/dist-perf" ../base/
+          else
+            (cd ../base && pnpm install --frozen-lockfile)
+          fi
+          mkdir -p dist ../base/dist
+      - name: Scan benchmark
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # The scanner only changes with the engine; skip the two builds otherwise.
+          if git diff --quiet "origin/$BASE_REF...HEAD" -- src-tauri; then
+            echo "No engine changes; scan benchmark skipped."
+            exit 0
+          fi
+          bin="$CARGO_TARGET_DIR/release/examples/_bench_fixture"
+          mkdir -p "$RUNNER_TEMP/base-build"
+          if [ -x "$RUNNER_TEMP/base-build/bench" ]; then
+            echo "Base benchmark from the cache."
+          else
+            (cd ../base/src-tauri && cargo build --release --locked --example _bench_fixture)
+            cp "$bin" "$RUNNER_TEMP/base-build/bench"
+          fi
+          cp "$RUNNER_TEMP/base-build/bench" "$RUNNER_TEMP/bench-base"
+          (cd src-tauri && cargo build --release --locked --example _bench_fixture)
+          cp "$bin" "$RUNNER_TEMP/bench-head"
+          # Alternate the two so a slower moment on the runner hits both.
+          fixture="$RUNNER_TEMP/perf-tree"
+          for round in 1 2 3 4 5; do
+            for side in base head; do
+              "$RUNNER_TEMP/bench-$side" "$fixture" 200000 1 > "$RUNNER_TEMP/scan-$side-$round.json"
+            done
+          done
+          for side in base head; do
+            node perf/merge.mjs "$RUNNER_TEMP/scan-$side.json" "$RUNNER_TEMP"/scan-$side-*.json
+            cat "$RUNNER_TEMP/scan-$side.json"
+          done
+      - name: UI benchmark
+        env:
+          CACHED: ${{ steps.base-cache.outputs.cache-hit }}
+        run: |
+          if [ "$CACHED" = true ]; then
+            (cd ../base && PERF_RUNS=1 PERF_SKIP_BUILD=1 node "$GITHUB_WORKSPACE/perf/ui.mjs" "$RUNNER_TEMP/ui-base-0.json")
+          else
+            (cd ../base && pnpm build >/dev/null && PERF_RUNS=1 node "$GITHUB_WORKSPACE/perf/ui.mjs" "$RUNNER_TEMP/ui-base-0.json")
+            mkdir -p "$RUNNER_TEMP/base-build"
+            cp -R ../base/dist ../base/dist-perf "$RUNNER_TEMP/base-build/"
+          fi
+          pnpm build >/dev/null && PERF_RUNS=1 node perf/ui.mjs "$RUNNER_TEMP/ui-head-0.json"
+          # Alternate further rounds, reusing each side's build.
+          for round in 1 2; do
+            for side in base head; do
+              dir=$([ "$side" = head ] && echo . || echo ../base)
+              (cd "$dir" && PERF_RUNS=1 PERF_SKIP_BUILD=1 node "$GITHUB_WORKSPACE/perf/ui.mjs" "$RUNNER_TEMP/ui-$side-$round.json")
+            done
+          done
+          for side in base head; do
+            node perf/merge.mjs "$RUNNER_TEMP/ui-$side.json" "$RUNNER_TEMP"/ui-$side-*.json
+          done
+      - name: Compare
+        id: compare
+        run: |
+          for side in base head; do
+            node -e 'const [a,b,o]=process.argv.slice(1);const fs=require("fs");const s=fs.existsSync(a)?JSON.parse(fs.readFileSync(a)):{};const u=JSON.parse(fs.readFileSync(b));fs.writeFileSync(o,JSON.stringify({...u,scanFixtureMs:s.scanMs},null,2))' \
+              "$RUNNER_TEMP/scan-$side.json" "$RUNNER_TEMP/ui-$side.json" "$RUNNER_TEMP/perf-$side.json"
+          done
+          set +e
+          node perf/compare.mjs "$RUNNER_TEMP/perf-base.json" "$RUNNER_TEMP/perf-head.json" > "$RUNNER_TEMP/perf.md"
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/perf.md" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Comment on the pull request
+        # Pull requests from forks get a read-only token; the job summary has the table.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          for try in 1 2 3; do
+            gh pr comment "$PR" --body-file "$RUNNER_TEMP/perf.md" --edit-last --create-if-none && exit 0
+            sleep 10
+          done
+          exit 1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: perf-results
+          path: ${{ runner.temp }}/perf-*.json
+          retention-days: 30
+      - name: Fail on a regression
+        if: steps.compare.outputs.status != '0'
+        run: exit 1

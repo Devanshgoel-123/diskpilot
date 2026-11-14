@@ -1,7 +1,7 @@
 {
   "name": "diskpilot",
   "private": true,
-  "version": "0.6.3",
+  "version": "0.6.5",
   "type": "module",
   "description": "Open-source macOS storage intelligence: understand your storage, know what is safe, clean it confidently.",
   "license": "MIT",
@@ -16,7 +16,8 @@
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "perf:ui": "node perf/ui.mjs perf-ui.json"
   },
   "packageManager": "pnpm@10.14.0",
   "dependencies": {
@@ -25,6 +26,7 @@
     "@radix-ui/react-separator": "^1.2.0",
     "@radix-ui/react-slot": "^1.5.0",
     "@radix-ui/react-tooltip": "^1.4.1",
+    "@tanstack/react-virtual": "3.13.12",
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-autostart": "^2.7.0",
     "@tauri-apps/plugin-dialog": "^2.8.4",
@@ -56,6 +58,7 @@
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^17.14.0",
     "jsdom": "^26.1.0",
+    "playwright-core": "1.56.1",
     "prettier": "^3.9.10",
     "prettier-plugin-tailwindcss": "^0.8.1",
     "tailwindcss": "^4.3.3",

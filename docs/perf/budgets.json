@@ -1,0 +1,10 @@
+{
+  "$comment": "Absolute limits for the perf CI job, set from its first run on macos-15-intel (UI with the CPU slowed 2x, software rendering, so scrolling is far below a real Mac's 60 fps). The job also fails when a metric is more than 10% worse than the base branch measured on the same runner (5% for JavaScript size, 15% for the scan). Lower is better except scrollFpsMin.",
+  "jsBytes": 760000,
+  "entryJsBytes": 680000,
+  "firstRenderMs": 450,
+  "pageSwitchMaxMs": 250,
+  "previewFirstImageMs": 250,
+  "previewOpenMs": 300,
+  "scrollFpsMin": 15
+}

@@ -131,18 +131,21 @@ export interface ScanSummary {
   largestFiles: FileEntry[];
   detectedLocations: DetectedLocation[];
   heavyDirectories: DirectorySize[];
-  /** Personal files by type, largest types first. Empty before 0.6 scans. */
-  fileKinds?: FileKindGroup[];
+  /**
+   * Personal files by type, largest types first, without the files
+   * themselves (`api.getFileKindFiles`). Empty before 0.6 scans.
+   */
+  fileKinds?: FileKindTotals[];
 }
 
 export type FileKind = "videos" | "images" | "audio" | "archives" | "installers" | "documents";
 
-export interface FileKindGroup {
+export interface FileKindTotals {
   kind: FileKind;
   bytes: number;
   fileCount: number;
-  /** Largest first, at most 2,000, each at least 25 KB. */
-  files: FileEntry[];
+  /** How many files the scan listed (largest first, at most 2,000, each at least 25 KB). */
+  listed: number;
 }
 
 export type EntryKind = "directory" | "file" | "symlink" | "other";
@@ -346,6 +349,18 @@ export interface TrashProgress {
   current: string | null;
   /** Indexes of finished entries that were not fully removed. */
   notRemoved: number[];
+}
+
+/** How far listing the Trash has got, before the preview is ready. */
+export interface TrashListing {
+  previewId: string;
+  /** Top-level items measured completely. */
+  entriesDone: number;
+  entriesTotal: number;
+  /** Size and files counted so far, including the item being measured. */
+  bytes: number;
+  files: number;
+  current: string | null;
 }
 
 export interface TrashResult {
@@ -814,4 +829,12 @@ export interface SystemExtra {
   checkCommand: string | null;
   settingsUri: string | null;
   needsAdmin: boolean;
+}
+
+/** The email this Mac signed up with on first launch. */
+export interface Signup {
+  email: string;
+  signedUpAtMs: number;
+  /** Whether diskpilot.live has received it (it is sent later when offline). */
+  sent: boolean;
 }

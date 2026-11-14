@@ -42,6 +42,7 @@ export function LargeFilesPage() {
       startScan: s.startScan,
     })),
   );
+  const openInExplorer = useApp((s) => s.openInExplorer);
   const home = env?.homeDir;
   const [view, setView] = useState<View>("files");
   const [query, setQuery] = useState("");
@@ -218,7 +219,17 @@ export function LargeFilesPage() {
                     tabIndex={0}
                     aria-selected={selected === r.path}
                     onClick={() => setSelected(r.path)}
-                    onKeyDown={(e) => e.key === "Enter" && setSelected(r.path)}
+                    // Open a folder in Storage > Folders; for a file, the folder that holds it.
+                    onDoubleClick={() =>
+                      openInExplorer(view === "files" ? parentOf(r.path) : r.path)
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter")
+                        openInExplorer(view === "files" ? parentOf(r.path) : r.path);
+                    }}
+                    title={
+                      view === "files" ? "Double-click to show its folder" : "Double-click to open"
+                    }
                     className={cn(
                       "h-8 border-b border-border/60 outline-none hover:bg-hover/60 focus-visible:bg-hover",
                       selected === r.path && "bg-accent-soft hover:bg-accent-soft",

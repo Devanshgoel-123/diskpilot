@@ -152,10 +152,12 @@ Scanner -> Classifier -> Recommendations -> Planner -> Safety gate -> Executor
 
 ## Privacy
 
-- Scanning, classification, recommendations, cleanup and Docker management run entirely on your Mac. There is no account, no telemetry and no cloud service. The only automatic network request is a daily check of DiskPilot's GitHub releases for a newer version, which sends nothing about you or your Mac and can be turned off in Settings.
+- Scanning, classification, recommendations, cleanup and Docker management run entirely on your Mac. Nothing about your files, folders or scans is ever sent anywhere.
+- From 0.6.5, DiskPilot asks for your email the first time it opens. It sends the email, the DiskPilot version, the macOS version and the CPU architecture to `diskpilot.live` once (later, if the Mac is offline), so you can be told about updates and asked for feedback. A copy is kept in `~/Library/Application Support/dev.diskpilot.app/signup.json`. To change or delete your email, write to devanshgoel.dev@gmail.com. Details: [diskpilot.live/privacy](https://diskpilot.live/privacy).
+- Once a day DiskPilot checks its GitHub releases for a newer version. That request sends nothing about you or your Mac and can be turned off in Settings.
 - DiskPilot works without Full Disk Access. macOS asks for permission the first time protected folders such as Desktop, Documents and Downloads are read, and folders such as Mail, Messages, iCloud Drive and the Photos library are skipped and listed as not measured.
 - If you grant Full Disk Access in System Settings, DiskPilot can also measure those folders. It reads sizes only, keeps the results on your Mac, and never shares what is inside them with the assistant: the assistant sees each of them as a single total.
-- The optional assistant is the only feature that uses the network. When you ask a question, the question and the storage data needed to answer it (folder and file names, paths with your home folder shown as `~`, sizes and categories; private folders such as Mail, Messages and Photos only as totals) are sent directly from your Mac to the API of the provider you chose (`api.anthropic.com`, `api.openai.com` or `openrouter.ai`). File contents are never read or sent. The API key never leaves the Rust process except in the request to that provider's own host; redirects are never followed.
+- The optional assistant sends data only when you ask it something. When you ask a question, the question and the storage data needed to answer it (folder and file names, paths with your home folder shown as `~`, sizes and categories; private folders such as Mail, Messages and Photos only as totals) are sent directly from your Mac to the API of the provider you chose (`api.anthropic.com`, `api.openai.com` or `openrouter.ai`). File contents are never read or sent. The API key never leaves the Rust process except in the request to that provider's own host; redirects are never followed.
 
 ## Installation
 

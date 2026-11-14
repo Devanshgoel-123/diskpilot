@@ -59,13 +59,13 @@ const TOOL_DEFS: { id: string; name: string; description: string; prefixes: stri
     id: "xcode",
     name: "Xcode & Apple tools",
     description: "DerivedData, archives, device support and simulators.",
-    prefixes: ["xcode.", "apple.", "cocoapods."],
+    prefixes: ["xcode.", "apple.", "cocoapods.", "swiftpm."],
   },
   {
     id: "node",
     name: "Node.js",
     description: "node_modules, package manager caches, framework builds and runtimes.",
-    prefixes: ["node.", "npm.", "pnpm.", "yarn.", "bun.", "nvm."],
+    prefixes: ["node.", "npm.", "pnpm.", "yarn.", "bun.", "deno.", "nvm.", "puppeteer."],
   },
   {
     id: "cursor",
@@ -126,10 +126,10 @@ const TOOL_DEFS: { id: string; name: string; description: string; prefixes: stri
     name: "Other developer storage",
     get description() {
       return isWindows()
-        ? "Gradle, Maven, Android, CLI caches and Git data."
-        : "Gradle, Maven, Android, Homebrew, CLI caches and Git data.";
+        ? "Gradle, Maven, NuGet, Android, CLI caches and Git data."
+        : "Gradle, Maven, NuGet, Android, Homebrew, CLI caches and Git data.";
     },
-    prefixes: ["gradle.", "maven.", "android.", "homebrew.", "xdg.", "git."],
+    prefixes: ["gradle.", "maven.", "nuget.", "android.", "homebrew.", "xdg.", "git."],
   },
 ];
 

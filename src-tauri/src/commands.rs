@@ -93,6 +93,30 @@ pub fn get_environment(state: State<'_, AppState>) -> AppEnvironment {
     }
 }
 
+/// The email this Mac signed up with, if it has.
+#[tauri::command]
+pub fn get_signup(state: State<'_, AppState>) -> Option<crate::signup::Signup> {
+    state.data_dir.as_deref().and_then(crate::signup::load)
+}
+
+/// Sign up with an email: saved here, then sent to diskpilot.live with the
+/// app and macOS versions. Works offline; the email is sent later.
+#[tauri::command]
+pub async fn submit_signup(
+    state: State<'_, AppState>,
+    email: String,
+) -> AppResult<crate::signup::Signup> {
+    let dir = state
+        .data_dir
+        .clone()
+        .ok_or_else(|| AppError::Other("DiskPilot's data folder is unavailable.".into()))?;
+    blocking(move || {
+        crate::signup::submit(&dir, &email, crate::scanner::now_ms(), crate::signup::send)
+            .map_err(AppError::Other)
+    })
+    .await
+}
+
 /// An update replaces the app where it is. From the disk image (read-only),
 /// or from a copy macOS opened in a random read-only location because it was
 /// never moved out of Downloads (App Translocation), that cannot work.
@@ -401,14 +425,74 @@ pub fn cancel_scan(state: State<'_, AppState>) -> bool {
     }
 }
 
-#[tauri::command]
+/// Async so the wait for the previous launch's results happens off the main thread.
+#[tauri::command(async)]
 pub fn is_scan_running(state: State<'_, AppState>) -> bool {
     state.slot().running.is_some()
 }
 
-#[tauri::command]
-pub fn get_scan_summary(state: State<'_, AppState>) -> Option<ScanSummary> {
-    state.slot().last.as_ref().map(|o| o.summary.clone())
+/// One type's totals in the summary sent to the window, without its files.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileKindTotals {
+    pub kind: crate::filekinds::FileKind,
+    pub bytes: u64,
+    pub file_count: u64,
+    /// How many files the scan listed for this type (`get_file_kind_files`).
+    pub listed: usize,
+}
+
+/// The scan summary as the window receives it. The 2,000 largest files per
+/// type were most of its size (about 1.2 MB of JSON for a home folder), so
+/// each type carries its totals and the window asks for one type's files
+/// when it shows them.
+pub fn summary_for_window(summary: &ScanSummary) -> serde_json::Value {
+    let totals: Vec<FileKindTotals> = summary
+        .file_kinds
+        .iter()
+        .map(|g| FileKindTotals {
+            kind: g.kind,
+            bytes: g.bytes,
+            file_count: g.file_count,
+            listed: g.files.len(),
+        })
+        .collect();
+    let rest = ScanSummary {
+        file_kinds: Vec::new(),
+        ..summary.clone()
+    };
+    let mut value = serde_json::to_value(rest).unwrap_or(serde_json::Value::Null);
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert(
+            "fileKinds".into(),
+            serde_json::to_value(totals).unwrap_or_default(),
+        );
+    }
+    value
+}
+
+/// Async so the wait for the previous launch's results happens off the main thread.
+#[tauri::command(async)]
+pub fn get_scan_summary(state: State<'_, AppState>) -> Option<serde_json::Value> {
+    let last = state.slot().last.clone()?;
+    Some(summary_for_window(&last.summary))
+}
+
+/// The files the last scan listed for one type, largest first.
+#[tauri::command(async)]
+pub fn get_file_kind_files(
+    state: State<'_, AppState>,
+    kind: crate::filekinds::FileKind,
+) -> Vec<crate::model::FileEntry> {
+    let Some(last) = state.slot().last.clone() else {
+        return Vec::new();
+    };
+    last.summary
+        .file_kinds
+        .iter()
+        .find(|g| g.kind == kind)
+        .map(|g| g.files.clone())
+        .unwrap_or_default()
 }
 
 fn last_scan(state: &AppState) -> AppResult<Arc<ScanOutcome>> {
@@ -532,7 +616,7 @@ pub async fn get_system_extras() -> AppResult<Vec<crate::system_extras::SystemEx
     blocking(|| Ok(crate::system_extras::system_extras())).await
 }
 
-/// A Quick Look thumbnail (PNG bytes) of a file DiskPilot listed, so people
+/// A Quick Look thumbnail (JPEG or PNG bytes) of a file DiskPilot listed, so people
 /// can see a photo, video or document before deciding to remove it.
 ///
 /// Quick Look renders text, PDFs and documents legibly, so this must not be
@@ -546,15 +630,21 @@ pub async fn file_thumbnail(
     size: f64,
 ) -> AppResult<tauri::ipc::Response> {
     ensure_listed(&state, &path)?;
+    let cache = state.thumbs.clone();
     blocking(move || {
         let path = previewable_file(&path)?;
         ensure_local(&path)?;
+        if let Some(saved) = cache.as_ref().and_then(|c| c.get(&path, size)) {
+            return Ok(tauri::ipc::Response::new(saved));
+        }
         let system = if cfg!(windows) { "Windows" } else { "macOS" };
-        crate::preview::thumbnail_png(&path, size)
-            .map(tauri::ipc::Response::new)
-            .ok_or_else(|| {
-                AppError::Other(format!("{system} could not make a preview of this file"))
-            })
+        let made = crate::preview::thumbnail_png(&path, size).ok_or_else(|| {
+            AppError::Other(format!("{system} could not make a preview of this file"))
+        })?;
+        if let Some(c) = &cache {
+            c.put(&path, size, &made);
+        }
+        Ok(tauri::ipc::Response::new(made))
     })
     .await
 }
@@ -717,7 +807,8 @@ pub fn get_scan_history(
 
 // ---- Recommendations & cleanup -------------------------------------------
 
-#[tauri::command]
+/// Async so the wait for the previous launch's results happens off the main thread.
+#[tauri::command(async)]
 pub fn get_recommendations(state: State<'_, AppState>) -> Vec<Recommendation> {
     state.slot().all_recommendations()
 }
@@ -1119,13 +1210,20 @@ pub async fn get_trash_summary(state: State<'_, AppState>) -> AppResult<TrashSum
 }
 
 /// List the Trash as a single-use preview. Only the entries in it can be
-/// removed by [`empty_trash`]. Nothing is changed.
+/// removed by [`empty_trash`]. Nothing is changed. What has been measured so
+/// far is emitted as `trash://listing`.
 #[tauri::command]
-pub async fn preview_trash(state: State<'_, AppState>) -> AppResult<trash::TrashPreview> {
+pub async fn preview_trash(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> AppResult<trash::TrashPreview> {
     let dir = trash::trash_dir(&state.home);
     let now = now_ms();
     let preview = blocking(move || {
-        trash::inventory(&dir, unique_id("trash", now), now).map_err(|e| AppError::io(&dir, &e))
+        trash::inventory_with_progress(&dir, unique_id("trash", now), now, &mut |p| {
+            let _ = app.emit(trash::EVENT_TRASH_LISTING, p);
+        })
+        .map_err(|e| AppError::io(&dir, &e))
     })
     .await?;
     let mut slot = state.trash();
@@ -1611,9 +1709,42 @@ fn unique_id(prefix: &str, now: i64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::opens_to_view;
     #[cfg(unix)]
     use super::previewable_file;
+    use super::{opens_to_view, summary_for_window};
+
+    #[test]
+    fn the_window_gets_file_kind_totals_without_the_files() {
+        let cls = serde_json::json!({ "category": "userData", "label": "x", "explanation": "x",
+            "ruleId": "x", "confidence": "high", "matchedPath": "/Users/t" });
+        let file = |p: &str, b: u64| {
+            serde_json::json!({ "path": p, "name": p, "bytes": b,
+            "logicalBytes": b, "modifiedMs": 1, "classification": cls })
+        };
+        let summary: crate::model::ScanSummary = serde_json::from_value(serde_json::json!({
+            "id": "s", "root": "/Users/t", "startedAtMs": 0, "finishedAtMs": 1, "durationMs": 1,
+            "totalBytes": 300, "fileCount": 9, "dirCount": 1, "symlinkCount": 0,
+            "skippedVolumes": 0, "errorCount": 0, "errorSamples": [], "categories": [],
+            "largestFiles": [file("/Users/t/a.mov", 200)], "detectedLocations": [],
+            "heavyDirectories": [],
+            "fileKinds": [{ "kind": "videos", "bytes": 300, "fileCount": 7,
+                "files": [file("/Users/t/a.mov", 200), file("/Users/t/b.mov", 100)] }]
+        }))
+        .unwrap();
+        let v = summary_for_window(&summary);
+        let kinds = v["fileKinds"].as_array().unwrap();
+        assert_eq!(kinds.len(), 1);
+        assert_eq!(kinds[0]["kind"], "videos");
+        assert_eq!(kinds[0]["bytes"], 300);
+        assert_eq!(kinds[0]["fileCount"], 7);
+        assert_eq!(kinds[0]["listed"], 2);
+        assert!(kinds[0].get("files").is_none());
+        // Everything else is as the scanner made it.
+        assert_eq!(v["totalBytes"], 300);
+        assert_eq!(v["largestFiles"][0]["path"], "/Users/t/a.mov");
+        // The saved summary still has the files.
+        assert_eq!(summary.file_kinds[0].files.len(), 2);
+    }
 
     #[test]
     fn opens_photos_videos_and_documents_only() {

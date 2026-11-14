@@ -11,7 +11,11 @@ use std::path::Path;
 /// Largest thumbnail edge, in points, the UI may ask for.
 pub const MAX_THUMBNAIL_PX: f64 = 512.0;
 
-/// A PNG thumbnail of the file, `px` points square at 2x scale, or the file's
+/// JPEG quality for opaque thumbnails; artefacts are not visible at preview size.
+#[cfg(target_os = "macos")]
+const JPEG_QUALITY: f64 = 0.82;
+
+/// A thumbnail of the file (JPEG when opaque, otherwise PNG), `px` points square at 2x scale, or the file's
 /// icon when macOS has no thumbnail for its type. `None` if neither exists.
 #[cfg(target_os = "macos")]
 pub fn thumbnail_png(path: &Path, px: f64) -> Option<Vec<u8>> {
@@ -19,9 +23,57 @@ pub fn thumbnail_png(path: &Path, px: f64) -> Option<Vec<u8>> {
     use std::time::Duration;
 
     use block2::RcBlock;
+    use objc2::runtime::AnyObject;
     use objc2::AnyThread;
-    use objc2_app_kit::{NSBitmapImageFileType, NSBitmapImageRep};
-    use objc2_foundation::{NSDictionary, NSError, NSSize, NSString, NSURL};
+    use objc2_app_kit::{
+        NSBitmapFormat, NSBitmapImageFileType, NSBitmapImageRep, NSBitmapImageRepPropertyKey,
+        NSImageCompressionFactor,
+    };
+
+    /// Whether every pixel is fully opaque. Quick Look images always carry an
+    /// alpha channel, so the alpha samples themselves are checked (about a
+    /// millisecond for a 1024 px image). Photos often come as 16-bit floating
+    /// point. Unknown layouts count as transparent.
+    fn is_opaque(rep: &NSBitmapImageRep) -> bool {
+        if !rep.hasAlpha() {
+            return true;
+        }
+        let fmt = rep.bitmapFormat();
+        let float = fmt.contains(NSBitmapFormat::FloatingPointSamples);
+        let sample = rep.bitsPerSample() as usize / 8;
+        // The bytes of a fully opaque alpha sample, little-endian.
+        let one: &[u8] = match (sample, float) {
+            (1, false) => &[0xFF],
+            (2, false) => &[0xFF, 0xFF],
+            (2, true) => &[0x00, 0x3C],             // 1.0 as a half float
+            (4, true) => &[0x00, 0x00, 0x80, 0x3F], // 1.0 as a float
+            _ => return false,
+        };
+        if rep.isPlanar() || rep.samplesPerPixel() != 4 {
+            return false;
+        }
+        let (row, high) = (rep.bytesPerRow(), rep.pixelsHigh());
+        let data = rep.bitmapData();
+        if data.is_null() || row <= 0 || high <= 0 {
+            return false;
+        }
+        let pixel = sample * 4;
+        let at = if fmt.contains(NSBitmapFormat::AlphaFirst) {
+            0
+        } else {
+            3 * sample
+        };
+        let wide = (rep.pixelsWide().max(0) as usize).min(row as usize / pixel);
+        // SAFETY: the buffer holds `bytesPerRow * pixelsHigh` bytes and stays
+        // alive while `rep` does; it is only read here.
+        let bytes = unsafe { std::slice::from_raw_parts(data, (row * high) as usize) };
+        bytes.chunks_exact(row as usize).all(|line| {
+            line[..wide * pixel]
+                .chunks_exact(pixel)
+                .all(|px| &px[at..at + sample] == one)
+        })
+    }
+    use objc2_foundation::{NSDictionary, NSError, NSNumber, NSSize, NSString, NSURL};
     use objc2_quick_look_thumbnailing::{
         QLThumbnailGenerationRequest, QLThumbnailGenerationRequestRepresentationTypes as Types,
         QLThumbnailGenerator, QLThumbnailRepresentation,
@@ -50,14 +102,25 @@ pub fn thumbnail_png(path: &Path, px: f64) -> Option<Vec<u8>> {
                     // SAFETY: a finished representation always has a CGImage.
                     let cg = unsafe { rep.CGImage() };
                     let bitmap = NSBitmapImageRep::initWithCGImage(NSBitmapImageRep::alloc(), &cg);
-                    // SAFETY: an empty properties dictionary is valid for PNG output.
-                    unsafe {
-                        bitmap.representationUsingType_properties(
-                            NSBitmapImageFileType::PNG,
-                            &NSDictionary::new(),
+                    // Opaque images (photos, video frames, documents) as JPEG:
+                    // several times faster to encode and about a tenth of the
+                    // bytes to send to the window. Icons and images with
+                    // transparency stay PNG.
+                    let (kind, props) = if !is_opaque(&bitmap) {
+                        (NSBitmapImageFileType::PNG, NSDictionary::new())
+                    } else {
+                        // SAFETY: NSImageCompressionFactor is an AppKit constant.
+                        let key: &NSBitmapImageRepPropertyKey = unsafe { NSImageCompressionFactor };
+                        let quality = NSNumber::new_f64(JPEG_QUALITY);
+                        let value: &AnyObject = &quality;
+                        (
+                            NSBitmapImageFileType::JPEG,
+                            NSDictionary::from_slices(&[key], &[value]),
                         )
-                    }
-                    .map(|data| data.to_vec())
+                    };
+                    // SAFETY: the properties are valid for the chosen type.
+                    unsafe { bitmap.representationUsingType_properties(kind, &props) }
+                        .map(|data| data.to_vec())
                 })
             });
             let _ = tx.try_send(png);
@@ -98,7 +161,33 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("notes.txt");
         std::fs::write(&file, "Hello from DiskPilot\n".repeat(50)).unwrap();
-        let png = thumbnail_png(&file, 128.0).expect("a thumbnail or icon");
-        assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
+        let img = thumbnail_png(&file, 128.0).expect("a thumbnail or icon");
+        let png = img.starts_with(b"\x89PNG\r\n\x1a\n");
+        let jpeg = img.starts_with(&[0xFF, 0xD8, 0xFF]);
+        assert!(png || jpeg, "neither PNG nor JPEG");
+    }
+
+    #[test]
+    fn opaque_images_are_jpeg_and_transparent_ones_png() {
+        let dir = tempfile::tempdir().unwrap();
+        // A tiny opaque BMP and a PNG with a transparent pixel.
+        let opaque = dir.path().join("opaque.bmp");
+        let mut bmp = vec![b'B', b'M'];
+        let px: Vec<u8> = [0x20u8, 0x40, 0x80].repeat(16 * 16);
+        let size = 54 + px.len() as u32;
+        bmp.extend_from_slice(&size.to_le_bytes());
+        bmp.extend_from_slice(&[0, 0, 0, 0, 54, 0, 0, 0, 40, 0, 0, 0]);
+        bmp.extend_from_slice(&16i32.to_le_bytes());
+        bmp.extend_from_slice(&16i32.to_le_bytes());
+        bmp.extend_from_slice(&[1, 0, 24, 0, 0, 0, 0, 0]);
+        bmp.extend_from_slice(&(px.len() as u32).to_le_bytes());
+        bmp.extend_from_slice(&[0; 16]);
+        bmp.extend_from_slice(&px);
+        std::fs::write(&opaque, bmp).unwrap();
+        let img = thumbnail_png(&opaque, 64.0).expect("a thumbnail");
+        assert!(
+            img.starts_with(&[0xFF, 0xD8, 0xFF]),
+            "opaque image should be JPEG"
+        );
     }
 }
