@@ -51,7 +51,7 @@ vi.mock("@/lib/api", () => ({
       Promise.resolve([{ id: "/h/.claude/skills/old", methods: ["trash"] }]),
     agentSetConnection: (...a: unknown[]) => setConnection(...a),
     agentSetPlugin: (...a: unknown[]) => setPlugin(...a),
-    agentRemovePermission: (...a: unknown[]) => removePermission(...a),
+    agentRemovePermissions: (...a: unknown[]) => removePermission(...a),
     agentReconnect: vi.fn(),
     agentForgetDisconnected: vi.fn(),
     getAppBadges: () => Promise.resolve({}),
@@ -87,6 +87,22 @@ beforeEach(() => {
             kind: "allow",
             label: "Read",
             value: "Read",
+            source: "~/.claude/settings.json",
+            risk: null,
+          },
+          {
+            id: "claude-code|.claude/settings.json|allow|Bash(npm test)",
+            kind: "allow",
+            label: "Bash",
+            value: "Bash(npm test)",
+            source: "~/.claude/settings.json",
+            risk: null,
+          },
+          {
+            id: "claude-code|.claude/settings.json|allow|Bash(git status)",
+            kind: "allow",
+            label: "Bash",
+            value: "Bash(git status)",
             source: "~/.claude/settings.json",
             risk: null,
           },
@@ -147,16 +163,34 @@ beforeEach(() => {
 
 async function open() {
   render(<AgentsPage />);
-  await screen.findByRole("tab", { name: /Claude Code/ });
+  await screen.findByRole("heading", { name: "Claude Code" });
 }
 
 describe("AI Agents page", () => {
-  it("lists risky permissions first and only offers agents that are installed", async () => {
+  it("shows only installed agents and puts risky permissions first", async () => {
     await open();
-    expect(screen.getByRole("tab", { name: /Antigravity/ })).toBeDisabled();
-    expect(screen.getByText(/1 setting lets Claude Code act without asking/)).toBeVisible();
-    const rows = screen.getAllByText(/^(Read|Bash\(\*\))$/);
-    expect(rows[0]).toHaveTextContent("Bash(*)");
+    expect(screen.queryByText("Antigravity")).toBeNull();
+    expect(screen.queryByRole("radiogroup", { name: "Agent" })).toBeNull();
+    expect(screen.getByRole("tab", { name: /Permissions.*1 needs a look/ })).toBeVisible();
+    expect(screen.getByText("Needs a look")).toBeVisible();
+    expect(screen.getByText("Runs any shell command without asking.")).toBeVisible();
+  });
+
+  it("explains approved commands in plain words and clears one-time approvals together", async () => {
+    removePermission.mockResolvedValue(report);
+    await open();
+    expect(screen.getByText("Commands you approved once")).toBeVisible();
+    expect(screen.getByText("npm test")).toBeVisible();
+    expect(screen.getAllByText("Terminal").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Clear all 2" }));
+    const dialog = await screen.findByRole("dialog");
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Clear approvals" }));
+    });
+    expect(removePermission).toHaveBeenCalledWith("claude-code", [
+      "claude-code|.claude/settings.json|allow|Bash(npm test)",
+      "claude-code|.claude/settings.json|allow|Bash(git status)",
+    ]);
   });
 
   it("asks before removing a rule and sends only the rule's id", async () => {
@@ -164,15 +198,14 @@ describe("AI Agents page", () => {
     await open();
     fireEvent.click(screen.getByRole("button", { name: "Remove rule Bash(*)" }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/will ask again before doing this/)).toBeVisible();
+    expect(within(dialog).getByText(/will ask you again before doing this/)).toBeVisible();
     expect(removePermission).not.toHaveBeenCalled();
     await act(async () => {
-      fireEvent.click(within(dialog).getByRole("button", { name: "Remove rule" }));
+      fireEvent.click(within(dialog).getByRole("button", { name: "Remove" }));
     });
-    expect(removePermission).toHaveBeenCalledWith(
-      "claude-code",
+    expect(removePermission).toHaveBeenCalledWith("claude-code", [
       "claude-code|.claude/settings.json|allow|Bash(*)",
-    );
+    ]);
   });
 
   it("disconnects a server after confirming and shows a failure without closing the page", async () => {

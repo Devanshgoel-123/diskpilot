@@ -12,7 +12,7 @@
         { "keys": ["⌘", "6"], "action": "Docker", "page": "docker", "since": "0.6.3" },
         { "keys": ["⌘", "7"], "action": "Cleanup", "page": "recommendations", "since": "0.6.3" },
         { "keys": ["⌘", "8"], "action": "History", "page": "history", "since": "0.6.3" },
-        { "keys": ["⌘", "9"], "action": "AI Agents", "page": "agents", "since": "0.7.0" },
+        { "keys": ["⌘", "9"], "action": "AI Agents", "page": "agents", "since": "0.6.6" },
         { "keys": ["⌘", ","], "action": "Settings", "page": "settings", "since": "0.6.3" }
       ]
     },
