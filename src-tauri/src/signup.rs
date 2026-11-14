@@ -66,21 +66,52 @@ pub fn normalize_email(raw: &str) -> Result<String, String> {
 
 /// Domains that can't receive mail, or only for a few minutes.
 const THROWAWAY: &[&str] = &[
-    "example.com", "example.org", "example.net", "test.com", "xx.com", "xxx.com", "abc.com",
-    "mailinator.com", "guerrillamail.com", "sharklasers.com", "10minutemail.com", "yopmail.com",
-    "temp-mail.org", "tempmail.com", "trashmail.com", "maildrop.cc", "getnada.com",
-    "dispostable.com", "dontsp.am", "throwawaymail.com", "fakeinbox.com", "mailnesia.com",
-    "spamgourmet.com", "burnermail.io", "emailondeck.com", "mohmal.com",
+    "example.com",
+    "example.org",
+    "example.net",
+    "test.com",
+    "xx.com",
+    "xxx.com",
+    "abc.com",
+    "mailinator.com",
+    "guerrillamail.com",
+    "sharklasers.com",
+    "10minutemail.com",
+    "yopmail.com",
+    "temp-mail.org",
+    "tempmail.com",
+    "trashmail.com",
+    "maildrop.cc",
+    "getnada.com",
+    "dispostable.com",
+    "dontsp.am",
+    "throwawaymail.com",
+    "fakeinbox.com",
+    "mailnesia.com",
+    "spamgourmet.com",
+    "burnermail.io",
+    "emailondeck.com",
+    "mohmal.com",
 ];
 /// Top-level domains reserved for examples and tests (RFC 2606).
 const RESERVED_TLDS: &[&str] = &["test", "example", "invalid", "localhost", "local"];
 /// Common slips of the big providers, with what was meant.
 const TYPOS: &[(&str, &str)] = &[
-    ("gmal.com", "gmail.com"), ("gmial.com", "gmail.com"), ("gmai.com", "gmail.com"),
-    ("gamil.com", "gmail.com"), ("gnail.com", "gmail.com"), ("gmail.co", "gmail.com"),
-    ("gmail.con", "gmail.com"), ("gmail.cm", "gmail.com"), ("hotmial.com", "hotmail.com"),
-    ("hotmal.com", "hotmail.com"), ("yahooo.com", "yahoo.com"), ("yaho.com", "yahoo.com"),
-    ("outlok.com", "outlook.com"), ("outlook.co", "outlook.com"), ("iclod.com", "icloud.com"),
+    ("gmal.com", "gmail.com"),
+    ("gmial.com", "gmail.com"),
+    ("gmai.com", "gmail.com"),
+    ("gamil.com", "gmail.com"),
+    ("gnail.com", "gmail.com"),
+    ("gmail.co", "gmail.com"),
+    ("gmail.con", "gmail.com"),
+    ("gmail.cm", "gmail.com"),
+    ("hotmial.com", "hotmail.com"),
+    ("hotmal.com", "hotmail.com"),
+    ("yahooo.com", "yahoo.com"),
+    ("yaho.com", "yahoo.com"),
+    ("outlok.com", "outlook.com"),
+    ("outlook.co", "outlook.com"),
+    ("iclod.com", "icloud.com"),
     ("icloud.co", "icloud.com"),
 ];
 
@@ -94,11 +125,16 @@ fn not_real(local: &str, domain: &str) -> Option<String> {
         return Some("Use an email you read. Fixes and new versions are sent there.".to_string());
     }
     let base = local.split('+').next().unwrap_or(local);
-    let placeholder = ["test", "tester", "asdf", "qwerty", "fake", "none", "null", "noreply",
-                       "no-reply", "nobody", "abc", "user", "name", "email", "mail"]
-        .contains(&base.trim_end_matches(|c: char| c.is_ascii_digit()))
+    let placeholder = [
+        "test", "tester", "asdf", "qwerty", "fake", "none", "null", "noreply", "no-reply",
+        "nobody", "abc", "user", "name", "email", "mail",
+    ]
+    .contains(&base.trim_end_matches(|c: char| c.is_ascii_digit()))
         || base.starts_with("tester")
-        || (base.len() >= 2 && base.chars().all(|c| c == base.chars().next().unwrap_or(' ')));
+        || (base.len() >= 2
+            && base
+                .chars()
+                .all(|c| c == base.chars().next().unwrap_or(' ')));
     placeholder.then(|| "Use an email you read. Fixes and new versions are sent there.".to_string())
 }
 
