@@ -22,7 +22,7 @@ export function SignupScreen({ onDone }: { onDone: (s: Signup) => void }) {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!looksLikeEmail(email)) {
-      setError("Enter a valid email address, like name@example.com.");
+      setError("Enter a valid email address, like name@gmail.com.");
       return;
     }
     setBusy(true);
@@ -60,7 +60,7 @@ export function SignupScreen({ onDone }: { onDone: (s: Signup) => void }) {
           type="email"
           autoComplete="email"
           autoFocus
-          placeholder="name@example.com"
+          placeholder="you@gmail.com"
           value={email}
           onChange={(e) => {
             setEmail(e.target.value);

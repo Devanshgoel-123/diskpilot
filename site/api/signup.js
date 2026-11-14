@@ -1,6 +1,7 @@
 // POST /api/signup: stores the email DiskPilot asks for on first launch,
 // with the app version, macOS version and CPU architecture. Nothing else is
 // accepted. The table is created on first use. See /privacy.
+import { resolveMx } from "node:dns/promises";
 import { neon } from "@neondatabase/serverless";
 
 const EMAIL = /^[^\s@]{1,64}@[^\s@.][^\s@]*\.[^\s@.]+$/;
@@ -24,6 +25,49 @@ export function limited(ip, now = Date.now()) {
   }
   h.n += 1;
   return h.n > PER_WINDOW;
+}
+
+// The same rules as the app (src-tauri/src/signup.rs), for anything that skips them.
+const THROWAWAY = new Set([
+  "example.com", "example.org", "example.net", "test.com", "xx.com", "xxx.com", "abc.com",
+  "mailinator.com", "guerrillamail.com", "sharklasers.com", "10minutemail.com", "yopmail.com",
+  "temp-mail.org", "tempmail.com", "trashmail.com", "maildrop.cc", "getnada.com",
+  "dispostable.com", "dontsp.am", "throwawaymail.com", "fakeinbox.com", "mailnesia.com",
+  "spamgourmet.com", "burnermail.io", "emailondeck.com", "mohmal.com",
+]);
+const RESERVED_TLDS = new Set(["test", "example", "invalid", "localhost", "local"]);
+const TYPOS = {
+  "gmal.com": "gmail.com", "gmial.com": "gmail.com", "gmai.com": "gmail.com", "gamil.com": "gmail.com",
+  "gnail.com": "gmail.com", "gmail.co": "gmail.com", "gmail.con": "gmail.com", "gmail.cm": "gmail.com",
+  "hotmial.com": "hotmail.com", "hotmal.com": "hotmail.com", "yahooo.com": "yahoo.com",
+  "yaho.com": "yahoo.com", "outlok.com": "outlook.com", "outlook.co": "outlook.com",
+  "iclod.com": "icloud.com", "icloud.co": "icloud.com",
+};
+const PLACEHOLDERS = new Set(["test", "tester", "asdf", "qwerty", "fake", "none", "null", "noreply",
+  "no-reply", "nobody", "abc", "user", "name", "email", "mail"]);
+
+/** Why an address that looks right won't reach a person, or null. */
+export function notReal(email) {
+  const [local, domain] = email.split("@");
+  if (TYPOS[domain]) return `Did you mean ${local}@${TYPOS[domain]}?`;
+  const base = local.split("+")[0];
+  const fake =
+    THROWAWAY.has(domain) ||
+    RESERVED_TLDS.has(domain.split(".").pop()) ||
+    PLACEHOLDERS.has(base.replace(/\d+$/, "")) ||
+    base.startsWith("tester") ||
+    /^(.)\1+$/.test(base);
+  return fake ? "Use an email you read. Fixes and new versions are sent there." : null;
+}
+
+/** False only when DNS says the domain takes no mail; a slow or failed lookup lets it through. */
+export async function takesMail(domain, lookup = resolveMx) {
+  try {
+    const mx = await Promise.race([lookup(domain), new Promise((_, no) => setTimeout(() => no(new Error("slow")), 1500))]);
+    return Array.isArray(mx) && mx.length > 0;
+  } catch (e) {
+    return !(e && (e.code === "ENOTFOUND" || e.code === "ENODATA"));
+  }
 }
 
 let tableReady = false;
@@ -75,6 +119,11 @@ export default async function handler(req, res) {
   }
   const s = clean(body);
   if (!s) return res.status(400).json({ error: "Enter a valid email address." });
+  const why = notReal(s.email);
+  if (why) return res.status(422).json({ error: why });
+  if (!(await takesMail(s.email.split("@")[1]))) {
+    return res.status(422).json({ error: "That email's domain doesn't take mail. Check the spelling." });
+  }
 
   try {
     const sql = neon(url);

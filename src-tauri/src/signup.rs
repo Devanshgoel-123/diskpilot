@@ -40,7 +40,7 @@ pub struct Payload {
 /// A trimmed, lowercased address if it looks like an email, else why not.
 pub fn normalize_email(raw: &str) -> Result<String, String> {
     let email = raw.trim().to_lowercase();
-    let invalid = || Err("Enter a valid email address, like name@example.com.".to_string());
+    let invalid = || Err("Enter a valid email address, like name@gmail.com.".to_string());
     if email.is_empty()
         || email.len() > 254
         || email.chars().any(|c| c.is_whitespace() || c.is_control())
@@ -58,7 +58,48 @@ pub fn normalize_email(raw: &str) -> Result<String, String> {
     if local.is_empty() || local.len() > 64 || !domain_ok {
         return invalid();
     }
+    if let Some(why) = not_real(local, domain) {
+        return Err(why);
+    }
     Ok(email)
+}
+
+/// Domains that can't receive mail, or only for a few minutes.
+const THROWAWAY: &[&str] = &[
+    "example.com", "example.org", "example.net", "test.com", "xx.com", "xxx.com", "abc.com",
+    "mailinator.com", "guerrillamail.com", "sharklasers.com", "10minutemail.com", "yopmail.com",
+    "temp-mail.org", "tempmail.com", "trashmail.com", "maildrop.cc", "getnada.com",
+    "dispostable.com", "dontsp.am", "throwawaymail.com", "fakeinbox.com", "mailnesia.com",
+    "spamgourmet.com", "burnermail.io", "emailondeck.com", "mohmal.com",
+];
+/// Top-level domains reserved for examples and tests (RFC 2606).
+const RESERVED_TLDS: &[&str] = &["test", "example", "invalid", "localhost", "local"];
+/// Common slips of the big providers, with what was meant.
+const TYPOS: &[(&str, &str)] = &[
+    ("gmal.com", "gmail.com"), ("gmial.com", "gmail.com"), ("gmai.com", "gmail.com"),
+    ("gamil.com", "gmail.com"), ("gnail.com", "gmail.com"), ("gmail.co", "gmail.com"),
+    ("gmail.con", "gmail.com"), ("gmail.cm", "gmail.com"), ("hotmial.com", "hotmail.com"),
+    ("hotmal.com", "hotmail.com"), ("yahooo.com", "yahoo.com"), ("yaho.com", "yahoo.com"),
+    ("outlok.com", "outlook.com"), ("outlook.co", "outlook.com"), ("iclod.com", "icloud.com"),
+    ("icloud.co", "icloud.com"),
+];
+
+/// Why an address that looks right still won't reach a person, if it won't.
+fn not_real(local: &str, domain: &str) -> Option<String> {
+    if let Some((_, meant)) = TYPOS.iter().find(|(typo, _)| *typo == domain) {
+        return Some(format!("Did you mean {local}@{meant}?"));
+    }
+    let tld = domain.rsplit('.').next().unwrap_or("");
+    if THROWAWAY.contains(&domain) || RESERVED_TLDS.contains(&tld) {
+        return Some("Use an email you read. Fixes and new versions are sent there.".to_string());
+    }
+    let base = local.split('+').next().unwrap_or(local);
+    let placeholder = ["test", "tester", "asdf", "qwerty", "fake", "none", "null", "noreply",
+                       "no-reply", "nobody", "abc", "user", "name", "email", "mail"]
+        .contains(&base.trim_end_matches(|c: char| c.is_ascii_digit()))
+        || base.starts_with("tester")
+        || (base.len() >= 2 && base.chars().all(|c| c == base.chars().next().unwrap_or(' ')));
+    placeholder.then(|| "Use an email you read. Fixes and new versions are sent there.".to_string())
 }
 
 fn path(dir: &Path) -> PathBuf {
@@ -178,10 +219,36 @@ mod tests {
     #[test]
     fn accepts_and_cleans_ordinary_addresses() {
         assert_eq!(
-            normalize_email("  Name@Example.COM ").unwrap(),
-            "name@example.com"
+            normalize_email("  Riya.Sharma@Proton.ME ").unwrap(),
+            "riya.sharma@proton.me"
         );
         assert!(normalize_email("a.b+tag@mail.co.uk").is_ok());
+    }
+
+    #[test]
+    fn rejects_throwaway_and_placeholder_addresses() {
+        for bad in [
+            "xxx@xx.com",
+            "tester49xyz@icloud.com",
+            "jeppe@dontsp.am",
+            "name@example.com",
+            "a@mail.test",
+            "test123@gmail.com",
+            "aaaa@gmail.com",
+            "asdf@yahoo.com",
+        ] {
+            assert!(normalize_email(bad).is_err(), "{bad} should be refused");
+        }
+        assert!(normalize_email("lucasjuan14+diskpilot@gmail.com").is_ok());
+        assert!(normalize_email("michel.sirois@cgocable.ca").is_ok());
+    }
+
+    #[test]
+    fn suggests_the_provider_for_a_typo() {
+        assert_eq!(
+            normalize_email("theerasak.spark@gmal.com").unwrap_err(),
+            "Did you mean theerasak.spark@gmail.com?"
+        );
     }
 
     #[test]
@@ -213,16 +280,16 @@ mod tests {
     #[test]
     fn an_offline_signup_is_kept_and_sent_later() {
         let dir = crate::test_support::sandbox();
-        let s = submit(dir.path(), "me@example.com", 1, |_| Err("offline".into())).unwrap();
+        let s = submit(dir.path(), "me@proton.me", 1, |_| Err("offline".into())).unwrap();
         assert!(!s.sent);
-        assert_eq!(load(dir.path()).unwrap().email, "me@example.com");
+        assert_eq!(load(dir.path()).unwrap().email, "me@proton.me");
 
         let sent = RefCell::new(Vec::new());
         assert!(send_pending(dir.path(), |p| {
             sent.borrow_mut().push(p.email.clone());
             Ok(())
         }));
-        assert_eq!(sent.into_inner(), ["me@example.com"]);
+        assert_eq!(sent.into_inner(), ["me@proton.me"]);
         assert!(load(dir.path()).unwrap().sent);
         // Nothing is sent twice.
         assert!(!send_pending(dir.path(), |_| panic!("sent again")));
@@ -240,7 +307,7 @@ mod tests {
     fn the_saved_signup_is_private() {
         use std::os::unix::fs::PermissionsExt;
         let dir = crate::test_support::sandbox();
-        submit(dir.path(), "me@example.com", 1, |_| Ok(())).unwrap();
+        submit(dir.path(), "me@proton.me", 1, |_| Ok(())).unwrap();
         let mode = fs::metadata(dir.path().join(FILE))
             .unwrap()
             .permissions()
