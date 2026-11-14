@@ -2,10 +2,12 @@ import { Box, CheckCircle2, ChevronDown, FileX, MinusCircle, XCircle } from "luc
 import { useState } from "react";
 
 import { EmptyState } from "@/components/shared/EmptyState";
+import { Pager } from "@/components/shared/Pager";
 import { Badge } from "@/components/ui/badge";
 import { formatBytes, formatDate, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { ActionStatus, CleanupRecord, ItemStatus } from "@/lib/types";
+import { usePage } from "@/lib/usePage";
 import { cn } from "@/lib/utils";
 
 const STATUS_LABEL: Record<ActionStatus, string> = {
@@ -89,6 +91,8 @@ function Row({ record, home }: { record: CleanupRecord; home: string | undefined
   );
 }
 
+const CLEANUPS_PER_PAGE = 8;
+
 export function CleanupHistory() {
   const cleanups = useApp((s) => s.cleanups);
   const home = useApp((s) => s.env?.homeDir);
@@ -102,11 +106,19 @@ export function CleanupHistory() {
       />
     );
   }
+  return <CleanupList cleanups={cleanups} home={home} />;
+}
+
+function CleanupList({ cleanups, home }: { cleanups: CleanupRecord[]; home?: string }) {
+  const page = usePage(cleanups, CLEANUPS_PER_PAGE);
   return (
-    <ul>
-      {cleanups.map((r) => (
-        <Row key={r.id} record={r} home={home} />
-      ))}
-    </ul>
+    <>
+      <ul>
+        {page.items.map((r) => (
+          <Row key={r.id} record={r} home={home} />
+        ))}
+      </ul>
+      <Pager page={page} label="cleanup actions" className="border-t border-border px-4 py-2" />
+    </>
   );
 }

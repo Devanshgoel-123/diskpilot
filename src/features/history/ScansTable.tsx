@@ -6,10 +6,21 @@ import type { ScanRecord } from "@/lib/types";
 import { dayLabel, formatChange, sizeChanges, timeOfDay } from "./scans";
 
 /** Scans grouped by day, newest first. */
-export function ScansTable({ records, home }: { records: ScanRecord[]; home?: string }) {
+export function ScansTable({
+  records,
+  home,
+  shown,
+}: {
+  records: ScanRecord[];
+  home?: string;
+  /** The records on the current page, newest first; all of them by default. */
+  shown?: ScanRecord[];
+}) {
+  // Changes are worked out over every record, so a page's first row still
+  // compares with the scan before it on the previous page.
   const changes = sizeChanges(records);
   const days: { label: string; rows: ScanRecord[] }[] = [];
-  for (const r of [...records].sort((a, b) => b.startedAtMs - a.startedAtMs)) {
+  for (const r of shown ?? [...records].sort((a, b) => b.startedAtMs - a.startedAtMs)) {
     const label = dayLabel(r.startedAtMs);
     const group = days.at(-1);
     if (group?.label === label) group.rows.push(r);

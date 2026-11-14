@@ -29,6 +29,9 @@ import type {
   ScanSummary,
 } from "./types";
 
+/** History keeps this many scans and cleanups in memory; the page shows them a page at a time. */
+const HISTORY_LIMIT = 500;
+
 export type PageId =
   | "assistant"
   | "overview"
@@ -316,9 +319,9 @@ export const useApp = create<AppState>((set, get) => ({
         api.getDiskInfo(),
         api.getScanSummary(),
         api.isScanRunning(),
-        api.getScanHistory(50),
+        api.getScanHistory(HISTORY_LIMIT),
         api.getRecommendations(),
-        api.getCleanupHistory(50),
+        api.getCleanupHistory(HISTORY_LIMIT),
       ]);
       set({ env, disk, summary, scanning, history, recommendations, cleanups, ready: true });
       // Results saved from the last launch: re-run the tool checks, which
@@ -360,8 +363,8 @@ export const useApp = create<AppState>((set, get) => ({
   refreshHistory: async () => {
     try {
       const [history, cleanups] = await Promise.all([
-        api.getScanHistory(50),
-        api.getCleanupHistory(50),
+        api.getScanHistory(HISTORY_LIMIT),
+        api.getCleanupHistory(HISTORY_LIMIT),
       ]);
       set({ history, cleanups });
     } catch (e) {
