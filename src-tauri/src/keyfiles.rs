@@ -347,11 +347,26 @@ fn git_ignored(repo: &Path, path: &Path) -> Option<bool> {
     if !tools {
         return None;
     }
+    // The repository may not be the user's own (an unzipped download, say),
+    // and git runs commands named in a repository's config, such as
+    // core.fsmonitor, when it reads the index. So: never read the index
+    // (--no-index), turn those settings off, and ignore system config.
     let mut cmd = std::process::Command::new("/usr/bin/git");
-    cmd.arg("-C")
-        .arg(repo)
-        .args(["check-ignore", "-q", "--"])
-        .arg(path);
+    cmd.args([
+        "-c",
+        "core.fsmonitor=false",
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-c",
+        "core.untrackedCache=false",
+        "-C",
+    ])
+    .arg(repo)
+    .args(["check-ignore", "--no-index", "-q", "--"])
+    .arg(path)
+    .env("GIT_CONFIG_NOSYSTEM", "1")
+    .env_remove("GIT_DIR")
+    .env_remove("GIT_WORK_TREE");
     cmd.stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
@@ -931,6 +946,47 @@ mod tests {
         assert!(
             !merge_scan(&mut store, "scan-1", 5, vec![]),
             "same scan changes nothing"
+        );
+    }
+
+    #[test]
+    fn checking_gitignore_never_runs_commands_from_the_repository() {
+        if git_ignored(Path::new("/"), Path::new("/x")).is_none() {
+            return; // No developer tools on this Mac: git is never run.
+        }
+        let dir = crate::test_support::sandbox();
+        let repo = dir.path().join("downloaded");
+        std::fs::create_dir_all(&repo).unwrap();
+        let ok = std::process::Command::new("/usr/bin/git")
+            .args(["init", "-q"])
+            .current_dir(&repo)
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok);
+        let marker = dir.path().join("PWNED");
+        let config = format!(
+            "[core]\n\tfsmonitor = \"touch '{}'; false\"\n",
+            marker.display()
+        );
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(repo.join(".git/config"))
+            .unwrap();
+        std::io::Write::write_all(&mut f, config.as_bytes()).unwrap();
+        std::fs::write(repo.join(".gitignore"), ".env\n").unwrap();
+        std::fs::write(repo.join(".env"), "A=1\n").unwrap();
+        // Make an index exist, as in a real repository.
+        std::fs::write(repo.join("README"), "x").unwrap();
+        let _ = std::process::Command::new("/usr/bin/git")
+            .args(["-c", "core.fsmonitor=false", "add", "README"])
+            .current_dir(&repo)
+            .status();
+
+        assert_eq!(git_ignored(&repo, &repo.join(".env")), Some(true));
+        assert!(
+            !marker.exists(),
+            "the repository's fsmonitor command must not run"
         );
     }
 
