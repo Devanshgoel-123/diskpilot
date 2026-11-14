@@ -235,6 +235,9 @@ pub struct Stashed {
     pub name: String,
     pub scope: String,
     pub value: Value,
+    /// Where it was among its siblings, so it goes back in the same place.
+    #[serde(default)]
+    pub position: Option<usize>,
     pub at_ms: i64,
 }
 
@@ -281,13 +284,14 @@ pub fn disconnect_json(
         let Some(obj) = object_at(doc, parent) else {
             return Ok(false);
         };
+        let position = obj.keys().position(|k| k == name);
         // `shift_remove` keeps the order of the remaining servers.
         let v = obj.shift_remove(name);
         let found = v.is_some();
-        *removed.borrow_mut() = v;
+        *removed.borrow_mut() = v.map(|v| (v, position));
         Ok(found)
     })?;
-    let Some(value) = removed.into_inner().filter(|_| changed) else {
+    let Some((value, position)) = removed.into_inner().filter(|_| changed) else {
         return Err(other(format!("{name} is no longer in {}.", file.display())));
     };
     let mut items = stashed(data);
@@ -300,6 +304,7 @@ pub fn disconnect_json(
         name: name.into(),
         scope: scope.into(),
         value,
+        position,
         at_ms: now_ms,
     });
     save_stash(data, &items)
@@ -330,7 +335,16 @@ pub fn reconnect(data_dir: Option<&Path>, id: &str) -> Result<()> {
             // Already added back by hand: nothing to restore.
             return Ok(false);
         }
+        // Put it back where it was; anything added since stays after it.
+        let at = item.position.unwrap_or(obj.len()).min(obj.len());
+        let rest: Vec<(String, Value)> = {
+            let keys: Vec<String> = obj.keys().skip(at).cloned().collect();
+            keys.into_iter()
+                .filter_map(|k| obj.shift_remove(&k).map(|v| (k, v)))
+                .collect()
+        };
         obj.insert(item.name.clone(), item.value.clone());
+        obj.extend(rest);
         Ok(true)
     })?;
     items.remove(pos);
@@ -392,7 +406,12 @@ mod tests {
         let items = stashed(&data);
         assert_eq!(items.len(), 1);
         reconnect(Some(&data), &items[0].id).unwrap();
-        let back: Value = serde_json::from_str(&std::fs::read_to_string(&cfg).unwrap()).unwrap();
+        let text = std::fs::read_to_string(&cfg).unwrap();
+        assert!(
+            text.find("\"b\"").unwrap() < text.find("\"a\"").unwrap(),
+            "back in its old place"
+        );
+        let back: Value = serde_json::from_str(&text).unwrap();
         assert_eq!(back["mcpServers"]["b"]["env"]["TOKEN"], "s");
         assert!(stashed(&data).is_empty());
     }
