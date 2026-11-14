@@ -1,6 +1,7 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { AlertTriangle, Blocks, Loader2, MessageSquarePlus, RefreshCw, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AppIcon } from "@/components/shared/AppIcon";
@@ -30,6 +31,9 @@ import {
 import { type AgentTab, useAgents, useReviewable } from "./agentsStore";
 import { BrandMark } from "./logos";
 import { type Confirmation } from "./shared";
+import { AGENT_TOOL_IDS, MAIN_AGENT_IDS } from "@/features/developer/agentTools";
+import { ToolCard } from "@/features/developer/ToolCard";
+import { TranscriptSecrets } from "@/features/developer/TranscriptSecrets";
 
 /** The app bundle, when the agent has one; its own icon is the best logo. */
 const AGENT_APP: Record<string, string> = {
@@ -266,6 +270,35 @@ function AgentSwitcher({
   );
 }
 
+/** The Claude app, Copilot and other agent CLIs: their storage, from Developer Tools. */
+function OtherAgentTools() {
+  const tools = useApp(
+    useShallow((s) =>
+      (s.devtools?.tools ?? []).filter(
+        (t) => t.detected && AGENT_TOOL_IDS.has(t.id) && !MAIN_AGENT_IDS.has(t.id),
+      ),
+    ),
+  );
+  const reviewable = useReviewable();
+  const review = useApp((s) => s.reviewInRecommendations);
+  if (!tools.length) return null;
+  return (
+    <section className="space-y-2">
+      <div>
+        <h2 className="text-[13px] font-semibold">Other AI tools on this Mac</h2>
+        <p className="text-xs text-muted-foreground">
+          What they store, and what can be cleaned up.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {tools.map((t) => (
+          <ToolCard key={t.id} tool={t} reviewable={reviewable} onReview={review} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function RequestAgent() {
   const version = useApp((s) => s.env?.appVersion);
   const ask = (name: string) => {
@@ -355,6 +388,13 @@ export function AgentsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Storage details come from the Developer Tools analysis; run it if it hasn't.
+  const devtoolsReady = useApp((s) => !!s.devtools);
+  const analyzeDevTools = useApp((s) => s.analyzeDevTools);
+  useEffect(() => {
+    if (!devtoolsReady) void analyzeDevTools();
+  }, [devtoolsReady, analyzeDevTools]);
 
   const detected = useMemo(() => report?.agents.filter((a) => a.detected) ?? [], [report]);
   const agent = detected.find((a) => a.id === selected) ?? detected[0] ?? null;
@@ -460,7 +500,13 @@ export function AgentsPage() {
               </Panel>
             </>
           )}
-          {report ? <RequestAgent /> : null}
+          {report ? (
+            <>
+              <OtherAgentTools />
+              <TranscriptSecrets />
+              <RequestAgent />
+            </>
+          ) : null}
         </div>
       </div>
       <ConfirmDialog confirm={confirm} onClose={() => setConfirm(null)} />

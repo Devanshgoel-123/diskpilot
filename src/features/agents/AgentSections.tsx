@@ -17,6 +17,8 @@ import type {
 import { usePage } from "@/lib/usePage";
 import { cn } from "@/lib/utils";
 
+import { ToolCard } from "@/features/developer/ToolCard";
+
 import { useAgents, useReviewable } from "./agentsStore";
 import { isOneTime, modeValue, ruleArea, ruleText } from "./permissionText";
 import { type Confirmation, Tint } from "./shared";
@@ -909,56 +911,69 @@ export function CleanupList({ agent }: { agent: AgentReport }) {
   const home = useApp((s) => s.env?.homeDir);
   const reviewInRecommendations = useApp((s) => s.reviewInRecommendations);
   const reviewable = useReviewable();
+  // Everything the agent stores, from the Developer Tools analysis.
+  const stored = useApp((s) => s.devtools?.tools.find((t) => t.id === agent.id && t.detected));
   const items = agent.cleanup.filter(
     (i) => i.recommendationId && reviewable.has(i.recommendationId),
   );
-  if (!items.length) {
-    return <Empty>Nothing of {agent.name}&apos;s needs cleaning up.</Empty>;
-  }
   const total = items.reduce((a, i) => a + i.bytes, 0);
   return (
     <div className="space-y-6">
-      <Section
-        title={`${formatBytes(total)} can be freed`}
-        description="Caches, logs, old versions and inactive skills. Each one goes through the usual review and is moved to the Trash, so you can undo it from History."
-        action={
-          <Button
-            size="sm"
-            onClick={() => reviewInRecommendations(items.map((i) => i.recommendationId as string))}
-          >
-            Review all {items.length}
-          </Button>
-        }
-      >
-        <PagedList
-          items={items}
-          label="items"
-          render={(i, idx) => (
-            <Row
-              key={`${i.path ?? i.label}-${idx}`}
-              title={<span className="truncate">{i.label}</span>}
-              sub={i.path ? tildify(i.path, home) : i.detail}
-              meta={
-                <>
-                  <span className="tabular block font-medium text-foreground">
-                    {formatBytes(i.bytes)}
-                  </span>
-                  <span>{i.lastUsedMs ? formatRelative(i.lastUsedMs) : ""}</span>
-                </>
+      {!items.length ? (
+        <Empty>Nothing of {agent.name}&apos;s needs cleaning up.</Empty>
+      ) : (
+        <Section
+          title={`${formatBytes(total)} can be freed`}
+          description="Caches, logs, old versions and inactive skills. Each one goes through the usual review and is moved to the Trash, so you can undo it from History."
+          action={
+            <Button
+              size="sm"
+              onClick={() =>
+                reviewInRecommendations(items.map((i) => i.recommendationId as string))
               }
-              action={
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => reviewInRecommendations([i.recommendationId as string])}
-                >
-                  Review
-                </Button>
-              }
-            />
-          )}
-        />
-      </Section>
+            >
+              Review all {items.length}
+            </Button>
+          }
+        >
+          <PagedList
+            items={items}
+            label="items"
+            render={(i, idx) => (
+              <Row
+                key={`${i.path ?? i.label}-${idx}`}
+                title={<span className="truncate">{i.label}</span>}
+                sub={i.path ? tildify(i.path, home) : i.detail}
+                meta={
+                  <>
+                    <span className="tabular block font-medium text-foreground">
+                      {formatBytes(i.bytes)}
+                    </span>
+                    <span>{i.lastUsedMs ? formatRelative(i.lastUsedMs) : ""}</span>
+                  </>
+                }
+                action={
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => reviewInRecommendations([i.recommendationId as string])}
+                  >
+                    Review
+                  </Button>
+                }
+              />
+            )}
+          />
+        </Section>
+      )}
+      {stored ? (
+        <Section
+          title={`Everything ${agent.name} stores`}
+          description="Versions, conversation data, caches and settings, with what each one is. History and settings are listed for reference and never suggested for removal."
+        >
+          <ToolCard tool={stored} reviewable={reviewable} onReview={reviewInRecommendations} />
+        </Section>
+      ) : null}
     </div>
   );
 }
