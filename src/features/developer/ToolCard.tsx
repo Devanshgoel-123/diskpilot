@@ -25,6 +25,8 @@ import { useApp } from "@/lib/store";
 import type { ItemState, ToolReport } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+import { TOOL_MARKS } from "./toolMarks";
+
 const TOOL_ICON: Record<string, LucideIcon> = {
   cursor: MousePointer2,
   vscode: Code2,
@@ -59,10 +61,13 @@ const TOOL_COLOR: Record<string, string> = {
   versions: "var(--cat-system-files)",
 };
 
-/** A folder owned by the tool, used to show the installed app's own icon. */
+/**
+ * Where the installed app's own icon comes from: an app bundle (absolute) or
+ * a folder in the home folder that carries the app's icon.
+ */
 const TOOL_APP_PATH: Record<string, string> = {
   cursor: ".cursor",
-  vscode: ".vscode",
+  vscode: "/Applications/Visual Studio Code.app",
   windsurf: ".windsurf",
   "claude-code": ".claude",
   "claude-desktop": "Library/Application Support/Claude",
@@ -95,15 +100,20 @@ export function ToolCard({
   tool,
   reviewable,
   onReview,
+  defaultOpen = false,
 }: {
   tool: ToolReport;
   reviewable: Set<string>;
   onReview: (ids: string[]) => void;
+  /** Start with the details shown, for a card that is the page's only content. */
+  defaultOpen?: boolean;
 }) {
   const home = useApp((s) => s.env?.homeDir);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const Icon = TOOL_ICON[tool.id] ?? Wrench;
-  const appPath = TOOL_APP_PATH[tool.id] && home ? `${home}/${TOOL_APP_PATH[tool.id]}` : null;
+  const rel = TOOL_APP_PATH[tool.id];
+  const appPath = !rel ? null : rel.startsWith("/") ? rel : home ? `${home}/${rel}` : null;
+  const mark = TOOL_MARKS[tool.id];
   const color = TOOL_COLOR[tool.id] ?? "var(--accent)";
   const items = tool.sections.flatMap((s) => s.items);
   const actionable = items.filter((i) => i.recommendationId && reviewable.has(i.recommendationId));
@@ -120,7 +130,19 @@ export function ToolCard({
           className="size-8"
           fallback={
             <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-panel-raised">
-              <Icon className="size-4" style={{ color }} strokeWidth={1.75} aria-hidden />
+              {mark ? (
+                <svg
+                  viewBox="0 0 24 24"
+                  className="size-[18px]"
+                  fill={mark.color ?? "currentColor"}
+                  aria-hidden
+                  focusable="false"
+                >
+                  <path d={mark.path} />
+                </svg>
+              ) : (
+                <Icon className="size-4" style={{ color }} strokeWidth={1.75} aria-hidden />
+              )}
             </span>
           }
         />
