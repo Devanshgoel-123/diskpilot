@@ -6,7 +6,7 @@
     <title>DiskPilot: find out what fills your Mac</title>
     <meta
       name="description"
-      content="DiskPilot is a free, open-source Mac app that explains what fills your disk and cleans it up safely: Docker, Xcode, node_modules, build output, editor and AI agent data, with a preview before anything moves."
+      content="DiskPilot is a free, open-source Mac app that explains what fills your disk and cleans it up safely: Docker, Xcode, node_modules, build output, editor and AI agent data, with a preview before anything moves. It also shows what your AI coding agents may do and finds the key files you've lost track of."
     />
     <meta name="theme-color" content="#121316" />
     <meta name="color-scheme" content="dark light" />
@@ -107,6 +107,7 @@
           <span>DiskPilot</span>
         </a>
         <nav class="nav-links" id="nav-links" aria-label="Sections">
+          <a href="#new">New</a>
           <a href="#demo">Demo</a>
           <a href="#tools">Tools</a>
           <a href="#safety">Safety</a>
@@ -174,7 +175,8 @@
           <div class="hero-row">
             <p class="lede">
               DiskPilot shows what's eating your storage, finds what Docker, Xcode, node_modules and
-              your AI tools left behind, and cleans it up only after you've reviewed it.
+              your AI tools left behind, and cleans it up only after you've reviewed it. New in
+              0.6.6: see what your AI coding agents are allowed to do.
             </p>
             <div class="hero-cta">
               <div class="cta-row">
@@ -226,8 +228,8 @@
                   srcset="/shots/overview-dark-1200.webp 1200w, /shots/overview-dark.webp 2200w"
                   sizes="(max-width: 1360px) 100vw, 1320px"
                   width="2200"
-                  height="1375"
-                  alt="DiskPilot's Overview: 130 GB used of 245 GB, a bar of usage by category, cleanup suggestions such as Rust build output (11.0 GB, likely safe) and a breakdown of where space goes."
+                  height="1376"
+                  alt="DiskPilot's Overview: 130 GB used of 245 GB, a bar of usage by category, 2.4 GB waiting in the Trash, cleanup suggestions such as Rust build output (11.0 GB, likely safe) and a breakdown of where space goes."
                   fetchpriority="high"
                 />
               </picture>
@@ -237,103 +239,100 @@
         </div>
       </section>
 
-      <!-- 1b. New in 0.6 -->
+      <!-- 1b. New in 0.6.6 -->
       <section class="section new" id="new" aria-labelledby="new-title">
         <div class="wrap">
           <div class="head head-split">
-            <h2 id="new-title">New in DiskPilot 0.6</h2>
+            <h2 id="new-title">New in DiskPilot 0.6.6</h2>
             <p>
-              Your own files sorted by type, a running count of the space you have cleared, Docker
-              cleanup that includes volumes, and an app that keeps itself up to date. If you want,
-              it also rescans on a schedule and reminds you once a week.
+              A page for the AI coding agents on your Mac: what they may do, what they connect to
+              and what they have installed. Plus the key files you've lost track of, and a Storage
+              view that shows what fills each folder.
             </p>
           </div>
           <div class="new-grid">
             <article class="new-item reveal">
               <div class="window">
                 <img
-                  data-shot="new-bytype"
-                  src="/shots/new-bytype-dark.webp"
+                  data-shot="new-agents"
+                  src="/shots/new-agents-dark.webp"
                   width="1280"
                   height="800"
                   loading="lazy"
                   decoding="async"
-                  alt="The By type tab in Storage: Videos selected, 18.4 GB in 214 files, with three large videos ticked for review."
+                  alt="The AI Agents page: Claude Code, Codex and Cursor listed, Claude Code selected, a warning that 2 settings let it act without asking, and Needs a look listing a default mode that never asks and any terminal command allowed."
                 />
               </div>
-              <h3>Your files, by type</h3>
+              <h3>What your AI agents may do</h3>
               <p>
-                Videos, images, archives, installers and documents, each in one list with filters
-                for folder and age. Press Space to preview a file, like Quick Look. These are your
-                files, so DiskPilot never calls them safe to delete: you pick.
+                Claude Code, Codex, Cursor and Antigravity, in plain words. Settings that let an
+                agent run commands or work outside its sandbox without asking come first. Remove a
+                rule in one click; DiskPilot saves a copy of the settings file before it changes
+                anything.
               </p>
             </article>
             <article class="new-item reveal">
               <div class="window">
                 <img
-                  data-shot="new-cleared"
-                  src="/shots/new-cleared-dark.webp"
+                  data-shot="new-mcp"
+                  src="/shots/new-mcp-dark.webp"
                   width="1280"
                   height="800"
                   loading="lazy"
                   decoding="async"
-                  alt="History showing 47.7 GB cleared in 9 cleanups and a 6-week streak."
+                  alt="MCP servers for Claude Code: github and postgres-local connected, linear off in this project, each with a Disconnect button."
                 />
               </div>
-              <h3>See what you have cleared</h3>
+              <h3>What they connect to and run</h3>
               <p>
-                History adds up the space DiskPilot has freed and counts your weekly streak.
-                Emptying the Trash is not counted twice, and the numbers never leave your Mac.
+                Every MCP server, plugin and skill each agent has. Disconnect a server you no longer
+                use and reconnect it later exactly as it was, or find the skills you haven't used in
+                30 days. Keys and tokens are never shown.
               </p>
             </article>
             <article class="new-item reveal">
               <div class="window">
                 <img
-                  data-shot="new-docker"
-                  src="/shots/new-docker-dark.webp"
+                  data-shot="new-keys"
+                  src="/shots/new-keys-dark.webp"
                   width="1280"
                   height="800"
                   loading="lazy"
                   decoding="async"
-                  alt="Removing a Docker container: the dialog lists docker stop, docker rm and docker volume rm, with the container's volumes as checkboxes."
+                  alt="Keys and secrets: 4 of 6 key files need attention. acme-prod.pem is in Downloads and readable by other accounts, with Make private and Show buttons; an .env file is in a git project and not in .gitignore."
                 />
               </div>
-              <h3>Containers and their volumes</h3>
+              <h3>Keys you've lost track of</h3>
               <p>
-                Stop a container with one click, or remove it together with the volumes only it
-                uses. You tick each volume, type the container's name, and see every command before
-                it runs.
+                Private keys, .env files and cloud credentials found by your scan, with what makes
+                each one risky: readable by other accounts, sitting in Downloads, or in a git
+                project without a .gitignore entry. Make a key private in one click. Contents are
+                never shown or sent.
               </p>
             </article>
             <article class="new-item reveal">
               <div class="window">
                 <img
-                  data-shot="new-updates"
-                  src="/shots/new-updates-dark.webp"
+                  data-shot="new-storage"
+                  src="/shots/new-storage-dark.webp"
                   width="1280"
                   height="800"
                   loading="lazy"
                   decoding="async"
-                  alt="The sidebar notice: DiskPilot 0.6.1 is available, with Update and restart and What's new buttons."
+                  alt="Storage, Folders view: 68.4 GB in 104 items, one bar split by folder with Library at 57 percent, 30.7 GB recommended for cleanup with a Review 62 button, and each row's share of the folder."
                 />
               </div>
-              <h3>Updates itself</h3>
+              <h3>What fills each folder</h3>
               <p>
-                DiskPilot checks for a new version once a day and asks before installing it. Every
-                update is signed, and checked against that signature before anything is installed.
+                Storage opens on one bar of the folder you're in, split by item, with the part
+                DiskPilot recommends for cleanup hatched. Each row shows its share of the folder,
+                and one button reviews everything recommended inside it.
               </p>
             </article>
           </div>
           <p class="note">
             Screens from the real app with sample data. Full notes in the
-            <a
-              href="https://github.com/Devanshgoel-123/diskpilot/releases/latest"
-              data-track="github"
-              data-where="new"
-              target="_blank"
-              rel="noopener"
-              >release on GitHub</a
-            >.
+            <a href="/changelog">changelog</a>.
           </p>
         </div>
       </section>
@@ -599,7 +598,7 @@
                   height="1250"
                   loading="lazy"
                   decoding="async"
-                  alt="DiskPilot's Developer Tools page: Rust 12.5 GB, Cursor 8.3 GB with 81 workspace folders for projects that no longer exist, Node.js 6.4 GB, Claude Code 1.6 GB with superseded versions, and a check for credentials in AI transcripts."
+                  alt="DiskPilot's Developer Tools page: Rust 12.5 GB, Cursor 8.3 GB with 81 workspace folders for projects that no longer exist, Node.js 6.4 GB, VS Code 905 MB, Python 408 MB, and a link to the AI Agents page."
                 />
               </picture>
             </div>
@@ -651,9 +650,9 @@
             <div>
               <h3>AI tools</h3>
               <ul>
-                <li>Older Claude Code versions, Codex, Gemini CLI, Copilot</li>
-                <li>Ollama and LM Studio models no one uses</li>
-                <li>Hugging Face cache, and Homebrew downloads</li>
+                <li>What Claude Code, Codex, Cursor and Antigravity may do</li>
+                <li>Older agent versions, Gemini CLI and Copilot data</li>
+                <li>Ollama, LM Studio and Hugging Face models no one uses</li>
               </ul>
             </div>
           </div>
@@ -662,8 +661,9 @@
             <p>
               <b>Credentials in AI transcripts.</b> Claude Code, Codex CLI and Gemini CLI keep every
               conversation on disk, including keys that were pasted or printed. DiskPilot can check
-              them for well-known credential formats. The check runs offline and shows only a masked
-              form of each value.
+              them for well-known credential formats, offline, and shows only a masked form of each
+              value. After you confirm, it removes the key from the transcript and keeps the rest,
+              so you can still resume the conversation. Revoke the key with its provider too.
             </p>
           </aside>
         </div>
@@ -802,10 +802,10 @@
                 <img
                   data-shot="cleanup"
                   src="/shots/cleanup-dark.webp"
-                  srcset="/shots/cleanup-dark-1200.webp 1200w, /shots/cleanup-dark.webp 2000w"
+                  srcset="/shots/cleanup-dark-1200.webp 1200w, /shots/cleanup-dark.webp 2200w"
                   sizes="(max-width: 1220px) 100vw, 1180px"
-                  width="2000"
-                  height="691"
+                  width="2200"
+                  height="760"
                   loading="lazy"
                   decoding="async"
                   alt="DiskPilot's Cleanup page: tabs for Likely safe 23.2 GB, Review first 10.3 GB and Keep 11.7 GB, a note that every path is re-checked before anything happens, and selected items such as Rust build output and application caches."
@@ -846,8 +846,14 @@
               <ul>
                 <li>Every scan, size and path</li>
                 <li>Cleanup history and saved results</li>
+                <li>
+                  The list of key files and your labels, encrypted with a key in your Keychain
+                </li>
                 <li>Private folders such as Mail and Messages, which DiskPilot only ever sizes</li>
-                <li>Your files' contents, which DiskPilot only reads on your Mac to find duplicates and tell keys from certificates</li>
+                <li>
+                  Your files' contents, which DiskPilot only reads on your Mac to find duplicates
+                  and tell keys from certificates
+                </li>
               </ul>
             </div>
             <div class="ledger ledger-opt">
