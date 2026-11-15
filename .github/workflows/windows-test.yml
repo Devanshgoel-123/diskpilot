@@ -106,7 +106,15 @@ jobs:
         run: |
           extra=()
           if [ -n "$FEATURES" ]; then extra=(--features "$FEATURES"); fi
-          printf '{"version":"%s","bundle":{"createUpdaterArtifacts":false}}' "$TEST_VERSION" > "$RUNNER_TEMP/test.json"
+          # The CI-only build also opens WebView2's DevTools port itself. Tauri
+          # replaces the windows array whole, so it is copied from the config.
+          node -e '
+            const c = require("./src-tauri/tauri.conf.json");
+            const out = { version: process.env.TEST_VERSION, bundle: { createUpdaterArtifacts: false } };
+            if (process.env.FEATURES) out.app = { windows: c.app.windows.map((w) => ({ ...w,
+              additionalBrowserArgs: "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port=9222 --remote-allow-origins=*" })) };
+            require("fs").writeFileSync(process.env.RUNNER_TEMP + "/test.json", JSON.stringify(out));
+          '
           cat "$RUNNER_TEMP/test.json"
           pnpm tauri build --ci --target "$TARGET" --bundles nsis --config "$RUNNER_TEMP/test.json" "${extra[@]}"
       - name: Name the installer
@@ -199,6 +207,9 @@ jobs:
           if ($app.HasExited) { throw "The tester build exited" }
           if ($title -ne 'DiskPilot') { throw "The tester build opened no DiskPilot window" }
           Stop-Process -Id $app.Id -Force
+          # WebView2's own processes outlive the app; a new launch would reuse
+          # them and ignore its browser arguments.
+          Get-Process msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force
           Start-Sleep 3
           $un = Get-ChildItem $exe.DirectoryName -Filter 'uninstall*.exe' | Select-Object -First 1
           $p = Start-Process $un.FullName -ArgumentList '/S' -Wait -PassThru
