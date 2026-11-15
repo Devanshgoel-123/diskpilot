@@ -4,7 +4,7 @@ h1: Troubleshooting
 nav: Troubleshooting
 description: Fixes for the questions people hit most with DiskPilot: permission prompts, skipped folders, the Trash, updates and Homebrew.
 summary: Permission prompts, skipped folders, the Trash, updates and Homebrew.
-order: 6
+order: 7
 updated: 2026-11-10
 ---
 
