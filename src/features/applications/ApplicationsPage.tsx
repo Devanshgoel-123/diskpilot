@@ -196,7 +196,7 @@ export function ApplicationsPage() {
         description="Installed apps and the data each keeps in your Library."
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1120px] space-y-8 px-6 pt-6 pb-10">
+        <div className="page-content space-y-8">
           {error ? (
             <EmptyState
               icon={AppWindow}

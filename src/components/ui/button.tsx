@@ -17,6 +17,8 @@ const buttonVariants = cva(
         danger:
           "border border-critical/35 text-critical hover:border-critical/60 hover:bg-critical/10",
         positive: "border border-tier-safe/40 text-tier-safe hover:bg-tier-safe/10",
+        /** The fix a row recommends: accent, but quieter than the page's primary. */
+        soft: "bg-accent-soft text-accent hover:bg-[color-mix(in_oklab,var(--accent)_24%,transparent)]",
       },
       size: {
         default: "h-7 px-3",

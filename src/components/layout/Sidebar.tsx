@@ -20,6 +20,8 @@ import { shortcutLabel } from "@/lib/shortcuts";
 import { useApp, type PageId } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { UpdateBanner } from "@/components/layout/UpdateBanner";
+import { useAgents } from "@/features/agents/agentsStore";
+import { useKeys } from "@/features/keys/keysStore";
 
 interface NavItem {
   id: PageId;
@@ -27,6 +29,10 @@ interface NavItem {
   icon: LucideIcon;
   /** Optional count shown at the trailing edge. */
   count?: number;
+  /** What the count means, for the tooltip and screen readers. */
+  countLabel?: string;
+  /** Warn counts are things that need a look, in the review color. */
+  tone?: "warn";
 }
 
 function NavButton({ item }: { item: NavItem }) {
@@ -38,7 +44,15 @@ function NavButton({ item }: { item: NavItem }) {
     <button
       type="button"
       onClick={() => navigate(item.id)}
-      title={shortcutLabel(item.id) ? `${item.label} (${shortcutLabel(item.id)})` : undefined}
+      title={
+        [
+          item.label,
+          shortcutLabel(item.id) ? `(${shortcutLabel(item.id)})` : null,
+          item.count && item.countLabel ? `· ${item.countLabel}` : null,
+        ]
+          .filter(Boolean)
+          .join(" ") || undefined
+      }
       aria-keyshortcuts={shortcutLabel(item.id)?.replace("⌘", "Meta+") ?? undefined}
       aria-current={active ? "page" : undefined}
       className={cn(
@@ -53,7 +67,18 @@ function NavButton({ item }: { item: NavItem }) {
       />
       <span className="min-w-0 flex-1 truncate">{item.label}</span>
       {item.count ? (
-        <span className="tabular text-xs text-subtle-foreground">{item.count}</span>
+        item.tone === "warn" ? (
+          <span className="tabular flex items-center gap-1 text-xs text-tier-review">
+            <span className="size-[5px] rounded-full bg-tier-review" aria-hidden />
+            {item.count}
+            {item.countLabel ? <span className="sr-only"> {item.countLabel}</span> : null}
+          </span>
+        ) : (
+          <span className="tabular text-xs text-subtle-foreground">
+            {item.count}
+            {item.countLabel ? <span className="sr-only"> {item.countLabel}</span> : null}
+          </span>
+        )
       ) : null}
     </button>
   );
@@ -139,12 +164,28 @@ export function Sidebar() {
   const recommendations = useApp((s) => s.recommendations);
   const assistantEnabled = useApp((s) => s.assistantEnabled);
   const cleanupCount = recommendations.filter((r) => r.methods.length > 0).length;
+  // Shown once each page has been opened; neither is read just for the sidebar.
+  const riskyRules = useAgents(
+    (s) =>
+      s.report?.agents
+        .filter((a) => a.detected)
+        .reduce((n, a) => n + a.permissions.filter((p) => p.risk).length, 0) ?? 0,
+  );
+  const exposedKeys = useKeys(
+    (s) => s.report?.files.filter((f) => f.risks.some((r) => r.serious)).length ?? 0,
+  );
 
   // What most people come for first: the summary and the one place to get
   // space back. Then where the space went, then tools for developers.
   const main: NavItem[] = [
     { id: "overview", label: "Overview", icon: Gauge },
-    { id: "recommendations", label: "Cleanup", icon: Sparkles, count: cleanupCount },
+    {
+      id: "recommendations",
+      label: "Cleanup",
+      icon: Sparkles,
+      count: cleanupCount,
+      countLabel: "suggestions you can act on",
+    },
     ...(assistantEnabled ? [{ id: "assistant" as const, label: "Assistant", icon: Bot }] : []),
   ];
   const findSpace: NavItem[] = [
@@ -153,8 +194,22 @@ export function Sidebar() {
     { id: "applications", label: "Applications", icon: AppWindow },
   ];
   const developers: NavItem[] = [
-    { id: "agents", label: "AI Agents", icon: Blocks },
-    { id: "keys", label: "Keys & secrets", icon: KeyRound },
+    {
+      id: "agents",
+      label: "AI Agents",
+      icon: Blocks,
+      count: riskyRules,
+      countLabel: "settings let agents act without asking",
+      tone: "warn",
+    },
+    {
+      id: "keys",
+      label: "Keys & secrets",
+      icon: KeyRound,
+      count: exposedKeys,
+      countLabel: "key files need attention",
+      tone: "warn",
+    },
     { id: "developer", label: "Developer Tools", icon: Code2 },
     { id: "docker", label: "Docker", icon: Box },
   ];

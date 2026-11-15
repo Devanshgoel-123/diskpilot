@@ -9,6 +9,15 @@
  */
 :root {
   --dp-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  /* Layout and motion: one value per rule in docs/DESIGN.md. */
+  --content-max: 1120px;
+  --gutter: 24px;
+  --header-h: 56px;
+  --row-1: 32px;
+  --row-2: 44px;
+  --dur-fast: 120ms;
+  --dur-mid: 180ms;
+  --dur-sheet: 220ms;
   --background: #ffffff;
   --sidebar: #f5f5f7;
   --panel: #ffffff;
@@ -54,22 +63,24 @@
 }
 
 .dark {
-  --background: #1c1c1e;
-  --sidebar: #161618;
-  --panel: #1c1c1e;
-  --panel-raised: #252528;
-  --hover: #2a2a2d;
-  --selected: #323236;
-  --border: #2e2e31;
-  --border-strong: #3a3a3d;
-  --foreground: #f5f5f7;
-  --muted-foreground: #a1a1a6;
-  --subtle-foreground: #8e8e93;
+  /* Cool near-black. Sidebar and content share one ground, split by a
+     hairline; raised fills and selection step up in small, even amounts. */
+  --background: #111215;
+  --sidebar: #111215;
+  --panel: #111215;
+  --panel-raised: #1a1b1f;
+  --hover: #1c1d22;
+  --selected: #212228;
+  --border: #24262b;
+  --border-strong: #30323a;
+  --foreground: #f4f4f6;
+  --muted-foreground: #9fa1a8;
+  --subtle-foreground: #8b8d95;
   --accent: #7d7aff;
   --accent-fill: #5e5ce6;
   --accent-foreground: #ffffff;
-  --accent-soft: #2a2950;
-  --track: #2a2a2d;
+  --accent-soft: #25244a;
+  --track: #1f2025;
   --chart-other: #636366;
   --good: #30d158;
   --warning: #ff9f0a;
@@ -126,6 +137,8 @@
   --color-tier-safe: var(--tier-safe);
   --color-tier-review: var(--tier-review);
   --color-tier-keep: var(--tier-keep);
+  --color-review-soft: color-mix(in oklab, var(--tier-review) 11%, transparent);
+  --color-safe-soft: color-mix(in oklab, var(--tier-safe) 11%, transparent);
 
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;
@@ -185,6 +198,15 @@
   }
   ::-webkit-scrollbar-track {
     background: transparent;
+  }
+}
+
+@layer components {
+  /* The content column every page uses, so nothing shifts between pages. */
+  .page-content {
+    margin-inline: auto;
+    max-width: var(--content-max);
+    padding: var(--gutter) var(--gutter) 40px;
   }
 }
 
