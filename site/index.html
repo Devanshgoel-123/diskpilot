@@ -881,8 +881,8 @@
               <h3>Checkable</h3>
               <ul>
                 <li>Open source under the MIT license</li>
-                <li>Every release is built from its tag by GitHub Actions</li>
-                <li>Each download carries a signed record of the commit that built it</li>
+                <li>Signed with a Developer ID and notarized by Apple</li>
+                <li>Every release lists the SHA-256 checksum of its download</li>
               </ul>
             </div>
           </div>
@@ -1031,12 +1031,15 @@ brew install --cask diskpilot</code></pre>
             <div>
               <h3>Check the download</h3>
               <p>
-                Each release lists its SHA-256 checksum and a signed record of how it was built.
-                With the GitHub CLI:
+                Each release lists its SHA-256 checksum. The app and the disk image are signed with
+                a Developer ID and notarized by Apple, which macOS checks when you open them; you
+                can check both yourself. Releases built by GitHub Actions also carry a build record
+                that
+                <code>gh attestation verify</code> checks.
               </p>
             </div>
             <pre><code>shasum -a 256 DiskPilot.dmg
-gh attestation verify DiskPilot.dmg -R Devanshgoel-123/diskpilot</code></pre>
+spctl --assess --type open --context context:primary-signature -v DiskPilot.dmg</code></pre>
           </div>
           <p class="note">
             Prefer to build it yourself? The

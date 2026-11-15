@@ -1,6 +1,6 @@
 # Releasing DiskPilot
 
-Releases are built on GitHub Actions from a tag, never from a local machine.
+Releases are normally built on GitHub Actions from a tag. `scripts/release-local.sh` builds, notarizes and uploads the same files from a Mac; a release built that way has no GitHub build attestation, and its notes must say so.
 
 ## Where work happens
 
