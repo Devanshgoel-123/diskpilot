@@ -2,6 +2,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   AlertTriangle,
   Blocks,
+  Bot,
   Loader2,
   MessageSquarePlus,
   RefreshCw,
@@ -26,7 +27,7 @@ import {
 import { Panel } from "@/components/ui/panel";
 import { formatBytes, formatCount, formatRelative } from "@/lib/format";
 import { useApp } from "@/lib/store";
-import type { AgentReport } from "@/lib/types";
+import type { AgentReport, ToolReport } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 import {
@@ -48,7 +49,11 @@ const AGENT_APP: Record<string, string> = {
   codex: "/Applications/Codex.app",
   cursor: "/Applications/Cursor.app",
   antigravity: "/Applications/Antigravity.app",
+  "claude-desktop": "/Applications/Claude.app",
 };
+
+/** Rail entries for other AI tools are selected as `tool:<id>`. */
+const TOOL_PREFIX = "tool:";
 
 const REPO_ISSUES = "https://github.com/Devanshgoel-123/diskpilot/issues/new";
 const REQUESTABLE = ["Windsurf", "GitHub Copilot", "Gemini CLI", "Cline", "Zed", "Kiro"];
@@ -64,11 +69,14 @@ export function AgentLogo({ id, size = "md" }: { id: string; size?: "sm" | "md" 
         box,
       )}
     >
-      {BrandMark({ id, className: mark }) ?? (
-        <span className="text-xs font-semibold text-muted-foreground">
-          {id.charAt(0).toUpperCase()}
-        </span>
-      )}
+      {BrandMark({ id, className: mark }) ??
+        (id === "ai-agents" ? (
+          <Bot className={cn(mark, "text-muted-foreground")} strokeWidth={1.75} aria-hidden />
+        ) : null) ?? (
+          <span className="text-xs font-semibold text-muted-foreground">
+            {id.charAt(0).toUpperCase()}
+          </span>
+        )}
     </span>
   );
   const app = AGENT_APP[id];
@@ -266,13 +274,74 @@ function Posture({ agent }: { agent: AgentReport }) {
   );
 }
 
-/** Every agent on this Mac, with how many of its settings need a look. */
-function AgentList({
+/** The Claude app, Copilot and other agent CLIs, from the Developer Tools analysis. */
+function useOtherTools(): ToolReport[] {
+  return useApp(
+    useShallow((s) =>
+      (s.devtools?.tools ?? []).filter(
+        (t) => t.detected && AGENT_TOOL_IDS.has(t.id) && !MAIN_AGENT_IDS.has(t.id),
+      ),
+    ),
+  );
+}
+
+function RailItem({
+  id,
+  name,
+  detail,
+  on,
+  risky,
+  onSelect,
+}: {
+  id: string;
+  name: string;
+  detail: string;
+  on: boolean;
+  risky?: number;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={on}
+      onClick={onSelect}
+      className={cn(
+        "flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left transition-colors duration-[120ms]",
+        on ? "bg-selected" : "hover:bg-hover",
+      )}
+    >
+      <AgentLogo id={id} size="sm" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13px] font-medium">{name}</span>
+        <span className="block truncate font-mono text-2xs text-subtle-foreground">{detail}</span>
+      </span>
+      {risky ? (
+        <span
+          className="tabular flex items-center gap-1 text-xs text-tier-review"
+          title={`${risky} need${risky === 1 ? "s" : ""} a look`}
+        >
+          <span className="size-[5px] rounded-full bg-tier-review" aria-hidden />
+          {risky}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+/**
+ * Every agent on this Mac, with how many of its settings need a look, then
+ * the other AI tools whose storage DiskPilot knows. Stays in view while the
+ * selected one scrolls.
+ */
+function AgentRail({
   agents,
+  tools,
   selected,
   onSelect,
 }: {
   agents: AgentReport[];
+  tools: ToolReport[];
   selected: string;
   onSelect: (id: string) => void;
 }) {
@@ -282,47 +351,47 @@ function AgentList({
   const riskyTotal = agents.reduce((n, a) => n + a.permissions.filter((p) => p.risk).length, 0);
   const riskyAgents = agents.filter((a) => a.permissions.some((p) => p.risk)).length;
   return (
-    <div className="space-y-3">
-      <p className="px-2 text-2xs font-semibold text-subtle-foreground">On this Mac</p>
-      <div role="radiogroup" aria-label="Agent" className="space-y-px">
-        {agents.map((a) => {
-          const risky = a.permissions.filter((p) => p.risk).length;
-          const on = a.id === selected;
-          return (
-            <button
-              key={a.id}
-              type="button"
-              role="radio"
-              aria-checked={on}
-              onClick={() => onSelect(a.id)}
-              className={cn(
-                "flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left transition-colors duration-[120ms]",
-                on ? "bg-selected" : "hover:bg-hover",
-              )}
-            >
-              <AgentLogo id={a.id} size="sm" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-medium">{a.name}</span>
-                <span className="block truncate font-mono text-2xs text-subtle-foreground">
-                  {[a.version, formatBytes(a.totalBytes)].filter(Boolean).join(" · ")}
-                </span>
-              </span>
-              {risky ? (
-                <span
-                  className="tabular flex items-center gap-1 text-xs text-tier-review"
-                  title={`${risky} need${risky === 1 ? "s" : ""} a look`}
-                >
-                  <span className="size-[5px] rounded-full bg-tier-review" aria-hidden />
-                  {risky}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
+    <nav aria-label="Agents" className="space-y-4 md:sticky md:top-0 md:self-start">
+      <div role="radiogroup" aria-label="Agent" className="space-y-4">
+        <div className="space-y-1">
+          <p className="px-2 text-2xs font-semibold text-subtle-foreground">Coding agents</p>
+          <div className="space-y-px">
+            {agents.map((a) => (
+              <RailItem
+                key={a.id}
+                id={a.id}
+                name={a.name}
+                detail={[a.version, formatBytes(a.totalBytes)].filter(Boolean).join(" · ")}
+                on={a.id === selected}
+                risky={a.permissions.filter((p) => p.risk).length}
+                onSelect={() => onSelect(a.id)}
+              />
+            ))}
+          </div>
+          {missing.length ? (
+            <p className="px-2 pt-1 text-2xs text-subtle-foreground">
+              Not installed: {missing.join(", ")}
+            </p>
+          ) : null}
+        </div>
+        {tools.length ? (
+          <div className="space-y-1">
+            <p className="px-2 text-2xs font-semibold text-subtle-foreground">Other AI tools</p>
+            <div className="space-y-px">
+              {tools.map((t) => (
+                <RailItem
+                  key={t.id}
+                  id={t.id}
+                  name={t.name}
+                  detail={[t.version, formatBytes(t.totalBytes)].filter(Boolean).join(" · ")}
+                  on={selected === TOOL_PREFIX + t.id}
+                  onSelect={() => onSelect(TOOL_PREFIX + t.id)}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
-      {missing.length ? (
-        <p className="px-2 text-2xs text-subtle-foreground">Not installed: {missing.join(", ")}</p>
-      ) : null}
       {riskyTotal ? (
         <p className="mx-2 border-t border-border pt-3 text-xs text-muted-foreground">
           <span className="tabular font-medium text-tier-review">{formatCount(riskyTotal)}</span>{" "}
@@ -330,36 +399,22 @@ function AgentList({
           {riskyAgents} of {agents.length} agents.
         </p>
       ) : null}
-    </div>
+    </nav>
   );
 }
 
-/** The Claude app, Copilot and other agent CLIs: their storage, from Developer Tools. */
-function OtherAgentTools() {
-  const tools = useApp(
-    useShallow((s) =>
-      (s.devtools?.tools ?? []).filter(
-        (t) => t.detected && AGENT_TOOL_IDS.has(t.id) && !MAIN_AGENT_IDS.has(t.id),
-      ),
-    ),
-  );
+/** An AI tool without its own settings view: what it stores and what can go. */
+function ToolDetail({ tool }: { tool: ToolReport }) {
   const reviewable = useReviewable();
   const review = useApp((s) => s.reviewInRecommendations);
-  if (!tools.length) return null;
   return (
-    <section className="space-y-2">
-      <div>
-        <h2 className="text-[13px] font-semibold">Other AI tools on this Mac</h2>
-        <p className="text-xs text-muted-foreground">
-          What they store, and what can be cleaned up.
-        </p>
-      </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {tools.map((t) => (
-          <ToolCard key={t.id} tool={t} reviewable={reviewable} onReview={review} />
-        ))}
-      </div>
-    </section>
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        What this takes up on this Mac and what can be cleaned up. DiskPilot doesn&apos;t read its
+        settings.
+      </p>
+      <ToolCard key={tool.id} tool={tool} reviewable={reviewable} onReview={review} defaultOpen />
+    </div>
   );
 }
 
@@ -461,7 +516,12 @@ export function AgentsPage() {
   }, [devtoolsReady, analyzeDevTools]);
 
   const detected = useMemo(() => report?.agents.filter((a) => a.detected) ?? [], [report]);
-  const agent = detected.find((a) => a.id === selected) ?? detected[0] ?? null;
+  const tools = useOtherTools();
+  const tool = selected?.startsWith(TOOL_PREFIX)
+    ? (tools.find((t) => TOOL_PREFIX + t.id === selected) ?? null)
+    : null;
+  const agent = tool ? null : (detected.find((a) => a.id === selected) ?? detected[0] ?? null);
+  const showRail = detected.length + tools.length > 1;
 
   return (
     <>
@@ -510,76 +570,94 @@ export function AgentsPage() {
                 description="Reads the settings of the coding agents on this Mac. Nothing is changed."
               />
             </Panel>
-          ) : !agent ? (
-            <Panel>
-              <EmptyState
-                icon={Blocks}
-                title="No coding agents found"
-                description="DiskPilot supports Claude Code, Codex, Cursor and Antigravity."
-              />
-            </Panel>
           ) : (
-            <div
-              className={cn(
-                "grid gap-7",
-                detected.length > 1 && "md:grid-cols-[208px_minmax(0,1fr)]",
-              )}
-            >
-              {detected.length > 1 ? (
-                <AgentList agents={detected} selected={agent.id} onSelect={select} />
+            <div className={cn("grid gap-8", showRail && "md:grid-cols-[208px_minmax(0,1fr)]")}>
+              {showRail ? (
+                <AgentRail
+                  agents={detected}
+                  tools={tools}
+                  selected={tool ? TOOL_PREFIX + tool.id : (agent?.id ?? "")}
+                  onSelect={select}
+                />
               ) : null}
-              <div className="min-w-0 space-y-4">
-                <div className="flex items-center gap-3">
-                  <AgentLogo id={agent.id} size="md" />
-                  <div className="min-w-0">
-                    <h2 className="text-[17px] leading-[22px] font-semibold tracking-tight">
-                      {agent.name}
-                    </h2>
-                    <p className="truncate font-mono text-2xs text-subtle-foreground">
-                      {[
-                        agent.version,
-                        `${formatBytes(agent.totalBytes)} on disk`,
-                        agent.permissions[0]?.source,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </p>
-                  </div>
-                </div>
-                <Posture agent={agent} />
-                <SectionTabs agent={agent} />
-                <div
-                  id="agent-tabpanel"
-                  role="tabpanel"
-                  aria-labelledby={`agent-tab-${tab}`}
-                  className="pt-1"
-                >
-                  {tab === "permissions" ? (
-                    <PermissionsList agent={agent} onConfirm={setConfirm} />
-                  ) : tab === "connections" ? (
-                    <ConnectionsList
-                      agent={agent}
-                      disconnected={report.disconnected.filter((d) => d.agent === agent.id)}
-                      onConfirm={setConfirm}
+              <div className="min-w-0 space-y-8">
+                {tool ? (
+                  <section aria-label={tool.name} className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <AgentLogo id={tool.id} size="md" />
+                      <div className="min-w-0">
+                        <h2 className="text-[17px] leading-[22px] font-semibold tracking-tight">
+                          {tool.name}
+                        </h2>
+                        <p className="truncate font-mono text-2xs text-subtle-foreground">
+                          {[tool.version, `${formatBytes(tool.totalBytes)} on disk`]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                      </div>
+                    </div>
+                    <ToolDetail tool={tool} />
+                  </section>
+                ) : agent ? (
+                  <section aria-label={agent.name} className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <AgentLogo id={agent.id} size="md" />
+                      <div className="min-w-0">
+                        <h2 className="text-[17px] leading-[22px] font-semibold tracking-tight">
+                          {agent.name}
+                        </h2>
+                        <p className="truncate font-mono text-2xs text-subtle-foreground">
+                          {[
+                            agent.version,
+                            `${formatBytes(agent.totalBytes)} on disk`,
+                            agent.permissions[0]?.source,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                      </div>
+                    </div>
+                    <Posture agent={agent} />
+                    <SectionTabs agent={agent} />
+                    <div
+                      id="agent-tabpanel"
+                      role="tabpanel"
+                      aria-labelledby={`agent-tab-${tab}`}
+                      className="pt-1"
+                    >
+                      {tab === "permissions" ? (
+                        <PermissionsList agent={agent} onConfirm={setConfirm} />
+                      ) : tab === "connections" ? (
+                        <ConnectionsList
+                          agent={agent}
+                          disconnected={report.disconnected.filter((d) => d.agent === agent.id)}
+                          onConfirm={setConfirm}
+                        />
+                      ) : tab === "plugins" ? (
+                        <PluginsList agent={agent} onConfirm={setConfirm} />
+                      ) : tab === "skills" ? (
+                        <SkillsList agent={agent} onConfirm={setConfirm} />
+                      ) : (
+                        <CleanupList agent={agent} />
+                      )}
+                    </div>
+                  </section>
+                ) : (
+                  <Panel>
+                    <EmptyState
+                      icon={Blocks}
+                      title="No coding agents found"
+                      description="DiskPilot supports Claude Code, Codex, Cursor and Antigravity."
                     />
-                  ) : tab === "plugins" ? (
-                    <PluginsList agent={agent} onConfirm={setConfirm} />
-                  ) : tab === "skills" ? (
-                    <SkillsList agent={agent} onConfirm={setConfirm} />
-                  ) : (
-                    <CleanupList agent={agent} />
-                  )}
+                  </Panel>
+                )}
+                <div className="space-y-3">
+                  <TranscriptSecrets />
+                  <RequestAgent />
                 </div>
               </div>
             </div>
           )}
-          {report ? (
-            <>
-              <OtherAgentTools />
-              <TranscriptSecrets />
-              <RequestAgent />
-            </>
-          ) : null}
         </div>
       </div>
       <ConfirmDialog confirm={confirm} onClose={() => setConfirm(null)} />
