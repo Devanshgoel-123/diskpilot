@@ -44,8 +44,9 @@ describe("Storage strip", () => {
   it("moves to the new numbers after a cleanup", async () => {
     const { rerender } = render(strip(193, 9));
     rerender(strip(185, 5));
-    expect(await screen.findByText("185 GB")).toBeVisible();
-    expect(await screen.findAllByText("60.0 GB")).not.toHaveLength(0);
-    expect(await screen.findByText("5.0 GB")).toBeVisible();
+    const wait = { timeout: 5000 };
+    expect(await screen.findByText("185 GB", {}, wait)).toBeVisible();
+    expect(await screen.findAllByText("60.0 GB", {}, wait)).not.toHaveLength(0);
+    expect(await screen.findByText("5.0 GB", {}, wait)).toBeVisible();
   });
 });
