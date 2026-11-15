@@ -1,6 +1,7 @@
 import type * as React from "react";
 
 import { ScanControl } from "./ScanControl";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function PageHeader({
   title,
@@ -25,6 +26,7 @@ export function PageHeader({
       <div className="flex shrink-0 items-center gap-2">
         {actions}
         <ScanControl />
+        <ThemeToggle />
       </div>
     </header>
   );
