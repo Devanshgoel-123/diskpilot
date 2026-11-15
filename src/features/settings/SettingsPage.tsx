@@ -243,7 +243,7 @@ function SoundsSetting() {
   return (
     <Setting
       label="Sounds"
-      description="A quiet tone while a scan runs, and a soft chime when a scan or cleanup finishes. Never while the window is hidden."
+      description="A soft chime when a scan or cleanup finishes. Never while the window is hidden."
       control={
         <Switch
           on={on}
