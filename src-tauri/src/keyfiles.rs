@@ -380,7 +380,7 @@ fn git_ignored(repo: &Path, path: &Path) -> Option<bool> {
                 let _ = child.wait();
                 return None;
             }
-            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(10)),
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(2)),
             Err(_) => return None,
         }
     }
@@ -412,8 +412,10 @@ pub fn report(
         meta: std::fs::Metadata,
         hash: Option<[u8; 32]>,
     }
+    use rayon::prelude::*;
+    // Each file is read in full for its digest; read them side by side.
     let items: Vec<Item> = found
-        .iter()
+        .par_iter()
         .filter_map(|f| {
             // Never follow links: a link is not where the key is.
             let meta = f.path.symlink_metadata().ok()?;
@@ -438,9 +440,20 @@ pub fn report(
         }
     }
     let share_dirs = ["Downloads", "Desktop", "Documents"].map(|d| home.join(d));
+    // Asking git is one process per file; ask for all of them side by side.
+    // Outer None: not a secret in a git project. Inner: git's answer.
+    let git: Vec<Option<Option<bool>>> = items
+        .par_iter()
+        .map(|i| {
+            if !i.found.kind.secret() {
+                return None;
+            }
+            in_git_project(&i.found.path, home).map(|repo| git_ignored(&repo, &i.found.path))
+        })
+        .collect();
 
     let mut files = Vec::with_capacity(items.len());
-    for i in &items {
+    for (i, git) in items.iter().zip(git) {
         let path = &i.found.path;
         let kind = i.found.kind;
         let mode = i.meta.permissions().mode();
@@ -468,23 +481,18 @@ pub fn report(
                 });
             }
         }
-        if kind.secret() {
-            if let Some(repo) = in_git_project(path, home) {
-                match git_ignored(&repo, path) {
-                    Some(true) => {}
-                    Some(false) => risks.push(Risk {
-                        kind: RiskKind::InGitProject,
-                        text: "In a git project and not in .gitignore, so it could be committed."
-                            .into(),
-                        serious: true,
-                    }),
-                    None => risks.push(Risk {
-                        kind: RiskKind::InGitProject,
-                        text: "In a git project. Check that .gitignore covers it.".into(),
-                        serious: false,
-                    }),
-                }
-            }
+        match git {
+            None | Some(Some(true)) => {}
+            Some(Some(false)) => risks.push(Risk {
+                kind: RiskKind::InGitProject,
+                text: "In a git project and not in .gitignore, so it could be committed.".into(),
+                serious: true,
+            }),
+            Some(None) => risks.push(Risk {
+                kind: RiskKind::InGitProject,
+                text: "In a git project. Check that .gitignore covers it.".into(),
+                serious: false,
+            }),
         }
         if let Some(n) = i.hash.and_then(|h| copies.get(&h)).filter(|n| **n > 1) {
             risks.push(Risk {

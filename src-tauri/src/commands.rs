@@ -271,11 +271,6 @@ fn run_scan(app: AppHandle, opts: ScanOptions, cancel: Arc<AtomicBool>) {
                 state.plans().clear();
             }
             saved = Some(outcome);
-            // Keep the key files this scan found in the encrypted list, so
-            // they are there after a restart (the saved scan never has them).
-            if let Err(e) = keys_run(&state, |_, _| Ok(())) {
-                eprintln!("keys: could not update the encrypted list: {e}");
-            }
             (ScanStatus::Completed, None, record)
         }
         Err(err) => {
@@ -324,9 +319,18 @@ fn run_scan(app: AppHandle, opts: ScanOptions, cancel: Arc<AtomicBool>) {
         },
     );
     // Save after telling the UI, so a large index doesn't delay the results.
+    let completed = saved.is_some();
     if let (Some(outcome), Some(dir)) = (saved, &state.data_dir) {
         if let Err(e) = snapshot::save(dir, &outcome) {
             eprintln!("diskpilot: could not save scan results: {e}");
+        }
+    }
+    // Keep the key files this scan found in the encrypted list, so they are
+    // there after a restart (the saved scan never has them). This reads the
+    // Keychain and checks each file, so it waits until the results are shown.
+    if completed {
+        if let Err(e) = keys_run(&state, |_, _| Ok(())) {
+            eprintln!("keys: could not update the encrypted list: {e}");
         }
     }
 }
