@@ -1,23 +1,28 @@
 name: Windows test build
 
 # A Windows installer for testers, built from a test/windows-* branch: runs
-# the Rust and frontend tests on Windows, builds the NSIS installers (x64 and
-# arm64), checks that the x64 one installs and opens on a clean runner, and
-# drives the app (.github/smoke/windows-smoke.mjs), then uploads the
-# installers as run artifacts. Release builds turn WebView2's DevTools off,
-# which also closes the port the smoke test drives the app through, so the
-# driving uses a third, CI-only x64 build with the smoke-test feature
-# (DevTools on). Testers only get the two regular installers. It creates no release or tag, does not touch the update feed
+# the Rust and frontend tests on Windows, builds the NSIS installer (x64, and
+# arm64 when asked), checks that the x64 one installs, opens and uninstalls
+# on a clean runner, and drives the app (.github/smoke/windows-smoke.mjs).
+# Release builds turn WebView2's DevTools off, which also closes the port the
+# smoke test drives the app through, so the driving uses a CI-only x64 build
+# with the smoke-test feature (DevTools on); testers only get the regular
+# installers. It creates no release or tag, does not touch the update feed
 # (latest.json) and uses no secrets, so the installers are unsigned.
+#
+# Started by hand only (Actions tab, or `gh workflow run windows-test.yml
+# --ref <branch>`), so pushes don't spend runner time.
 on:
-  push:
-    branches: ["test/windows-*"]
   workflow_dispatch:
     inputs:
       version:
         description: Version shown in the test build
         required: false
         default: "0.6.6"
+      arm64:
+        description: Also build the arm64 installer
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -67,15 +72,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target: x86_64-pc-windows-msvc
-            arch: x64
-          - target: aarch64-pc-windows-msvc
-            arch: arm64
-          - target: x86_64-pc-windows-msvc
-            arch: x64-devtools
-            features: smoke-test
-            artifact: ci-only-DiskPilot-windows-x64-devtools
+        # arm64 only when asked for.
+        include: ${{ fromJSON(inputs.arm64 && '[{"target":"x86_64-pc-windows-msvc","arch":"x64"},{"target":"x86_64-pc-windows-msvc","arch":"x64-devtools","features":"smoke-test","artifact":"ci-only-DiskPilot-windows-x64-devtools"},{"target":"aarch64-pc-windows-msvc","arch":"arm64"}]' || '[{"target":"x86_64-pc-windows-msvc","arch":"x64"},{"target":"x86_64-pc-windows-msvc","arch":"x64-devtools","features":"smoke-test","artifact":"ci-only-DiskPilot-windows-x64-devtools"}]') }}
     defaults:
       run:
         shell: bash
