@@ -156,6 +156,7 @@ pub fn run() {
             commands::open_full_disk_access_settings,
             commands::get_full_disk_access,
             commands::check_ai_transcripts,
+            commands::remove_transcript_secrets,
             commands::find_duplicates,
             commands::cancel_find_duplicates,
             commands::get_duplicates,

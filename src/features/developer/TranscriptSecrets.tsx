@@ -2,11 +2,22 @@ import { FolderOpen, KeyRound, Loader2, ShieldCheck } from "lucide-react";
 import { type CSSProperties, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Panel } from "@/components/ui/panel";
 import { api, errorMessage } from "@/lib/api";
 import { formatBytes, formatCount, formatRelative, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
-import type { SecretsReport } from "@/lib/types";
+import type { SecretsReport, TranscriptFinding } from "@/lib/types";
+
+/** Matches the backend: a transcript used this recently may still be open. */
+const OPEN_WINDOW_MS = 2 * 60 * 1000;
 
 /**
  * Offline check for API keys, tokens and private keys that ended up in AI
@@ -17,6 +28,21 @@ export function TranscriptSecrets() {
   const [report, setReport] = useState<SecretsReport | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<TranscriptFinding | null>(null);
+  const [removing, setRemoving] = useState(false);
+
+  const remove = async (f: TranscriptFinding) => {
+    setRemoving(true);
+    setError(null);
+    try {
+      setReport(await api.removeTranscriptSecrets(f.path));
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setRemoving(false);
+      setConfirm(null);
+    }
+  };
 
   const check = async () => {
     setRunning(true);
@@ -64,8 +90,8 @@ export function TranscriptSecrets() {
               <p className="text-xs">
                 {formatCount(total)} possible credential{total === 1 ? "" : "s"} in{" "}
                 {formatCount(found.length)} of {formatCount(report.filesChecked)} transcript files.
-                Revoke and replace each key with its provider: removing the transcript does not undo
-                a leak.
+                Revoke and replace each key with its provider: removing it from the transcript does
+                not undo a leak.
               </p>
               <ul className="mt-2 divide-y divide-border rounded-lg border border-border">
                 {found.map((f) => (
@@ -78,6 +104,11 @@ export function TranscriptSecrets() {
                       <span className="shrink-0 text-2xs text-subtle-foreground">
                         {formatRelative(f.modifiedMs)}
                       </span>
+                      <RemoveButton
+                        finding={f}
+                        checkedAtMs={report.generatedAtMs}
+                        onClick={() => setConfirm(f)}
+                      />
                       <button
                         type="button"
                         onClick={() => void api.revealInFinder(f.path)}
@@ -113,6 +144,69 @@ export function TranscriptSecrets() {
           )}
         </div>
       ) : null}
+      <Dialog open={!!confirm} onOpenChange={(o) => !o && !removing && setConfirm(null)}>
+        <DialogContent className="w-[min(460px,calc(100vw-32px))]" showClose={!removing}>
+          {confirm ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Remove keys from this transcript?</DialogTitle>
+                <DialogDescription asChild>
+                  <div className="space-y-2">
+                    <p>
+                      DiskPilot replaces {confirm.matches.length === 1 ? "the key" : "each key"} in{" "}
+                      <span className="font-mono text-2xs">{tildify(confirm.path, home)}</span> with
+                      “[removed by DiskPilot]”. The rest of the conversation stays, and you can
+                      still resume it.
+                    </p>
+                    <p>
+                      No copy of the old file is kept, so this can’t be undone. Anyone or anything
+                      that already read the key still has it: revoke it with its provider too.
+                    </p>
+                  </div>
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="secondary" onClick={() => setConfirm(null)} disabled={removing}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={removing}
+                  onClick={() => void remove(confirm)}
+                >
+                  {removing ? <Loader2 className="animate-spin" aria-hidden /> : null}
+                  Remove keys
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </Panel>
+  );
+}
+
+function RemoveButton({
+  finding,
+  checkedAtMs,
+  onClick,
+}: {
+  finding: TranscriptFinding;
+  /** When the transcripts were checked; the backend checks again on removal. */
+  checkedAtMs: number;
+  onClick: () => void;
+}) {
+  const open = finding.modifiedMs != null && checkedAtMs - finding.modifiedMs < OPEN_WINDOW_MS;
+  return (
+    <Button
+      size="sm"
+      variant="secondary"
+      className="shrink-0"
+      disabled={open}
+      title={open ? "Used in the last two minutes. Close the conversation first." : undefined}
+      onClick={onClick}
+    >
+      Remove keys
+    </Button>
   );
 }

@@ -99,6 +99,8 @@ export const api = {
   openFullDiskAccessSettings: () => invoke<null>("open_full_disk_access_settings"),
 
   checkAiTranscripts: () => invoke<SecretsReport>("check_ai_transcripts"),
+  removeTranscriptSecrets: (path: string) =>
+    invoke<SecretsReport>("remove_transcript_secrets", { path }),
   findDuplicates: (minBytes: number) => invoke<DuplicateReport>("find_duplicates", { minBytes }),
   cancelFindDuplicates: () => invoke<boolean>("cancel_find_duplicates"),
   getDuplicates: () => invoke<DuplicateReport | null>("get_duplicates"),

@@ -5,9 +5,11 @@
 //! them. This module reads those logs line by line and reports where
 //! well-known credential formats appear.
 //!
-//! Nothing leaves the Mac, nothing is changed, and the credentials themselves
-//! are never returned: findings carry only a masked form (a short prefix and
-//! the last four characters) so the user can recognize which key it was.
+//! Nothing leaves the Mac and the credentials themselves are never returned:
+//! findings carry only a masked form (a short prefix and the last four
+//! characters) so the user can recognize which key it was. Checking changes
+//! nothing; `remove_from_file` replaces the keys in one transcript, when the
+//! user asks, with a marker and leaves the rest of the conversation as it was.
 
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -212,10 +214,47 @@ fn looks_real(body: &[u8]) -> bool {
     digits >= 2 && letters >= 4 && distinct >= 10
 }
 
-/// Credentials in one line: (kind, masked form).
-fn scan_line(line: &[u8]) -> Vec<(&'static str, String)> {
-    let mut out = Vec::new();
-    let mut taken: Vec<(usize, usize)> = Vec::new();
+/// One credential in a line: what it is and the bytes it covers.
+struct Span {
+    kind: &'static str,
+    prefix: &'static str,
+    start: usize,
+    /// End of the prefix; the key's body runs from here to `end`.
+    body: usize,
+    end: usize,
+}
+
+/// Where a private key block that starts at `start` ends. Transcripts keep it
+/// inside one JSON string with escaped newlines, so the block ends at its
+/// `-----END … PRIVATE KEY-----` line or, if that was cut off, where the
+/// base64 stops. Never runs past a quote, and never ends between a backslash
+/// and the character it escapes, so the JSON stays valid when it is replaced.
+fn private_key_end(line: &[u8], header_end: usize) -> usize {
+    let window = &line[header_end..line.len().min(header_end + 16 * 1024)];
+    if let Some(e) = find(window, b"-----END ") {
+        if let Some(k) = find(&window[e..], b"PRIVATE KEY-----") {
+            return header_end + e + k + "PRIVATE KEY-----".len();
+        }
+    }
+    let run = window
+        .iter()
+        .take_while(|&&b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'=' | b'\\'))
+        .count();
+    let mut end = header_end + run;
+    let slashes = line[header_end..end]
+        .iter()
+        .rev()
+        .take_while(|&&b| b == b'\\')
+        .count();
+    if slashes % 2 == 1 {
+        end -= 1;
+    }
+    end
+}
+
+/// Credentials in one line, in the order their patterns are listed.
+fn spans(line: &[u8]) -> Vec<Span> {
+    let mut out: Vec<Span> = Vec::new();
     for p in PATTERNS {
         let pre = p.prefix.as_bytes();
         let mut from = 0;
@@ -225,14 +264,21 @@ fn scan_line(line: &[u8]) -> Vec<(&'static str, String)> {
             if start > 0 && token_char(line[start - 1]) {
                 continue; // inside a longer word
             }
-            if taken.iter().any(|&(s, e)| start >= s && start < e) {
+            if out.iter().any(|s| start >= s.start && start < s.end) {
                 continue; // already matched by a more specific prefix
             }
             if p.kind == "Private key" {
                 let rest = &line[from..line.len().min(from + 40)];
-                if find(rest, b"PRIVATE KEY-----").is_some() {
-                    taken.push((start, from));
-                    out.push((p.kind, mask(p.kind, "", "")));
+                if let Some(h) = find(rest, b"PRIVATE KEY-----") {
+                    let header_end = from + h + "PRIVATE KEY-----".len();
+                    out.push(Span {
+                        kind: p.kind,
+                        prefix: p.prefix,
+                        start,
+                        body: from,
+                        end: private_key_end(line, header_end),
+                    });
+                    from = header_end;
                 }
                 continue;
             }
@@ -240,12 +286,27 @@ fn scan_line(line: &[u8]) -> Vec<(&'static str, String)> {
             if len < p.min_len || !looks_real(&line[from..from + len]) {
                 continue;
             }
-            let token = String::from_utf8_lossy(&line[from..from + len]);
-            taken.push((start, from + len));
-            out.push((p.kind, mask(p.kind, p.prefix, &token)));
+            out.push(Span {
+                kind: p.kind,
+                prefix: p.prefix,
+                start,
+                body: from,
+                end: from + len,
+            });
         }
     }
     out
+}
+
+/// Credentials in one line: (kind, masked form).
+fn scan_line(line: &[u8]) -> Vec<(&'static str, String)> {
+    spans(line)
+        .into_iter()
+        .map(|s| {
+            let token = String::from_utf8_lossy(&line[s.body..s.end]);
+            (s.kind, mask(s.kind, s.prefix, &token))
+        })
+        .collect()
 }
 
 fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
@@ -383,6 +444,146 @@ pub fn check(home: &Path, cancel: &AtomicBool) -> SecretsReport {
     }
 }
 
+/// What replaces each key in a transcript. Plain text, so it stays valid
+/// inside a JSON string.
+pub const REMOVED: &str = "[removed by DiskPilot]";
+
+/// A transcript written to this recently may belong to a conversation that is
+/// still open; the agent would keep appending to the file being replaced.
+pub const OPEN_WINDOW_MS: i64 = 2 * 60 * 1000;
+
+#[derive(Debug, thiserror::Error)]
+pub enum RemoveError {
+    #[error("This file is not one of the agent transcripts DiskPilot checks.")]
+    NotATranscript,
+    #[error("This conversation was used in the last two minutes. Close it in the agent, then try again.")]
+    InUse,
+    #[error(
+        "The transcript changed while DiskPilot was working on it. Nothing was changed; try again."
+    )]
+    Changed,
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
+}
+
+/// Is `path` a transcript file inside one of the agents' folders? Both sides
+/// are resolved, so a link cannot point the edit somewhere else.
+fn is_transcript(home: &Path, path: &Path) -> bool {
+    let Ok(meta) = path.symlink_metadata() else {
+        return false;
+    };
+    if !meta.is_file() {
+        return false;
+    }
+    let ext_ok = path
+        .extension()
+        .and_then(|x| x.to_str())
+        .is_some_and(|x| EXTENSIONS.contains(&x));
+    let Ok(real) = path.canonicalize() else {
+        return false;
+    };
+    ext_ok
+        && SOURCES.iter().any(|(_, rel)| {
+            home.join(rel)
+                .canonicalize()
+                .is_ok_and(|root| real == root || real.starts_with(&root))
+        })
+}
+
+/// Replace every credential in one line; returns how many were replaced.
+fn redact_line(line: &[u8], out: &mut Vec<u8>) -> u64 {
+    let mut found = spans(line);
+    if found.is_empty() {
+        out.extend_from_slice(line);
+        return 0;
+    }
+    found.sort_by_key(|s| s.start);
+    let mut at = 0;
+    let mut count = 0;
+    for s in found {
+        if s.start < at {
+            at = at.max(s.end); // overlaps one already replaced
+            continue;
+        }
+        out.extend_from_slice(&line[at..s.start]);
+        out.extend_from_slice(REMOVED.as_bytes());
+        at = s.end;
+        count += 1;
+    }
+    out.extend_from_slice(&line[at..]);
+    count
+}
+
+fn stamp(meta: &std::fs::Metadata) -> (u64, Option<std::time::SystemTime>) {
+    (meta.len(), meta.modified().ok())
+}
+
+/// Replace the credentials in one transcript with [`REMOVED`] and keep
+/// everything else byte for byte. The new file is written next to the old one
+/// and moved over it in one step, keeping its permissions, so the transcript
+/// is never half-written. No copy of the old file is kept: that would keep
+/// the keys. Returns how many keys were replaced.
+pub fn remove_from_file(home: &Path, path: &Path, now: i64) -> Result<u64, RemoveError> {
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+
+    if !is_transcript(home, path) {
+        return Err(RemoveError::NotATranscript);
+    }
+    let before = path.metadata()?;
+    if before
+        .modified()
+        .ok()
+        .and_then(to_ms)
+        .is_some_and(|m| now - m < OPEN_WINDOW_MS)
+    {
+        return Err(RemoveError::InUse);
+    }
+    let dir = path.parent().ok_or(RemoveError::NotATranscript)?;
+    let name = path
+        .file_name()
+        .ok_or(RemoveError::NotATranscript)?
+        .to_string_lossy();
+    let tmp = dir.join(format!(".{name}.diskpilot-{}", std::process::id()));
+
+    let result = (|| -> Result<u64, RemoveError> {
+        let mut reader = BufReader::with_capacity(256 * 1024, File::open(path)?);
+        let mut out = std::io::BufWriter::new(
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&tmp)?,
+        );
+        let mut line = Vec::new();
+        let mut redacted = Vec::new();
+        let mut count = 0;
+        loop {
+            line.clear();
+            if reader.read_until(b'\n', &mut line)? == 0 {
+                break;
+            }
+            redacted.clear();
+            count += redact_line(&line, &mut redacted);
+            out.write_all(&redacted)?;
+        }
+        let file = out.into_inner().map_err(|e| e.into_error())?;
+        file.set_permissions(std::fs::Permissions::from_mode(
+            before.permissions().mode() & 0o7777,
+        ))?;
+        file.sync_all()?;
+        // An agent that appended meanwhile would lose those lines.
+        if stamp(&path.metadata()?) != stamp(&before) {
+            return Err(RemoveError::Changed);
+        }
+        if count > 0 {
+            std::fs::rename(&tmp, path)?;
+        }
+        Ok(count)
+    })();
+    let _ = std::fs::remove_file(&tmp);
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -461,6 +662,83 @@ mod tests {
         assert_eq!(
             (m.kind, m.line, m.occurrences),
             ("Hugging Face token", 2, 2)
+        );
+    }
+
+    fn transcript(home: &Path, body: &str) -> PathBuf {
+        let log = home.join(".claude/projects/-Users-x-app/s1.jsonl");
+        std::fs::create_dir_all(log.parent().unwrap()).unwrap();
+        std::fs::write(&log, body).unwrap();
+        log
+    }
+    const LATER: i64 = i64::MAX / 2;
+
+    #[test]
+    fn removing_replaces_only_the_keys() {
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        let key = fake("hf_", "a1B2c3D4e5F6g7H8i9J0kLmNoPqRsTuVw");
+        let pem = format!(
+            "{}OPENSSH PRIVATE KEY-----\\nb3BlbnNzaC1rZXk\\nAAAA+/==\\n-----END OPENSSH PRIVATE KEY-----",
+            "-----BEGIN "
+        );
+        let body = format!(
+            "{{\"t\":\"use {key} now\"}}\n{{\"t\":\"clean\"}}\n{{\"k\":\"{pem}\",\"n\":1}}\n"
+        );
+        let log = transcript(&home, &body);
+        std::fs::set_permissions(&log, std::os::unix::fs::PermissionsExt::from_mode(0o600))
+            .unwrap();
+
+        assert_eq!(remove_from_file(&home, &log, LATER).unwrap(), 2);
+        let after = std::fs::read_to_string(&log).unwrap();
+        assert_eq!(
+            after,
+            format!("{{\"t\":\"use {REMOVED} now\"}}\n{{\"t\":\"clean\"}}\n{{\"k\":\"{REMOVED}\",\"n\":1}}\n")
+        );
+        for l in after.lines() {
+            serde_json::from_str::<serde_json::Value>(l).unwrap();
+        }
+        let mode = std::os::unix::fs::PermissionsExt::mode(&log.metadata().unwrap().permissions());
+        assert_eq!(mode & 0o777, 0o600);
+        assert!(scan_file(&log, &AtomicBool::new(false)).is_empty());
+    }
+
+    #[test]
+    fn a_cut_off_private_key_is_removed_without_breaking_the_json() {
+        let pem = format!("{}RSA PRIVATE KEY-----\\nMIIEow+/AB\\\"", "-----BEGIN ");
+        let line = format!("{{\"k\":\"{pem} tail\"}}\n");
+        let mut out = Vec::new();
+        assert_eq!(redact_line(line.as_bytes(), &mut out), 1);
+        let text = String::from_utf8(out).unwrap();
+        assert!(!text.contains("MIIE"));
+        serde_json::from_str::<serde_json::Value>(text.trim()).unwrap();
+    }
+
+    #[test]
+    fn removing_refuses_recent_and_outside_files() {
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        let key = fake("hf_", "a1B2c3D4e5F6g7H8i9J0kLmNoPqRsTuVw");
+        let log = transcript(&home, &format!("{key}\n"));
+        assert!(matches!(
+            remove_from_file(&home, &log, now_ms()),
+            Err(RemoveError::InUse)
+        ));
+        let outside = home.join("notes.jsonl");
+        std::fs::write(&outside, format!("{key}\n")).unwrap();
+        assert!(matches!(
+            remove_from_file(&home, &outside, LATER),
+            Err(RemoveError::NotATranscript)
+        ));
+        let link = home.join(".claude/projects/-Users-x-app/link.jsonl");
+        std::os::unix::fs::symlink(&outside, &link).unwrap();
+        assert!(matches!(
+            remove_from_file(&home, &link, LATER),
+            Err(RemoveError::NotATranscript)
+        ));
+        assert_eq!(
+            std::fs::read_to_string(&outside).unwrap(),
+            format!("{key}\n")
         );
     }
 }

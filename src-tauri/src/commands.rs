@@ -1297,6 +1297,22 @@ pub async fn check_ai_transcripts(
     blocking(move || Ok(crate::secrets::check(&home, &AtomicBool::new(false)))).await
 }
 
+/// Replace the credentials found in one transcript with a marker, then check
+/// all transcripts again so the list is current.
+#[tauri::command]
+pub async fn remove_transcript_secrets(
+    state: State<'_, AppState>,
+    path: String,
+) -> AppResult<crate::secrets::SecretsReport> {
+    let home = state.home.clone();
+    blocking(move || {
+        crate::secrets::remove_from_file(&home, Path::new(&path), crate::scanner::now_ms())
+            .map_err(|e| AppError::Other(e.to_string()))?;
+        Ok(crate::secrets::check(&home, &AtomicBool::new(false)))
+    })
+    .await
+}
+
 // ---- Trash ---------------------------------------------------------------
 
 #[derive(Debug, Clone, serde::Serialize)]
