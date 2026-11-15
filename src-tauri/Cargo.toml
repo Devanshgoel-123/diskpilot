@@ -1,6 +1,6 @@
 [package]
 name = "diskpilot"
-version = "0.6.5"
+version = "0.6.6"
 description = "Open-source macOS storage intelligence"
 authors = ["DiskPilot contributors"]
 license = "MIT"
@@ -88,3 +88,8 @@ objc2-app-kit = { version = "0.3", default-features = false, features = ["std", 
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGImage"] }
 objc2-quick-look-thumbnailing = { version = "0.3", default-features = false, features = ["std", "block2", "QLThumbnailGenerator", "QLThumbnailGenerationRequest", "QLThumbnailRepresentation", "objc2-core-graphics", "objc2-core-foundation"] }
 block2 = "0.6"
+
+[features]
+# CI only (.github/workflows/windows-test.yml): keeps WebView2's DevTools on in
+# a release build so the smoke test can drive the app. Never shipped.
+smoke-test = ["tauri/devtools"]
