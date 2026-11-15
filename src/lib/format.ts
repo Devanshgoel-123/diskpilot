@@ -1,14 +1,22 @@
-/** Formatting helpers. Sizes use decimal units (1 GB = 10^9 bytes), like Finder. */
+import { isWindows } from "./platform";
+
+/**
+ * Formatting helpers. Sizes match the system's own: decimal units on macOS
+ * (1 GB = 10^9 bytes), like Finder, and units of 1024 on Windows, which File
+ * Explorer and Settings also label "GB". Otherwise a 492 GB disk here shows
+ * as 458 GB in Windows.
+ */
 
 const UNITS = ["B", "KB", "MB", "GB", "TB", "PB"] as const;
 
 export function formatBytes(bytes: number | null | undefined, digits = 1): string {
   if (bytes == null || !Number.isFinite(bytes)) return "—";
-  if (bytes < 1000) return `${Math.max(0, Math.round(bytes))} B`;
+  const base = isWindows() ? 1024 : 1000;
+  if (bytes < base) return `${Math.max(0, Math.round(bytes))} B`;
   let value = bytes;
   let unit = 0;
-  while (value >= 1000 && unit < UNITS.length - 1) {
-    value /= 1000;
+  while (value >= base && unit < UNITS.length - 1) {
+    value /= base;
     unit += 1;
   }
   const fixed = value >= 100 ? 0 : digits;

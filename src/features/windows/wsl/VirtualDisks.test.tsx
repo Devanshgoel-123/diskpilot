@@ -102,7 +102,7 @@ describe("Virtual disks", () => {
 
     useWsl.setState({ overview: overview([disk()]) });
     rerender(<VirtualDisksSummary />);
-    expect(screen.getByText("28.0 GB")).toBeInTheDocument();
+    expect(screen.getByText("26.1 GB")).toBeInTheDocument(); // 28 billion bytes in Windows units
     screen.getByRole("button", { name: "Review" }).click();
     expect(navigate).toHaveBeenCalledWith("developer");
   });

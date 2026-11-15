@@ -21,16 +21,20 @@ use crate::{disk, tray_icon};
 pub const EVENT_TRAY_NAVIGATE: &str = "tray://navigate";
 const REFRESH: Duration = Duration::from_secs(30);
 
-/// Decimal units, like Finder and the rest of the app.
+/// Units of 1000 on macOS, like Finder, and of 1024 on Windows, like File
+/// Explorer (which also writes "GB"); the same as the app's formatBytes.
+pub const BYTES_PER_UNIT: u64 = if cfg!(windows) { 1024 } else { 1000 };
+
 pub fn format_bytes(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["KB", "MB", "GB", "TB", "PB"];
-    if bytes < 1000 {
+    let base = BYTES_PER_UNIT as f64;
+    if bytes < BYTES_PER_UNIT {
         return format!("{bytes} B");
     }
     let mut value = bytes as f64;
     let mut unit = 0;
-    while value >= 1000.0 && unit < UNITS.len() {
-        value /= 1000.0;
+    while value >= base && unit < UNITS.len() {
+        value /= base;
         unit += 1;
     }
     let digits = if value >= 100.0 { 0 } else { 1 };
@@ -201,12 +205,22 @@ pub fn install<R: Runtime>(app: &AppHandle<R>, home: PathBuf) -> tauri::Result<(
 mod tests {
     use super::*;
 
+    #[cfg(not(windows))]
     #[test]
     fn formats_like_the_interface() {
         assert_eq!(format_bytes(999), "999 B");
         assert_eq!(format_bytes(1_500), "1.5 KB");
         assert_eq!(format_bytes(115_400_000_000), "115 GB");
         assert_eq!(format_bytes(23_160_000_000), "23.2 GB");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn formats_like_windows() {
+        assert_eq!(format_bytes(1023), "1023 B");
+        assert_eq!(format_bytes(1_536), "1.5 KB");
+        assert_eq!(format_bytes(491_800_000_000), "458 GB");
+        assert_eq!(format_bytes(38_100_000_000), "35.5 GB");
     }
 
     #[test]
