@@ -165,10 +165,38 @@ const pages = [
   [",", "settings"],
   ["1", "overview"],
 ];
+// Waits until the page stops showing a loading state (skeletons, spinners,
+// "Analyzing…"), up to `ms`; logs how long it took.
+async function settle(name, ms = 180_000) {
+  const t = Date.now();
+  for (;;) {
+    const loading = await evaluate(
+      "!!document.querySelector('main .animate-pulse, main .animate-spin, [aria-busy=true]') || /Analyzing|Loading|Reading/i.test(document.querySelector('main')?.innerText ?? '')",
+    );
+    if (!loading) break;
+    if (Date.now() - t > ms) {
+      log(`${name}: still loading after ${ms / 1000} s`);
+      return false;
+    }
+    await sleep(2000);
+  }
+  log(`${name}: ready after ${Math.round((Date.now() - t) / 1000)} s`);
+  return true;
+}
+
 for (const [key, name] of pages) {
   await ctrl(key);
+  if (name === "applications" || name === "developer") await settle(name);
   await snap(name);
 }
+
+// Duplicates: run the search on the planted copies.
+await ctrl("3");
+await sleep(800);
+log("find duplicates:", await clickText("/^Find duplicates$/i"));
+await sleep(1500);
+await settle("duplicates");
+await snap("duplicates-found");
 
 // Developer Tools: run the transcript check.
 await ctrl("5");
