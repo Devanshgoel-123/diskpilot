@@ -2,9 +2,12 @@ name: Windows test build
 
 # A Windows installer for testers, built from a test/windows-* branch: runs
 # the Rust and frontend tests on Windows, builds the NSIS installers (x64 and
-# arm64), installs the x64 one on a clean runner and drives the app
-# (.github/smoke/windows-smoke.mjs), then uploads the installers as run
-# artifacts. It creates no release or tag, does not touch the update feed
+# arm64), checks that the x64 one installs and opens on a clean runner, and
+# drives the app (.github/smoke/windows-smoke.mjs), then uploads the
+# installers as run artifacts. Release builds turn WebView2's DevTools off,
+# which also closes the port the smoke test drives the app through, so the
+# driving uses a third, CI-only x64 build with the smoke-test feature
+# (DevTools on). Testers only get the two regular installers. It creates no release or tag, does not touch the update feed
 # (latest.json) and uses no secrets, so the installers are unsigned.
 on:
   push:
@@ -69,6 +72,10 @@ jobs:
             arch: x64
           - target: aarch64-pc-windows-msvc
             arch: arm64
+          - target: x86_64-pc-windows-msvc
+            arch: x64-devtools
+            features: smoke-test
+            artifact: ci-only-DiskPilot-windows-x64-devtools
     defaults:
       run:
         shell: bash
@@ -88,17 +95,20 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: src-tauri
-          key: ${{ matrix.target }}
+          key: ${{ matrix.arch }}
       - run: pnpm install --frozen-lockfile
       # Unsigned, and without updater artifacts: the version is set for this
       # build only, nothing is committed.
       - name: Build the installer
         env:
           TARGET: ${{ matrix.target }}
+          FEATURES: ${{ matrix.features }}
         run: |
+          extra=()
+          if [ -n "$FEATURES" ]; then extra=(--features "$FEATURES"); fi
           printf '{"version":"%s","bundle":{"createUpdaterArtifacts":false}}' "$TEST_VERSION" > "$RUNNER_TEMP/test.json"
           cat "$RUNNER_TEMP/test.json"
-          pnpm tauri build --ci --target "$TARGET" --bundles nsis --config "$RUNNER_TEMP/test.json"
+          pnpm tauri build --ci --target "$TARGET" --bundles nsis --config "$RUNNER_TEMP/test.json" "${extra[@]}"
       - name: Name the installer
         env:
           ARCH: ${{ matrix.arch }}
@@ -112,7 +122,7 @@ jobs:
           sha256sum "$name" | tee "$name.sha256"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: DiskPilot-windows-${{ matrix.arch }}-test-setup
+          name: ${{ matrix.artifact || format('DiskPilot-windows-{0}-test-setup', matrix.arch) }}
           path: out/
           if-no-files-found: error
           retention-days: 14
@@ -133,6 +143,10 @@ jobs:
         with:
           name: DiskPilot-windows-x64-test-setup
           path: installer
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ci-only-DiskPilot-windows-x64-devtools
+          path: installer-devtools
 
       - name: Make things for DiskPilot to find
         shell: pwsh
@@ -159,10 +173,47 @@ jobs:
           Set-Content "$data\signup.json" '{"email":"ci@diskpilot.invalid","signedUpAtMs":1,"sent":true}'
           Get-ChildItem $h -Force | Format-Table Name, Length
 
-      - name: Install
+      - name: The tester installer installs, opens and uninstalls
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force smoke-results | Out-Null
           $setup = Get-ChildItem installer -Filter *-setup.exe | Select-Object -First 1
+          "Tester installer: $($setup.Name)"
+          $p = Start-Process $setup.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "The tester installer failed: $($p.ExitCode)" }
+          $exe = Get-ChildItem "$env:LOCALAPPDATA" -Recurse -Depth 3 -Filter DiskPilot.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw "DiskPilot.exe not found after install" }
+          $version = (Get-Item $exe.FullName).VersionInfo.ProductVersion
+          "Installed version: $version"
+          if ($version -notlike "$env:TEST_VERSION*") { throw "Expected $env:TEST_VERSION, got $version" }
+          $app = Start-Process $exe.FullName -PassThru
+          $title = ''
+          for ($i = 0; $i -lt 30 -and -not $title; $i++) { Start-Sleep 1; $app.Refresh(); $title = $app.MainWindowTitle }
+          "Window title: '$title'"
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          Start-Sleep 5
+          $b = [Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object Drawing.Bitmap $b.Width, $b.Height
+          [Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("smoke-results\00-tester-build.png")
+          if ($app.HasExited) { throw "The tester build exited" }
+          if ($title -ne 'DiskPilot') { throw "The tester build opened no DiskPilot window" }
+          Stop-Process -Id $app.Id -Force
+          Start-Sleep 3
+          $un = Get-ChildItem $exe.DirectoryName -Filter 'uninstall*.exe' | Select-Object -First 1
+          $p = Start-Process $un.FullName -ArgumentList '/S' -Wait -PassThru
+          Start-Sleep 5
+          "Uninstaller exit code: $($p.ExitCode); removed: $(-not (Test-Path $exe.FullName))"
+          if (Test-Path $exe.FullName) { throw "The uninstaller left DiskPilot.exe behind" }
+
+      - name: Install the CI-only build
+        shell: pwsh
+        run: |
+          # The uninstaller may have taken the app's data with it.
+          $data = "$env:APPDATA\dev.diskpilot.app"
+          New-Item -ItemType Directory -Force $data | Out-Null
+          Set-Content "$data\signup.json" '{"email":"ci@diskpilot.invalid","signedUpAtMs":1,"sent":true}'
+          $setup = Get-ChildItem installer-devtools -Filter *-setup.exe | Select-Object -First 1
           "Installer: $($setup.Name) $([math]::Round($setup.Length/1MB,1)) MB"
           $p = Start-Process $setup.FullName -ArgumentList '/S' -Wait -PassThru
           "Installer exit code: $($p.ExitCode)"
@@ -177,12 +228,8 @@ jobs:
       - name: Run and drive the app
         shell: pwsh
         run: |
-          $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222'
-          # The app's own browser arguments can win over the variable; the
-          # per-app WebView2 policy applies either way.
-          $policy = 'HKCU:\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments'
-          New-Item -Path $policy -Force | Out-Null
-          New-ItemProperty -Path $policy -Name (Split-Path $env:EXE -Leaf) -Value '--remote-debugging-port=9222' -PropertyType String -Force | Out-Null
+          # Works because this build keeps DevTools on (the smoke-test feature).
+          $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = '--remote-debugging-port=9222 --remote-allow-origins=*'
           $app = Start-Process $env:EXE -PassThru
           Start-Sleep 5
           "Running: $(-not $app.HasExited)"
