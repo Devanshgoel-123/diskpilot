@@ -167,6 +167,9 @@ mod tests {
         assert!(png || jpeg, "neither PNG nor JPEG");
     }
 
+    // JPEG for opaque thumbnails is a macOS size saving; the Windows shell
+    // hands back bitmaps that are always sent as PNG.
+    #[cfg(target_os = "macos")]
     #[test]
     fn opaque_images_are_jpeg_and_transparent_ones_png() {
         let dir = tempfile::tempdir().unwrap();
