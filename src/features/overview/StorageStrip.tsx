@@ -2,6 +2,7 @@ import { Info } from "lucide-react";
 import { useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useCountUp } from "@/features/trash/useCountUp";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { recoverableByCategory } from "@/lib/analysis";
 import { CATEGORY_META } from "@/lib/categories";
@@ -15,6 +16,14 @@ interface Segment {
   color: string;
   /** Bytes in this segment covered by Likely safe recommendations. */
   recoverable: number;
+}
+
+/** How long the strip takes to move to new numbers, e.g. after a cleanup. */
+const MOVE_MS = 700;
+
+/** Bytes that ease to a new value instead of jumping. Starts on its value. */
+function Bytes({ value }: { value: number }) {
+  return <>{formatBytes(useCountUp(value, MOVE_MS, value))}</>;
 }
 
 const HATCH =
@@ -75,7 +84,7 @@ export function StorageStrip({
             Startup disk
           </h2>
           <p className="tabular mt-1 text-[28px] leading-8 font-semibold tracking-tight">
-            {formatBytes(disk.usedBytes)}
+            <Bytes value={disk.usedBytes} />
             <span className="ml-2 text-[15px] font-normal tracking-normal text-muted-foreground">
               used of {formatBytes(total)}
             </span>
@@ -84,13 +93,13 @@ export function StorageStrip({
         <div className="flex items-end gap-10">
           <Figure
             label="Available"
-            value={formatBytes(disk.availableBytes)}
+            value={<Bytes value={disk.availableBytes} />}
             tip="Space free right now. Finder may show more because it also counts purgeable space, such as local snapshots, that macOS frees on demand."
           />
           {summary ? (
             <Figure
               label="Likely recoverable"
-              value={formatBytes(recoverableTotal)}
+              value={<Bytes value={recoverableTotal} />}
               tone="safe"
               tip="The total of Likely safe recommendations: regenerable data such as caches and build output. Every item is still previewed and confirmed, and goes to the Trash first."
             />
@@ -122,12 +131,17 @@ export function StorageStrip({
                     minWidth: 3,
                     background: s.color,
                     animationDelay: `${i * 40}ms`,
+                    transition: `width ${MOVE_MS}ms var(--dp-ease)`,
                   }}
                 >
                   {s.recoverable > 0 ? (
                     <div
                       className="absolute inset-y-0 right-0"
-                      style={{ width: `${(s.recoverable / s.bytes) * 100}%`, background: HATCH }}
+                      style={{
+                        width: `${(s.recoverable / s.bytes) * 100}%`,
+                        background: HATCH,
+                        transition: `width ${MOVE_MS}ms var(--dp-ease)`,
+                      }}
                     />
                   ) : null}
                 </div>
@@ -153,13 +167,17 @@ export function StorageStrip({
           <li key={s.key} className="flex items-center gap-1.5 text-xs">
             <span className="size-2 rounded-full" style={{ background: s.color }} aria-hidden />
             <span className="text-muted-foreground">{s.label}</span>
-            <span className="tabular">{formatBytes(s.bytes)}</span>
+            <span className="tabular">
+              <Bytes value={s.bytes} />
+            </span>
           </li>
         ))}
         <li className="flex items-center gap-1.5 text-xs">
           <span className="size-2 rounded-full border border-border-strong bg-track" aria-hidden />
           <span className="text-muted-foreground">Available</span>
-          <span className="tabular">{formatBytes(disk.availableBytes)}</span>
+          <span className="tabular">
+            <Bytes value={disk.availableBytes} />
+          </span>
         </li>
         {recoverableTotal > 0 ? (
           <li className="flex items-center gap-1.5 text-xs">
@@ -183,7 +201,7 @@ function Figure({
   tone,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   tip: string;
   tone?: "safe";
 }) {

@@ -11,15 +11,16 @@ export function prefersReducedMotion(): boolean {
 /**
  * A number that eases towards `target` whenever it changes, starting from
  * wherever it is now. It always ends exactly on `target`; with reduced motion
- * it jumps there.
+ * it jumps there. `from` is where the first render starts: 0 counts up on
+ * mount, `target` shows the value straight away and animates only changes.
  */
-export function useCountUp(target: number, durationMs = 650): number {
-  const [value, setValue] = useState(0);
-  const current = useRef(0);
+export function useCountUp(target: number, durationMs = 650, from = 0): number {
+  const [value, setValue] = useState(from);
+  const current = useRef(from);
 
   useEffect(() => {
-    const from = current.current;
-    if (from === target || prefersReducedMotion()) {
+    const start0 = current.current;
+    if (start0 === target || prefersReducedMotion()) {
       current.current = target;
       setValue(target);
       return;
@@ -29,7 +30,7 @@ export function useCountUp(target: number, durationMs = 650): number {
     const step = (now: number) => {
       const t = Math.min(1, (now - start) / durationMs);
       const eased = 1 - Math.pow(1 - t, 3);
-      const next = t >= 1 ? target : from + (target - from) * eased;
+      const next = t >= 1 ? target : start0 + (target - start0) * eased;
       current.current = next;
       setValue(next);
       if (t < 1) frame = requestAnimationFrame(step);
