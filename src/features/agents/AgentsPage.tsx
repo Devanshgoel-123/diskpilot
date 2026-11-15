@@ -1,5 +1,13 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { AlertTriangle, Blocks, Loader2, MessageSquarePlus, RefreshCw, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Blocks,
+  Loader2,
+  MessageSquarePlus,
+  RefreshCw,
+  ShieldCheck,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
@@ -110,7 +118,8 @@ function useStats(agent: AgentReport): Stats {
 
 type Tone = "good" | "warn" | "plain";
 
-function StatTile({
+/** One tab: name and count always; a short note only when it needs a look. */
+function SectionTab({
   id,
   label,
   value,
@@ -134,37 +143,29 @@ function StatTile({
       aria-selected={active}
       aria-controls="agent-tabpanel"
       onClick={() => setTab(id)}
+      title={note}
       className={cn(
-        "min-w-0 rounded-lg border px-3 py-2.5 text-left transition-colors",
+        "-mb-px flex shrink-0 items-center gap-1.5 border-b-2 py-2 text-[13px] transition-colors duration-[120ms]",
         active
-          ? "border-accent bg-[color-mix(in_oklab,var(--accent)_7%,transparent)]"
-          : "border-border hover:bg-hover",
+          ? "border-accent font-medium text-foreground"
+          : "border-transparent text-muted-foreground hover:text-foreground",
       )}
     >
-      <span className="block text-xs text-muted-foreground">{label}</span>
-      <span className="tabular mt-0.5 block text-[20px] leading-7 font-semibold tracking-tight">
-        {value}
-      </span>
-      <span
-        className={cn(
-          "mt-0.5 flex items-center gap-1.5 truncate text-xs",
-          tone === "warn"
-            ? "text-tier-review"
-            : tone === "good"
-              ? "text-tier-safe"
-              : "text-subtle-foreground",
-        )}
-      >
-        {tone === "warn" ? (
-          <span className="size-1.5 shrink-0 rounded-full bg-tier-review" />
-        ) : null}
-        {note}
-      </span>
+      {label}
+      <span className="tabular text-xs font-normal text-subtle-foreground">{value}</span>
+      {tone === "warn" ? (
+        <span className="flex items-center gap-1 text-xs font-normal text-tier-review">
+          <span className="size-[5px] rounded-full bg-tier-review" aria-hidden />
+          {note}
+        </span>
+      ) : (
+        <span className="sr-only">{note}</span>
+      )}
     </button>
   );
 }
 
-function StatTiles({ agent }: { agent: AgentReport }) {
+function SectionTabs({ agent }: { agent: AgentReport }) {
   const s = useStats(agent);
   const extensions = agent.plugins.some((p) => p.kind === "extension");
   const knowsUse = agent.skills.some((k) => k.state !== "unknown");
@@ -172,23 +173,27 @@ function StatTiles({ agent }: { agent: AgentReport }) {
     <div
       role="tablist"
       aria-label={`${agent.name} sections`}
-      className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5"
+      className="flex gap-5 overflow-x-auto border-b border-border"
     >
-      <StatTile
+      <SectionTab
         id="permissions"
         label="Permissions"
         value={formatCount(agent.permissions.length)}
         note={s.risky ? `${s.risky} need${s.risky === 1 ? "s" : ""} a look` : "Nothing risky"}
         tone={s.risky ? "warn" : "good"}
       />
-      <StatTile
+      <SectionTab
         id="connections"
         label="MCP servers"
-        value={formatCount(agent.connections.length)}
+        value={
+          agent.connections.length
+            ? `${formatCount(s.serversOn)} of ${formatCount(agent.connections.length)} on`
+            : "0"
+        }
         note={agent.connections.length ? `${s.serversOn} connected` : "None set up"}
         tone="plain"
       />
-      <StatTile
+      <SectionTab
         id="plugins"
         label={extensions ? "Extensions" : "Plugins"}
         value={formatCount(agent.plugins.length)}
@@ -203,7 +208,7 @@ function StatTiles({ agent }: { agent: AgentReport }) {
         }
         tone={s.unusedPlugins ? "warn" : "plain"}
       />
-      <StatTile
+      <SectionTab
         id="skills"
         label="Skills"
         value={formatCount(agent.skills.length)}
@@ -218,7 +223,7 @@ function StatTiles({ agent }: { agent: AgentReport }) {
         }
         tone={s.inactive ? "warn" : knowsUse && agent.skills.length ? "good" : "plain"}
       />
-      <StatTile
+      <SectionTab
         id="cleanup"
         label="Can free"
         value={s.cleanupCount ? formatBytes(s.cleanupBytes) : "0"}
@@ -227,13 +232,42 @@ function StatTiles({ agent }: { agent: AgentReport }) {
             ? `${s.cleanupCount} item${s.cleanupCount === 1 ? "" : "s"} to review`
             : "Nothing to clean"
         }
-        tone={s.cleanupCount ? "warn" : "good"}
+        tone="plain"
       />
     </div>
   );
 }
 
-function AgentSwitcher({
+/** The one sentence a person should read first about this agent. */
+function Posture({ agent }: { agent: AgentReport }) {
+  const risky = agent.permissions.filter((p) => p.risk).length;
+  if (!risky) {
+    return (
+      <p className="flex items-center gap-2 text-xs text-muted-foreground">
+        <ShieldCheck className="size-3.5 shrink-0 text-tier-safe" aria-hidden />
+        No setting lets {agent.name} act without asking you first.
+      </p>
+    );
+  }
+  return (
+    <div className="flex gap-2.5 rounded-lg bg-review-soft px-3.5 py-3">
+      <AlertTriangle className="mt-px size-4 shrink-0 text-tier-review" aria-hidden />
+      <div className="min-w-0">
+        <p className="text-[13px] font-semibold">
+          {risky === 1 ? "One setting lets" : `${formatCount(risky)} settings let`} {agent.name} act
+          without asking you first.
+        </p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          They&apos;re listed first under Permissions. Removing a rule edits one settings file and
+          saves a copy of it beforehand.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Every agent on this Mac, with how many of its settings need a look. */
+function AgentList({
   agents,
   selected,
   onSelect,
@@ -242,30 +276,60 @@ function AgentSwitcher({
   selected: string;
   onSelect: (id: string) => void;
 }) {
+  const missing = ["Claude Code", "Codex", "Cursor", "Antigravity"].filter(
+    (n) => !agents.some((a) => a.name === n),
+  );
+  const riskyTotal = agents.reduce((n, a) => n + a.permissions.filter((p) => p.risk).length, 0);
+  const riskyAgents = agents.filter((a) => a.permissions.some((p) => p.risk)).length;
   return (
-    <div
-      role="radiogroup"
-      aria-label="Agent"
-      className="inline-flex flex-wrap gap-1 rounded-lg border border-border bg-panel p-1"
-    >
-      {agents.map((a) => (
-        <button
-          key={a.id}
-          type="button"
-          role="radio"
-          aria-checked={a.id === selected}
-          onClick={() => onSelect(a.id)}
-          className={cn(
-            "flex items-center gap-2 rounded-md px-3 py-1.5 text-[13px] transition-colors",
-            a.id === selected
-              ? "bg-panel-raised font-medium text-foreground shadow-sm"
-              : "text-muted-foreground hover:bg-hover hover:text-foreground",
-          )}
-        >
-          <AgentLogo id={a.id} size="sm" />
-          {a.name}
-        </button>
-      ))}
+    <div className="space-y-3">
+      <p className="px-2 text-2xs font-semibold text-subtle-foreground">On this Mac</p>
+      <div role="radiogroup" aria-label="Agent" className="space-y-px">
+        {agents.map((a) => {
+          const risky = a.permissions.filter((p) => p.risk).length;
+          const on = a.id === selected;
+          return (
+            <button
+              key={a.id}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => onSelect(a.id)}
+              className={cn(
+                "flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left transition-colors duration-[120ms]",
+                on ? "bg-selected" : "hover:bg-hover",
+              )}
+            >
+              <AgentLogo id={a.id} size="sm" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-medium">{a.name}</span>
+                <span className="block truncate font-mono text-2xs text-subtle-foreground">
+                  {[a.version, formatBytes(a.totalBytes)].filter(Boolean).join(" · ")}
+                </span>
+              </span>
+              {risky ? (
+                <span
+                  className="tabular flex items-center gap-1 text-xs text-tier-review"
+                  title={`${risky} need${risky === 1 ? "s" : ""} a look`}
+                >
+                  <span className="size-[5px] rounded-full bg-tier-review" aria-hidden />
+                  {risky}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+      {missing.length ? (
+        <p className="px-2 text-2xs text-subtle-foreground">Not installed: {missing.join(", ")}</p>
+      ) : null}
+      {riskyTotal ? (
+        <p className="mx-2 border-t border-border pt-3 text-xs text-muted-foreground">
+          <span className="tabular font-medium text-tier-review">{formatCount(riskyTotal)}</span>{" "}
+          {riskyTotal === 1 ? "setting lets" : "settings let"} agents act without asking, across{" "}
+          {riskyAgents} of {agents.length} agents.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -419,7 +483,7 @@ export function AgentsPage() {
         }
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1180px] space-y-4 px-6 py-5">
+        <div className="page-content space-y-4">
           {error ? (
             <div
               role="alert"
@@ -455,50 +519,59 @@ export function AgentsPage() {
               />
             </Panel>
           ) : (
-            <>
+            <div
+              className={cn(
+                "grid gap-7",
+                detected.length > 1 && "md:grid-cols-[208px_minmax(0,1fr)]",
+              )}
+            >
               {detected.length > 1 ? (
-                <AgentSwitcher agents={detected} selected={agent.id} onSelect={select} />
+                <AgentList agents={detected} selected={agent.id} onSelect={select} />
               ) : null}
-              <Panel className="space-y-4 px-4 py-4">
+              <div className="min-w-0 space-y-4">
                 <div className="flex items-center gap-3">
-                  <AgentLogo id={agent.id} size="lg" />
+                  <AgentLogo id={agent.id} size="md" />
                   <div className="min-w-0">
-                    <h2 className="text-[15px] font-semibold tracking-tight">{agent.name}</h2>
-                    <p className="text-xs text-muted-foreground">
+                    <h2 className="text-[17px] leading-[22px] font-semibold tracking-tight">
+                      {agent.name}
+                    </h2>
+                    <p className="truncate font-mono text-2xs text-subtle-foreground">
                       {[
-                        agent.version ? `Version ${agent.version}` : null,
+                        agent.version,
                         `${formatBytes(agent.totalBytes)} on disk`,
+                        agent.permissions[0]?.source,
                       ]
                         .filter(Boolean)
                         .join(" · ")}
                     </p>
                   </div>
                 </div>
-                <StatTiles agent={agent} />
-              </Panel>
-              <Panel
-                id="agent-tabpanel"
-                role="tabpanel"
-                aria-labelledby={`agent-tab-${tab}`}
-                className="px-4 py-4"
-              >
-                {tab === "permissions" ? (
-                  <PermissionsList agent={agent} onConfirm={setConfirm} />
-                ) : tab === "connections" ? (
-                  <ConnectionsList
-                    agent={agent}
-                    disconnected={report.disconnected.filter((d) => d.agent === agent.id)}
-                    onConfirm={setConfirm}
-                  />
-                ) : tab === "plugins" ? (
-                  <PluginsList agent={agent} onConfirm={setConfirm} />
-                ) : tab === "skills" ? (
-                  <SkillsList agent={agent} onConfirm={setConfirm} />
-                ) : (
-                  <CleanupList agent={agent} />
-                )}
-              </Panel>
-            </>
+                <Posture agent={agent} />
+                <SectionTabs agent={agent} />
+                <div
+                  id="agent-tabpanel"
+                  role="tabpanel"
+                  aria-labelledby={`agent-tab-${tab}`}
+                  className="pt-1"
+                >
+                  {tab === "permissions" ? (
+                    <PermissionsList agent={agent} onConfirm={setConfirm} />
+                  ) : tab === "connections" ? (
+                    <ConnectionsList
+                      agent={agent}
+                      disconnected={report.disconnected.filter((d) => d.agent === agent.id)}
+                      onConfirm={setConfirm}
+                    />
+                  ) : tab === "plugins" ? (
+                    <PluginsList agent={agent} onConfirm={setConfirm} />
+                  ) : tab === "skills" ? (
+                    <SkillsList agent={agent} onConfirm={setConfirm} />
+                  ) : (
+                    <CleanupList agent={agent} />
+                  )}
+                </div>
+              </div>
+            </div>
           )}
           {report ? (
             <>

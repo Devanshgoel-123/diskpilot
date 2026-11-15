@@ -107,7 +107,7 @@ function Row({
     <li
       className={cn(
         "flex min-h-12 items-center gap-4 px-3 py-2",
-        tone === "warn" && "bg-[color-mix(in_oklab,var(--tier-review)_7%,transparent)]",
+        tone === "warn" && "bg-review-soft",
       )}
     >
       <div className="min-w-0 flex-1">
@@ -257,7 +257,6 @@ export function PermissionsList({
           <ActionButton
             busyKey={`perm:${p.id}`}
             variant="ghost"
-            className="text-critical hover:bg-critical/10 hover:text-critical"
             onClick={() => removeOne(p)}
             aria-label={`Remove rule ${p.value}`}
           >
@@ -276,12 +275,9 @@ export function PermissionsList({
           count={risky.length}
           description={`These let ${agent.name} act without asking you first.`}
         >
-          <ul className="space-y-2">
+          <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
             {risky.map((p, i) => (
-              <li
-                key={`${p.value}-${i}`}
-                className="flex items-center gap-3 rounded-lg border border-tier-review/40 bg-[color-mix(in_oklab,var(--tier-review)_7%,transparent)] px-3 py-2.5"
-              >
+              <li key={`${p.value}-${i}`} className="flex min-h-12 items-center gap-3 px-3 py-2.5">
                 <AlertTriangle className="size-4 shrink-0 text-tier-review" aria-hidden />
                 <div className="min-w-0 flex-1">
                   <p className="flex min-w-0 items-center gap-2 text-[13px]">
@@ -305,11 +301,10 @@ export function PermissionsList({
                 {p.id ? (
                   <ActionButton
                     busyKey={`perm:${p.id}`}
-                    variant="danger"
                     onClick={() => removeOne(p)}
                     aria-label={`Remove rule ${p.value}`}
                   >
-                    Remove
+                    Remove…
                   </ActionButton>
                 ) : null}
               </li>
@@ -350,7 +345,7 @@ export function PermissionsList({
           description={`Each time you chose “Yes, don't ask again”, ${agent.name} saved that exact command and now runs it without asking. Most were for one task and can be cleared.`}
           action={
             removableOneTime.length > 1 ? (
-              <ActionButton busyKey="perm:one-time" variant="danger" onClick={removeOneTime}>
+              <ActionButton busyKey="perm:one-time" onClick={removeOneTime}>
                 Clear all {removableOneTime.length}
               </ActionButton>
             ) : null
@@ -460,7 +455,6 @@ export function ConnectionsList({
                   ) : (
                     <ActionButton
                       busyKey={`conn:${c.id}`}
-                      variant="danger"
                       aria-label={`Disconnect ${c.name}`}
                       onClick={() =>
                         onConfirm({
@@ -875,7 +869,6 @@ export function SkillsList({
                       p.enabled === true && st.inactive === st.total ? (
                         <ActionButton
                           busyKey={`plugin:${p.id}`}
-                          variant="danger"
                           onClick={() => setPlugin(p, false, st)}
                         >
                           Turn off plugin

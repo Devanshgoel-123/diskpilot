@@ -60,18 +60,16 @@ const PAGE_SIZE = 12;
 
 const needsAttention = (f: KeyFile) => f.risks.some((r) => r.serious);
 
-function Tile({
+function FilterButton({
   label,
   value,
-  note,
-  tone,
+  warn,
   active,
   onClick,
 }: {
   label: string;
   value: number;
-  note: string;
-  tone: "warn" | "good" | "plain";
+  warn?: boolean;
   active: boolean;
   onClick: () => void;
 }) {
@@ -81,30 +79,33 @@ function Tile({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "min-w-0 rounded-lg border px-3 py-2.5 text-left transition-colors",
+        "flex h-6 items-center gap-1.5 rounded-md px-2.5 text-[13px] transition-colors duration-[120ms]",
         active
-          ? "border-accent bg-[color-mix(in_oklab,var(--accent)_7%,transparent)]"
-          : "border-border hover:bg-hover",
+          ? "bg-panel text-foreground shadow-[0_0_0_0.5px_var(--border-strong),0_1px_2px_rgb(0_0_0/0.08)] dark:bg-selected"
+          : "text-muted-foreground hover:text-foreground",
       )}
     >
-      <span className="block text-xs text-muted-foreground">{label}</span>
-      <span className="tabular mt-0.5 block text-[20px] leading-7 font-semibold tracking-tight">
-        {formatCount(value)}
-      </span>
-      <span
-        className={cn(
-          "mt-0.5 block truncate text-xs",
-          tone === "warn"
-            ? "text-tier-review"
-            : tone === "good"
-              ? "text-tier-safe"
-              : "text-subtle-foreground",
-        )}
-      >
-        {note}
-      </span>
+      {warn ? <span className="size-1.5 rounded-full bg-tier-review" aria-hidden /> : null}
+      {label}
+      <span className="tabular text-xs text-subtle-foreground">{formatCount(value)}</span>
     </button>
   );
+}
+
+/** What makes the files risky, counted by kind, for the line under the answer. */
+function riskSummary(files: KeyFile[]): string {
+  const count = (k: string) =>
+    files.filter((f) => f.risks.some((r) => r.kind === k && r.serious)).length;
+  const parts: string[] = [];
+  const others = count("othersCanRead");
+  const share = count("easyToShare");
+  const git = count("inGitProject");
+  if (others) parts.push(`${others} can be read by other accounts`);
+  if (share)
+    parts.push(`${share} ${share === 1 ? "sits" : "sit"} where files get shared or synced`);
+  if (git)
+    parts.push(`${git} ${git === 1 ? "is" : "are"} in a git project without a .gitignore entry`);
+  return parts.join(" · ");
 }
 
 function LabelDialog({ file, onClose }: { file: KeyFile | null; onClose: () => void }) {
@@ -284,72 +285,83 @@ function KeyRow({
   const minor = file.risks.filter((r) => !r.serious);
   const folder = tildify(file.path.slice(0, file.path.lastIndexOf("/")) || "/", home);
   return (
-    <li
-      className={cn(
-        "flex gap-3 px-3 py-2.5",
-        serious.length && "bg-[color-mix(in_oklab,var(--tier-review)_5%,transparent)]",
-      )}
-    >
-      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-panel-raised">
-        <Icon className="size-4 text-muted-foreground" aria-hidden />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="truncate text-[13px] font-medium">{file.name}</span>
-          <span className="shrink-0 text-xs text-subtle-foreground">{file.kindLabel}</span>
-          {file.label ? (
-            <button
-              type="button"
-              onClick={() => onLabel(file)}
-              title={file.label.note || "Edit label"}
-              style={{ "--tint": "var(--accent)" } as CSSProperties}
-              className="tinted tint-text inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-px text-xs font-medium"
-            >
-              <Tag className="size-3" aria-hidden />
-              {file.label.provider}
-              {file.label.note ? (
-                <span className="max-w-48 truncate font-normal opacity-80">
-                  · {file.label.note}
-                </span>
-              ) : null}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => onLabel(file)}
-              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed border-border-strong px-2 py-px text-xs text-muted-foreground hover:bg-hover hover:text-foreground"
-            >
-              <Tag className="size-3" aria-hidden />
-              Add label
-            </button>
-          )}
+    <li className="grid grid-cols-1 items-start gap-x-6 gap-y-2 px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_210px]">
+      <div className="flex min-w-0 gap-3">
+        <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-panel-raised">
+          <Icon className="size-3.5 text-muted-foreground" aria-hidden />
+        </span>
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="truncate font-mono text-[12.5px] font-medium">{file.name}</span>
+            <span className="shrink-0 text-xs text-subtle-foreground">{file.kindLabel}</span>
+            {file.label ? (
+              <button
+                type="button"
+                onClick={() => onLabel(file)}
+                title={file.label.note || "Edit label"}
+                style={{ "--tint": "var(--accent)" } as CSSProperties}
+                className="tinted tint-text inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-px text-xs font-medium"
+              >
+                <Tag className="size-3" aria-hidden />
+                {file.label.provider}
+                {file.label.note ? (
+                  <span className="max-w-40 truncate font-normal opacity-80">
+                    · {file.label.note}
+                  </span>
+                ) : null}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onLabel(file)}
+                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed border-border-strong px-2 py-px text-xs text-muted-foreground hover:bg-hover hover:text-foreground"
+              >
+                <Tag className="size-3" aria-hidden />
+                Add label
+              </button>
+            )}
+          </div>
+          <p
+            className="mt-0.5 truncate font-mono text-2xs text-subtle-foreground"
+            title={file.path}
+          >
+            {folder}
+            {file.modifiedMs ? (
+              <span className="font-sans"> · changed {formatRelative(file.modifiedMs)}</span>
+            ) : null}
+          </p>
         </div>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground" title={file.path}>
-          {folder}
-          {file.modifiedMs ? ` · changed ${formatRelative(file.modifiedMs)}` : ""}
-        </p>
-        {serious.length || minor.length ? (
-          <ul className="mt-1.5 space-y-0.5">
-            {serious.map((r) => (
-              <li key={r.kind} className="flex items-start gap-1.5 text-xs text-tier-review">
-                <AlertTriangle className="mt-px size-3 shrink-0" aria-hidden />
-                {r.text}
-              </li>
-            ))}
-            {minor.map((r) => (
-              <li key={r.kind} className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                <span className="mt-1.5 size-1 shrink-0 rounded-full bg-subtle-foreground" />
-                {r.text}
-              </li>
-            ))}
-          </ul>
-        ) : null}
       </div>
-      <div className="flex shrink-0 items-start gap-1.5">
+      <ul className="flex min-w-0 flex-wrap gap-1.5 md:pt-0.5" aria-label="Why it's risky">
+        {serious.map((r) => (
+          <li
+            key={r.kind}
+            className="flex items-center gap-1 rounded bg-review-soft px-1.5 py-0.5 text-xs text-tier-review"
+          >
+            <AlertTriangle className="size-3 shrink-0" aria-hidden />
+            {r.text}
+          </li>
+        ))}
+        {minor.map((r) => (
+          <li
+            key={r.kind}
+            className="rounded bg-panel-raised px-1.5 py-0.5 text-xs text-muted-foreground"
+          >
+            {r.text}
+          </li>
+        ))}
+        {!serious.length && !minor.length ? (
+          <li className="flex items-center gap-1 py-0.5 text-xs text-subtle-foreground">
+            <ShieldCheck className="size-3 shrink-0" aria-hidden />
+            No issues found
+          </li>
+        ) : null}
+      </ul>
+      <div className="flex shrink-0 items-center gap-1.5 md:justify-end">
         {file.canFixPermissions ? (
           <Button
             size="sm"
-            variant="positive"
+            variant="soft"
             disabled={!!busy}
             onClick={() => void change(`perm:${file.path}`, () => api.keysMakePrivate(file.path))}
           >
@@ -418,9 +430,17 @@ export function KeysPage() {
   const files = useMemo(() => report?.files ?? [], [report]);
   const attention = files.filter(needsAttention).length;
   const labelled = files.filter((f) => f.label).length;
+  const [howItWorks, setHowItWorks] = useState(false);
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return files.filter((f) => {
+    // Most serious first; the backend's order is kept within each group.
+    const weight = (f: KeyFile) =>
+      f.risks.filter((r) => r.serious).length * 10 + f.risks.filter((r) => !r.serious).length;
+    const sorted = files
+      .map((f, i) => [f, i] as const)
+      .sort((x, y) => weight(y[0]) - weight(x[0]) || x[1] - y[1])
+      .map(([f]) => f);
+    return sorted.filter((f) => {
       if (filter === "attention" && !needsAttention(f)) return false;
       if (filter === "unlabelled" && f.label) return false;
       if (!q) return true;
@@ -445,17 +465,7 @@ export function KeysPage() {
         }
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1180px] space-y-4 px-6 py-5">
-          <p className="flex items-start gap-2 rounded-lg border border-border bg-panel px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-            <Lock className="mt-0.5 size-3.5 shrink-0 text-tier-safe" aria-hidden />
-            <span>
-              Files are found by their names during a scan. DiskPilot reads at most the first 512
-              bytes of a file to tell a key from a certificate, never shows what is inside, and
-              never sends anything. This list and your labels are saved encrypted, with the key in
-              your Keychain. There is no export, by design.
-            </span>
-          </p>
-
+        <div className="page-content space-y-4">
           {error ? (
             <div
               role="alert"
@@ -486,7 +496,7 @@ export function KeysPage() {
               <EmptyState
                 icon={KeyRound}
                 title="Scan to find your keys"
-                description="The next scan looks for SSH keys, .pem and .p12 files, .env files and cloud credentials by their names."
+                description="The next scan looks for SSH keys, .pem and .p12 files, .env files and cloud credentials by their names. DiskPilot reads at most the first 512 bytes of each to tell a key from a certificate, and never sends anything."
                 action={
                   desktop ? (
                     <Button onClick={() => void startScan()} disabled={scanning}>
@@ -499,39 +509,84 @@ export function KeysPage() {
             </Panel>
           ) : (
             <>
-              <div className="grid grid-cols-3 gap-2">
-                <Tile
-                  label="Found"
-                  value={files.length}
-                  note="Keys and credential files"
-                  tone="plain"
-                  active={filter === "all"}
-                  onClick={() => setFilter("all")}
-                />
-                <Tile
-                  label="Need attention"
-                  value={attention}
-                  note={attention ? "Readable by others or easy to leak" : "Nothing risky"}
-                  tone={attention ? "warn" : "good"}
-                  active={filter === "attention"}
-                  onClick={() => setFilter(filter === "attention" ? "all" : "attention")}
-                />
-                <Tile
-                  label="Labelled"
-                  value={labelled}
-                  note={
-                    files.length - labelled
-                      ? `${files.length - labelled} without a label`
-                      : "All labelled"
-                  }
-                  tone="plain"
-                  active={filter === "unlabelled"}
-                  onClick={() => setFilter(filter === "unlabelled" ? "all" : "unlabelled")}
-                />
+              <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-3">
+                <div className="min-w-0">
+                  <h2 className="text-[20px] leading-[26px] font-semibold tracking-tight">
+                    {!files.length ? (
+                      "No key files found"
+                    ) : attention ? (
+                      <>
+                        <span className="tabular">{formatCount(attention)}</span> of{" "}
+                        <span className="tabular">{formatCount(files.length)}</span> key files need
+                        attention
+                      </>
+                    ) : (
+                      <>
+                        None of your <span className="tabular">{formatCount(files.length)}</span>{" "}
+                        key files need attention
+                      </>
+                    )}
+                  </h2>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {attention
+                      ? riskSummary(files)
+                      : files.length
+                        ? "None is readable by other accounts, left where files get shared, or in a git project without a .gitignore entry."
+                        : "The last scan found no SSH or private keys, certificates, .env files or cloud credentials."}
+                  </p>
+                </div>
+                <div className="flex max-w-[340px] items-start gap-2 pt-1 text-xs leading-relaxed text-muted-foreground">
+                  <Lock className="mt-0.5 size-3.5 shrink-0 text-tier-safe" aria-hidden />
+                  <p>
+                    Contents are never shown or sent. Saved encrypted, with the key in your
+                    Keychain.{" "}
+                    <button
+                      type="button"
+                      aria-expanded={howItWorks}
+                      onClick={() => setHowItWorks((v) => !v)}
+                      className="text-accent hover:underline"
+                    >
+                      {howItWorks ? "Hide details" : "How it works"}
+                    </button>
+                  </p>
+                </div>
               </div>
+              {howItWorks ? (
+                <p className="animate-in rounded-lg bg-panel-raised px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+                  Files are found by their names during a scan. DiskPilot reads at most the first
+                  512 bytes of a file to tell a key from a certificate, never shows what is inside,
+                  and never sends anything. This list and your labels are saved encrypted, with the
+                  key in your Keychain. There is no export, by design.
+                </p>
+              ) : null}
 
-              <Panel>
-                <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <div
+                  role="group"
+                  aria-label="Show"
+                  className="inline-flex rounded-lg bg-panel-raised p-0.5"
+                >
+                  <FilterButton
+                    label="All"
+                    value={files.length}
+                    active={filter === "all"}
+                    onClick={() => setFilter("all")}
+                  />
+                  <FilterButton
+                    label="Need attention"
+                    value={attention}
+                    warn={attention > 0}
+                    active={filter === "attention"}
+                    onClick={() => setFilter(filter === "attention" ? "all" : "attention")}
+                  />
+                  <FilterButton
+                    label="Unlabelled"
+                    value={files.length - labelled}
+                    active={filter === "unlabelled"}
+                    onClick={() => setFilter(filter === "unlabelled" ? "all" : "unlabelled")}
+                  />
+                </div>
+                <label className="flex h-7 min-w-[220px] flex-1 items-center gap-2 rounded-md border border-border-strong px-2.5 sm:max-w-[380px]">
                   <Search className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                   <input
                     type="search"
@@ -540,11 +595,19 @@ export function KeysPage() {
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="Search by name, folder, provider or note"
                     aria-label="Search keys"
-                    className="selectable h-7 min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-subtle-foreground"
+                    className="selectable h-full min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-subtle-foreground"
                   />
-                  <span className="tabular shrink-0 text-xs text-subtle-foreground">
-                    {formatCount(shown.length)} of {formatCount(files.length)}
-                  </span>
+                </label>
+                <span className="tabular ml-auto shrink-0 text-xs text-subtle-foreground">
+                  {formatCount(shown.length)} of {formatCount(files.length)}
+                </span>
+              </div>
+
+              <Panel>
+                <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_210px] gap-x-6 border-b border-border px-3 py-1.5 text-xs text-subtle-foreground md:grid">
+                  <span className="pl-10">File and where it is</span>
+                  <span>Why it&apos;s risky</span>
+                  <span className="w-[210px]" />
                 </div>
                 {shown.length ? (
                   <ul className="divide-y divide-border">
