@@ -458,7 +458,7 @@ mod tests {
             body,
             "1.5 GB is likely safe to clear. You already cleaned up this week: 1 week in a row."
         );
-        let (_, body) = reminder_text(gb(0.8), s(0, false)).unwrap();
+        let (_, body) = reminder_text((800.0 * unit * unit) as u64, s(0, false)).unwrap();
         assert_eq!(
             body,
             "800.0 MB is likely safe to clear. Review it in DiskPilot."
