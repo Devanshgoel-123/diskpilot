@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/api";
 import { ALL_CATEGORIES, CATEGORY_META } from "@/lib/categories";
-import { formatBytes, formatCount, formatRelative, tildify } from "@/lib/format";
+import { formatBytes, formatCount, formatPercent, formatRelative, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { Category, DirectoryEntry, DirectoryListing, Recommendation } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,8 @@ import { cn } from "@/lib/utils";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { CategorySelect } from "@/components/shared/CategorySelect";
 import { SortHeader } from "@/components/shared/SortHeader";
+import { FolderSummary } from "./FolderSummary";
+import { recommendationsUnder } from "./underPath";
 import { type SortKey, sortEntries } from "./sorting";
 
 /** Height of a row in the folder table, in pixels (Tailwind h-8). */
@@ -50,21 +52,46 @@ function useCleanupIndex() {
 
 /**
  * The item's own tier if DiskPilot recommends it, otherwise how much inside
- * it is recommended. Empty when there is nothing to clean up.
+ * it is recommended. Either opens those recommendations for review. Empty
+ * when there is nothing to clean up.
  */
-function CleanupCell({ path, index }: { path: string; index: Recommendation[] }) {
-  const own = index.find((r) => r.path === path);
-  if (own) return <TierBadge tier={own.tier} />;
-  const inside = index.filter((r) => r.path.startsWith(`${path}/`));
-  if (!inside.length) return null;
+function CleanupCell({
+  entry,
+  index,
+  onReview,
+}: {
+  entry: DirectoryEntry;
+  index: Recommendation[];
+  onReview: (ids: string[]) => void;
+}) {
+  const own = index.find((r) => r.path === entry.path);
+  const inside = own ? [] : recommendationsUnder(entry.path, index);
+  if (!own && !inside.length) return null;
+  const ids = own ? [own.id] : inside.map((r) => r.id);
   const bytes = inside.reduce((a, r) => a + r.estimatedReclaimBytes, 0);
   return (
-    <span
-      className="text-xs text-muted-foreground"
-      title={`${inside.length} recommendation${inside.length === 1 ? "" : "s"} inside this folder`}
+    <button
+      type="button"
+      onClick={(ev) => {
+        ev.stopPropagation();
+        onReview(ids);
+      }}
+      onDoubleClick={(ev) => ev.stopPropagation()}
+      className="-mx-1 rounded px-1 py-0.5 text-left hover:bg-hover"
+      title={
+        own
+          ? "Review this recommendation"
+          : `Review ${inside.length} recommendation${inside.length === 1 ? "" : "s"} inside this folder`
+      }
     >
-      {formatBytes(bytes)} inside
-    </span>
+      {own ? (
+        <TierBadge tier={own.tier} />
+      ) : (
+        <span className="text-xs text-muted-foreground">
+          <span className="tabular text-foreground">{formatBytes(bytes)}</span> inside
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -115,7 +142,7 @@ function Breadcrumbs({
 }
 
 export function ExplorerPage() {
-  const { summary, env, explorerPath, scanning, startScan, browse } = useApp(
+  const { summary, env, explorerPath, scanning, startScan, browse, review } = useApp(
     useShallow((s) => ({
       summary: s.summary,
       env: s.env,
@@ -123,6 +150,7 @@ export function ExplorerPage() {
       scanning: s.scanning,
       startScan: s.startScan,
       browse: s.browse,
+      review: s.reviewInRecommendations,
     })),
   );
   const home = env?.homeDir;
@@ -187,7 +215,9 @@ export function ExplorerPage() {
   };
 
   const cleanup = useCleanupIndex();
-  const maxBytes = listing?.entries[0]?.bytes ?? 0;
+  // Bars show each item's share of the folder, so a small item reads as small
+  // rather than as an empty bar next to one huge sibling.
+  const folderBytes = listing?.bytes ?? 0;
   const presentCategories = useMemo(
     () =>
       ALL_CATEGORIES.filter((c) => listing?.entries.some((e) => e.classification.category === c)),
@@ -221,7 +251,7 @@ export function ExplorerPage() {
       <PageHeader
         title="Storage"
         actions={<StorageTabs />}
-        description="Folder sizes from the last scan. Open a folder with a double-click or Return."
+        description="What fills each folder, and what in it can go. Open a folder with a double-click or Return."
       />
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
@@ -256,19 +286,7 @@ export function ExplorerPage() {
           </div>
 
           {listing ? (
-            <div className="flex shrink-0 items-center gap-4 border-b border-border bg-panel px-4 py-2 text-xs text-muted-foreground">
-              <span>
-                <span className="tabular font-medium text-foreground">
-                  {formatBytes(listing.bytes)}
-                </span>{" "}
-                in this folder
-              </span>
-              <span className="tabular">{formatCount(listing.entries.length)} items</span>
-              <span className="flex min-w-0 items-center gap-1.5">
-                <CategoryBadge category={listing.classification.category} />
-                <span className="truncate">{listing.classification.label}</span>
-              </span>
-            </div>
+            <FolderSummary listing={listing} cleanup={cleanup} onOpen={open} onReview={review} />
           ) : null}
 
           <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
@@ -296,7 +314,7 @@ export function ExplorerPage() {
                       k="size"
                       sort={sort}
                       onSort={toggleSort}
-                      className="w-40"
+                      className="w-48"
                       align="right"
                     />
                     <SortHeader
@@ -304,7 +322,7 @@ export function ExplorerPage() {
                       k="files"
                       sort={sort}
                       onSort={toggleSort}
-                      className="w-20"
+                      className="hidden w-20 lg:table-cell"
                       align="right"
                     />
                     <SortHeader
@@ -314,7 +332,7 @@ export function ExplorerPage() {
                       onSort={toggleSort}
                       className="w-28"
                     />
-                    <th className="w-40 px-2 py-2 font-normal">Category</th>
+                    <th className="hidden w-40 px-2 py-2 font-normal lg:table-cell">Category</th>
                     <th className="w-36 px-2 py-2 pr-4 font-normal">Cleanup</th>
                   </tr>
                 </thead>
@@ -354,24 +372,36 @@ export function ExplorerPage() {
                           <div className="flex items-center gap-2">
                             <SizeBar
                               value={e.bytes}
-                              max={maxBytes}
+                              max={folderBytes}
                               color={CATEGORY_META[e.classification.category].color}
                               className="w-16"
                             />
+                            <span className="tabular w-10 text-right text-2xs text-subtle-foreground">
+                              {e.bytes != null && folderBytes > 0
+                                ? formatPercent(e.bytes, folderBytes)
+                                : ""}
+                            </span>
                             <span className="tabular ml-auto">{formatBytes(e.bytes)}</span>
                           </div>
                         </td>
-                        <td className="tabular px-2 text-right text-xs text-muted-foreground">
+                        <td className="tabular hidden px-2 text-right text-xs text-muted-foreground lg:table-cell">
                           {e.kind === "directory" ? formatCount(e.fileCount) : ""}
                         </td>
                         <td className="truncate px-2 text-xs text-muted-foreground">
                           {formatRelative(e.modifiedMs)}
                         </td>
-                        <td className="px-2" title={e.classification.label}>
-                          <CategoryBadge category={e.classification.category} />
+                        <td
+                          className="hidden truncate px-2 lg:table-cell"
+                          title={`${e.classification.label}. ${e.classification.explanation}`}
+                        >
+                          {e.classification.category === "unknown" ? (
+                            <span className="text-xs text-subtle-foreground">—</span>
+                          ) : (
+                            <CategoryBadge category={e.classification.category} />
+                          )}
                         </td>
                         <td className="px-2 pr-4">
-                          <CleanupCell path={e.path} index={cleanup} />
+                          <CleanupCell entry={e} index={cleanup} onReview={review} />
                         </td>
                       </tr>
                     );
