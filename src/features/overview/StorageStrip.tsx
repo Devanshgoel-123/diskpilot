@@ -26,7 +26,7 @@ function Bytes({ value }: { value: number }) {
   return <>{formatBytes(useCountUp(value, MOVE_MS, value))}</>;
 }
 
-const HATCH =
+export const HATCH =
   "repeating-linear-gradient(135deg, rgb(255 255 255 / 0.62) 0 1.5px, transparent 1.5px 4.5px)";
 
 /**

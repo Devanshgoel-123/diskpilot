@@ -50,7 +50,7 @@ export function RecommendationRow({
 
   return (
     <li className={cn("border-b border-border last:border-0", selected && "bg-accent-soft/60")}>
-      <div className="flex items-center gap-3 px-2 py-2">
+      <div className="flex min-h-11 items-center gap-3 px-2 py-1.5">
         <div className="flex w-5 shrink-0 justify-center">
           {actionable ? (
             <input
@@ -80,7 +80,9 @@ export function RecommendationRow({
               <AppIcon path={rec.path} />
               <span className="truncate text-[13px] font-medium">{rec.title}</span>
               {rec.marker ? <MarkerTag marker={rec.marker} /> : null}
-              <CategoryBadge category={rec.classification.category} />
+              <span className="md:hidden">
+                <CategoryBadge category={rec.classification.category} />
+              </span>
               {rec.source !== "scan" ? (
                 <span className="text-xs text-subtle-foreground">via Developer Tools</span>
               ) : null}
@@ -93,6 +95,9 @@ export function RecommendationRow({
             <p className="mt-0.5 truncate font-mono text-2xs text-subtle-foreground">
               {tildify(rec.path, home)}
             </p>
+          </div>
+          <div className="hidden w-[140px] shrink-0 md:block">
+            <CategoryBadge category={rec.classification.category} />
           </div>
           <div className="w-32 shrink-0">
             <p className="tabular text-right text-[13px]">{formatBytes(rec.bytes)}</p>

@@ -22,13 +22,16 @@ interface Handlers {
   onInspect: (t: InspectTarget) => void;
 }
 
+/** A row action with a short visible name; the tooltip gives the full one. */
 function IconAction({
   label,
+  short,
   disabledReason,
   onClick,
   children,
 }: {
   label: string;
+  short: string;
   disabledReason?: string | null;
   onClick: () => void;
   children: ReactNode;
@@ -36,12 +39,14 @@ function IconAction({
   const button = (
     <Button
       variant="ghost"
-      size="icon"
+      size="sm"
+      className="max-xl:size-7 max-xl:px-0"
       aria-label={label}
       disabled={!!disabledReason}
       onClick={onClick}
     >
       {children}
+      <span className="hidden xl:inline">{short}</span>
     </Button>
   );
   return (
@@ -82,11 +87,11 @@ export function ContainersTable({
       <thead>
         <tr className="border-b border-border text-xs text-muted-foreground">
           <th className={cn(th, "pl-4")}>Name</th>
-          <th className={th}>Image</th>
-          <th className={cn(th, "w-48")}>Status</th>
+          <th className={cn(th, "w-[24%]")}>Image</th>
+          <th className={cn(th, "w-40")}>Status</th>
           <th className={cn(th, "w-24 text-right")}>Size</th>
           <th className={cn(th, "w-28")}>Created</th>
-          <th className={cn(th, "w-28 pr-4 text-right")}>Actions</th>
+          <th className={cn(th, "w-24 pr-4 text-right xl:w-48")}>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -110,10 +115,11 @@ export function ContainersTable({
             <td className="tabular px-2 text-right">{formatBytes(c.sizeBytes)}</td>
             <td className="px-2 text-xs text-muted-foreground">{formatRelative(c.createdAtMs)}</td>
             <td className="px-2 pr-4">
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-0.5">
                 {c.running ? (
                   <IconAction
                     label="Stop container"
+                    short="Stop"
                     onClick={() => onAction({ type: "stopContainer", id: c.id })}
                   >
                     <CircleStop />
@@ -121,6 +127,7 @@ export function ContainersTable({
                 ) : null}
                 <IconAction
                   label="Inspect"
+                  short="Inspect"
                   onClick={() => onInspect({ kind: "container", id: c.id, title: c.name })}
                 >
                   <Search />
@@ -170,7 +177,7 @@ export function ImagesTable({ images, onAction, onInspect }: Handlers & { images
           <th className={cn(th, "w-28 text-right")}>Unique</th>
           <th className={cn(th, "w-24 text-right")}>Shared</th>
           <th className={cn(th, "w-28")}>Created</th>
-          <th className={cn(th, "w-20 pr-4 text-right")}>Actions</th>
+          <th className={cn(th, "w-20 pr-4 text-right xl:w-36")}>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -200,9 +207,10 @@ export function ImagesTable({ images, onAction, onInspect }: Handlers & { images
                 {formatRelative(i.createdAtMs)}
               </td>
               <td className="px-2 pr-4">
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-0.5">
                   <IconAction
                     label="Inspect"
+                    short="Inspect"
                     onClick={() => onInspect({ kind: "image", id: i.id, title: name })}
                   >
                     <Search />
@@ -246,7 +254,7 @@ export function VolumesTable({
           <th className={cn(th, "w-36")}>Project</th>
           <th className={th}>Used by</th>
           <th className={cn(th, "w-24 text-right")}>Size</th>
-          <th className={cn(th, "w-20 pr-4 text-right")}>Actions</th>
+          <th className={cn(th, "w-20 pr-4 text-right xl:w-36")}>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -269,9 +277,10 @@ export function VolumesTable({
               {v.sizeBytes == null ? "—" : formatBytes(v.sizeBytes)}
             </td>
             <td className="px-2 pr-4">
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-0.5">
                 <IconAction
                   label="Inspect"
+                  short="Inspect"
                   onClick={() => onInspect({ kind: "volume", id: v.name, title: v.name })}
                 >
                   <Search />

@@ -24,7 +24,7 @@ export function TrashWaitingNotice() {
   return (
     <div
       role="status"
-      className="flex items-center justify-between gap-4 rounded-[10px] border border-border bg-panel-raised px-3 py-2.5"
+      className="flex items-center justify-between gap-4 rounded-lg border border-border px-3 py-2"
     >
       <div className="flex min-w-0 gap-2 text-xs">
         <Trash2 className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />

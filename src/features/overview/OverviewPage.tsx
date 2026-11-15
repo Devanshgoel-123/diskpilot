@@ -78,10 +78,8 @@ export function OverviewPage() {
     <>
       <PageHeader title="Overview" />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1120px] space-y-8 px-6 pt-6 pb-10">
+        <div className="page-content space-y-8">
           <ResultsAge />
-          <PrivateFoldersNotice />
-          <TrashWaitingNotice />
           <ClearedStatsLine />
           {disk ? (
             <StorageStrip
@@ -97,6 +95,12 @@ export function OverviewPage() {
               <Skeleton className="h-3 w-2/3" />
             </div>
           )}
+
+          {/* Notes about the numbers above; each hides itself when it doesn't apply. */}
+          <div className="-mt-3 flex flex-wrap gap-2 empty:hidden [&>*]:min-w-[min(100%,380px)] [&>*]:flex-1">
+            <PrivateFoldersNotice />
+            <TrashWaitingNotice />
+          </div>
 
           {summary && scanning && partial ? (
             <p className="flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">

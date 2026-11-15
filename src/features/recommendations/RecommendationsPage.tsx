@@ -106,7 +106,7 @@ export function RecommendationsPage() {
         actions={<EmptyTrashButton />}
       />
       <div className="relative min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1120px] space-y-6 px-6 pt-6 pb-24">
+        <div className="page-content space-y-6 pb-24">
           <ResultsAge />
           <div
             role="tablist"
@@ -127,7 +127,7 @@ export function RecommendationsPage() {
                   className={cn(
                     "flex items-baseline gap-2 rounded-md px-3 py-1.5 text-[13px] transition-colors duration-[120ms]",
                     active
-                      ? "bg-panel text-foreground shadow-[0_0_0_0.5px_var(--border-strong),0_1px_2px_rgb(0_0_0/0.08)]"
+                      ? "bg-panel text-foreground shadow-[0_0_0_0.5px_var(--border-strong),0_1px_2px_rgb(0_0_0/0.08)] dark:bg-selected"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -140,7 +140,7 @@ export function RecommendationsPage() {
                   ) : null}
                   <span className="font-medium">{t === "all" ? "All" : TIER_META[t].label}</span>
                   <span className="tabular text-xs text-subtle-foreground">
-                    {t === "all" ? formatCount(items.length) : formatBytes(bytes)}
+                    {formatCount(items.length)} · {formatBytes(bytes)}
                   </span>
                 </button>
               );
@@ -195,15 +195,6 @@ export function RecommendationsPage() {
                   Show all
                 </Button>
               ) : null}
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={selectAllSafe}
-                disabled={!byTier.likelySafe.length}
-              >
-                <ListChecks />
-                Select all likely safe
-              </Button>
             </div>
           </div>
 
@@ -219,7 +210,7 @@ export function RecommendationsPage() {
             tiers.map((tier) =>
               byTier[tier].length ? (
                 <section key={tier} aria-label={TIER_META[tier].label}>
-                  <header className="flex items-center gap-2 border-b border-border pb-2">
+                  <header className="flex min-h-8 items-center gap-2 border-b border-border pb-2">
                     {(() => {
                       const Icon = TIER_META[tier].icon;
                       return (
@@ -231,10 +222,35 @@ export function RecommendationsPage() {
                       );
                     })()}
                     <h2 className="text-[13px] font-semibold">{TIER_META[tier].label}</h2>
-                    <span className="text-xs text-subtle-foreground">
+                    <span className="tabular shrink-0 text-xs text-muted-foreground">
+                      {formatCount(byTier[tier].length)} ·{" "}
+                      {formatBytes(byTier[tier].reduce((a, r) => a + r.bytes, 0))}
+                    </span>
+                    <span className="min-w-0 truncate text-xs text-subtle-foreground">
                       {TIER_META[tier].description}
                     </span>
+                    {tier === "likelySafe" ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="ml-auto text-accent hover:text-accent"
+                        onClick={selectAllSafe}
+                      >
+                        <ListChecks />
+                        Select all likely safe
+                      </Button>
+                    ) : null}
                   </header>
+                  <div
+                    className="hidden items-center gap-3 border-b border-border px-2 py-1.5 text-xs text-subtle-foreground md:flex"
+                    aria-hidden
+                  >
+                    <span className="w-5 shrink-0" />
+                    <span className="min-w-0 flex-1">Item</span>
+                    <span className="w-[140px] shrink-0">Category</span>
+                    <span className="w-32 shrink-0 text-right">Size</span>
+                    <span className="w-3.5 shrink-0" />
+                  </div>
                   <ul>
                     {byTier[tier].map((r) => (
                       <RecommendationRow
@@ -264,6 +280,9 @@ export function RecommendationsPage() {
               <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
                 Clear
               </Button>
+              <span className="text-xs text-subtle-foreground">
+                Nothing is removed until you confirm
+              </span>
               <Button onClick={() => setDialog({ key: Date.now(), ids: [...liveSelection] })}>
                 Review cleanup…
               </Button>

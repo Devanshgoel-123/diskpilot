@@ -24,6 +24,7 @@ import { formatBytes, formatCount } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { DiagnosticFinding, DockerAction, DockerOverview, FindingLevel } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { HATCH } from "@/features/overview/StorageStrip";
 
 import { DockerActionDialog } from "./DockerActionDialog";
 import { BuildCacheTable, ContainersTable, ImagesTable, VolumesTable } from "./DockerTables";
@@ -162,7 +163,7 @@ export function DockerPage() {
       />
       <div className="flex min-h-0 flex-1">
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-[1180px] space-y-4 px-6 py-5">
+          <div className="page-content space-y-4">
             {error ? <p className="text-xs text-critical">{error}</p> : null}
 
             {loading && !overview ? (
@@ -222,7 +223,7 @@ export function DockerPage() {
                       </p>
                     </div>
                   </div>
-                  <div className="mt-4 flex h-6 gap-[2px] overflow-hidden rounded-md bg-track">
+                  <div className="mt-4 flex h-3.5 gap-px overflow-hidden rounded bg-track">
                     {KINDS.map((k) =>
                       usage[k.usage].sizeBytes > 0 ? (
                         <Tooltip key={k.key}>
@@ -231,13 +232,23 @@ export function DockerPage() {
                               type="button"
                               onClick={() => setTab(k.key)}
                               aria-label={`${k.label}: ${formatBytes(usage[k.usage].sizeBytes)}`}
-                              className="fill-in h-full"
+                              className="fill-in flex h-full justify-end"
                               style={{
                                 width: `${(usage[k.usage].sizeBytes / Math.max(total, 1)) * 100}%`,
                                 background: k.color,
                                 minWidth: 3,
                               }}
-                            />
+                            >
+                              {usage[k.usage].reclaimableBytes > 0 ? (
+                                <span
+                                  className="h-full"
+                                  style={{
+                                    width: `${Math.min(100, (usage[k.usage].reclaimableBytes / usage[k.usage].sizeBytes) * 100)}%`,
+                                    backgroundImage: HATCH,
+                                  }}
+                                />
+                              ) : null}
+                            </button>
                           </TooltipTrigger>
                           <TooltipContent>
                             <p className="font-medium">{k.label}</p>
@@ -250,23 +261,76 @@ export function DockerPage() {
                       ) : null,
                     )}
                   </div>
-                  <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5">
-                    {KINDS.map((k) => (
-                      <li key={k.key} className="flex items-center gap-1.5 text-xs">
-                        <span
-                          className="size-2 rounded-full"
-                          style={{ background: k.color }}
-                          aria-hidden
-                        />
-                        <span className="text-muted-foreground">{k.label}</span>
-                        <span className="tabular">{formatBytes(usage[k.usage].sizeBytes)}</span>
-                        <span className="tabular text-subtle-foreground">
-                          {formatCount(usage[k.usage].active)} of{" "}
-                          {formatCount(usage[k.usage].totalCount)} active
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="mt-2 flex items-center gap-1.5 text-xs text-subtle-foreground">
+                    <span
+                      className="size-2.5 rounded-sm bg-subtle-foreground"
+                      style={{ backgroundImage: HATCH }}
+                      aria-hidden
+                    />
+                    Reclaimable
+                  </div>
+                  <table className="mt-4 w-full table-fixed text-[13px]">
+                    <thead>
+                      <tr className="border-b border-border text-xs text-subtle-foreground">
+                        <th className="py-1.5 pl-1 text-left font-normal">Type</th>
+                        <th className="w-28 py-1.5 text-right font-normal">Size</th>
+                        <th className="w-36 py-1.5 text-right font-normal">In use</th>
+                        <th className="w-32 py-1.5 text-right font-normal">Reclaimable</th>
+                        <th className="w-60 py-1.5 font-normal" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {KINDS.map((k) => {
+                        const u = usage[k.usage];
+                        return (
+                          <tr key={k.key} className="h-9 border-b border-border last:border-0">
+                            <td className="pl-1">
+                              <span className="flex items-center gap-2">
+                                <span
+                                  className="size-2 shrink-0 rounded-full"
+                                  style={{ background: k.color }}
+                                  aria-hidden
+                                />
+                                {k.label}
+                              </span>
+                            </td>
+                            <td className="tabular text-right">{formatBytes(u.sizeBytes)}</td>
+                            <td className="tabular text-right text-xs text-muted-foreground">
+                              {formatCount(u.active)} of {formatCount(u.totalCount)}{" "}
+                              {k.key === "containers" ? "running" : "in use"}
+                            </td>
+                            <td
+                              className={cn(
+                                "tabular text-right",
+                                u.reclaimableBytes > 0
+                                  ? "text-tier-safe"
+                                  : "text-subtle-foreground",
+                              )}
+                            >
+                              {u.reclaimableBytes > 0 ? formatBytes(u.reclaimableBytes) : "—"}
+                            </td>
+                            <td className="pl-4 text-right">
+                              {k.key === "buildCache" ? (
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  disabled={!overview.buildCache.some((b) => !b.inUse)}
+                                  onClick={() => setAction({ type: "pruneBuildCache" })}
+                                >
+                                  <Trash2 />
+                                  Remove unused build cache…
+                                </Button>
+                              ) : (
+                                <Button variant="ghost" size="sm" onClick={() => setTab(k.key)}>
+                                  Show {k.label.toLowerCase()}
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </section>
 
                 {findings ? (

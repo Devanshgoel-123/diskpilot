@@ -1,4 +1,4 @@
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Folder } from "lucide-react";
 
 import { AppIcon } from "@/components/shared/AppIcon";
 import { TierBadge } from "@/components/shared/TierBadge";
@@ -6,15 +6,11 @@ import { formatBytes, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { Recommendation } from "@/lib/types";
 
-function TierDot({ tier }: { tier: Recommendation["tier"] }) {
-  const color = tier === "likelySafe" ? "var(--tier-safe)" : "var(--tier-review)";
+/** Items without an app of their own get a quiet folder, not a second tier mark. */
+function ItemGlyph() {
   return (
-    <span
-      className="flex size-5 shrink-0 items-center justify-center rounded-[5px]"
-      style={{ background: `color-mix(in oklab, ${color} 16%, transparent)` }}
-      aria-hidden
-    >
-      <span className="size-1.5 rounded-full" style={{ background: color }} />
+    <span className="flex size-5 shrink-0 items-center justify-center" aria-hidden>
+      <Folder className="size-3.5 text-subtle-foreground" strokeWidth={1.75} />
     </span>
   );
 }
@@ -38,7 +34,7 @@ export function StartHere({ items }: { items: Recommendation[] }) {
             onClick={() => review([r.id])}
             className="group flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors duration-[120ms] hover:bg-hover"
           >
-            <AppIcon path={r.path} className="size-5" fallback={<TierDot tier={r.tier} />} />
+            <AppIcon path={r.path} className="size-5" fallback={<ItemGlyph />} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-medium">{r.title}</p>
               <p className="truncate text-xs text-muted-foreground" title={r.safeBecause}>
@@ -48,7 +44,9 @@ export function StartHere({ items }: { items: Recommendation[] }) {
                 {tildify(r.path, home)}
               </p>
             </div>
-            <TierBadge tier={r.tier} className="shrink-0" />
+            <span className="flex w-[104px] shrink-0">
+              <TierBadge tier={r.tier} />
+            </span>
             <span className="tabular w-[72px] shrink-0 text-right text-[13px] font-medium">
               {formatBytes(r.estimatedReclaimBytes)}
             </span>
