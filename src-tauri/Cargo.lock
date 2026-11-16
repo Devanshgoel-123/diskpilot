@@ -891,7 +891,7 @@ dependencies = [
 
 [[package]]
 name = "diskpilot"
-version = "0.6.6"
+version = "0.6.7"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
