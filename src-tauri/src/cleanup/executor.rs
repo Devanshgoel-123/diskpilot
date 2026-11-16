@@ -69,7 +69,21 @@ fn move_to_trash(path: &Path) -> io::Result<()> {
             .map_err(|e| io::Error::other(e.to_string()))
     }
     #[cfg(not(target_os = "macos"))]
-    trash::delete(path).map_err(|e| io::Error::other(e.to_string()))
+    trash::delete(path).map_err(|e| io::Error::other(describe_trash_error(&e)))
+}
+
+/// Windows aborts a Recycle Bin move when a file inside is open in another
+/// app; the `trash` crate reports only "Some operations were aborted".
+#[cfg(not(target_os = "macos"))]
+fn describe_trash_error(e: &trash::Error) -> String {
+    match e {
+        trash::Error::Unknown { description } if description.contains("aborted") => {
+            "Windows stopped the move, usually because a file inside is open in another app. \
+             Quit the app that uses it and try again. Some files may already be in the Recycle Bin."
+                .into()
+        }
+        other => other.to_string(),
+    }
 }
 
 impl FileOps for RealFileOps {
@@ -405,6 +419,17 @@ pub fn execute_with_progress(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn an_aborted_recycle_bin_move_says_why() {
+        let e = trash::Error::Unknown {
+            description: "Some operations were aborted".into(),
+        };
+        let msg = super::describe_trash_error(&e);
+        assert!(msg.contains("open in another app"), "{msg}");
+        assert!(!msg.contains("trash` operation"));
+    }
+
     use super::*;
     use crate::model::{PlanItem, Tier};
     use std::sync::Mutex;

@@ -81,10 +81,13 @@ pub fn build_plan(
     }
 
     match method {
-        CleanupMethod::Trash => warnings.push(
+        CleanupMethod::Trash => warnings.push(if cfg!(windows) {
+            "Items go to the Recycle Bin. Their space is freed only when you empty the Recycle Bin; until then you can restore them."
+                .into()
+        } else {
             "Items go to the Trash. Their space is freed only when you empty the Trash; until then you can put them back."
-                .into(),
-        ),
+                .into()
+        }),
         CleanupMethod::Delete => warnings.push(
             "Permanently deleted items cannot be restored by DiskPilot.".into(),
         ),

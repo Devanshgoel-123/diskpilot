@@ -531,7 +531,7 @@ pub static POLICIES: &[Policy] = &[
         alternative: Some("npm install / pnpm install / yarn (to restore)"),
         expand: Whole,
         min_bytes: 50 * MB,
-        before_you_start: Some("Stop dev servers running from these projects."),
+        before_you_start: Some("If a dev server is running from one of these projects, stop it first."),
     },
     Policy {
         rule_id: "node.dist",

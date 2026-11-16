@@ -264,7 +264,7 @@ export function RecommendationsPage() {
                 <span className="tabular font-medium">{formatBytes(selection.bytes)}</span>
               </p>
               <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
-                Clear
+                Clear selection
               </Button>
               <Button onClick={() => setDialog({ key: Date.now(), ids: [...liveSelection] })}>
                 Review cleanup…
