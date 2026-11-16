@@ -136,7 +136,7 @@ export function DeveloperToolsPage() {
                 <Blocks className="size-4 shrink-0 text-accent" aria-hidden />
                 <span className="min-w-0 flex-1">
                   <span className="block text-[13px] font-medium">
-                    Claude Code, Codex and other AI agents are on the AI Agents page
+                    Claude Code and Codex are on the AI Agents page
                   </span>
                   <span className="block text-xs text-muted-foreground">
                     Their caches, old versions, conversation data and the check for keys in

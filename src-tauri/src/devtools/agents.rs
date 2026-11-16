@@ -33,18 +33,31 @@ const CLIS: &[VersionedCli] = &[VersionedCli {
     source: "ai-agents",
 }];
 
-const DATA_DIRS: &[(&str, &str, &str)] = &[
+/// (label, folder under home, detail, the tool it belongs to)
+const DATA_DIRS: &[(&str, &str, &str, &str)] = &[
     (
         "Cursor agent data",
         ".cursor/projects",
         "Per-project agent state for Cursor.",
+        "Cursor Agent CLI",
     ),
     (
         "Gemini CLI data",
         ".gemini",
         "Configuration and session data.",
+        "Gemini CLI",
     ),
 ];
+
+/// Name the report after what was found, so a Mac with only the Cursor Agent
+/// CLI sees "Cursor Agent CLI" rather than a catch-all.
+fn report_name(found: &[&str]) -> String {
+    match found {
+        [one] => (*one).to_string(),
+        [a, b] => format!("{a} and {b}"),
+        _ => "Other AI agents".into(),
+    }
+}
 
 /// The version folder (a direct child of `versions`) the launcher points into.
 fn current_version(ctx: &Ctx, cli: &VersionedCli) -> Option<PathBuf> {
@@ -156,26 +169,32 @@ pub fn analyze(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
     let mut recs = Vec::new();
     let mut roots: Vec<(PathBuf, u64)> = Vec::new();
     let mut versions_summary = Vec::new();
+    let mut found: Vec<&str> = Vec::new();
 
     for cli in CLIS {
         let Some(mut v) = versions(ctx, cli) else {
             continue;
         };
+        let n = v.section.items.len();
         versions_summary.push(format!(
-            "{} ({} installed)",
-            cli.name,
-            v.section.items.len()
+            "{n} {} of {}",
+            if n == 1 { "version" } else { "versions" },
+            cli.name
         ));
+        found.push(cli.name);
         roots.push(v.root);
         recs.append(&mut v.recs);
         sections.push(v.section);
     }
 
     let mut data_items = Vec::new();
-    for (label, rel, detail) in DATA_DIRS {
+    for (label, rel, detail, owner) in DATA_DIRS {
         let path = ctx.home_path(rel);
         if !exists(&path) {
             continue;
+        }
+        if !found.contains(owner) {
+            found.push(owner);
         }
         let bytes = ctx.size(&path);
         roots.push((path.clone(), bytes));
@@ -189,7 +208,8 @@ pub fn analyze(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
             recommendation_id: None,
         });
     }
-    if !data_items.is_empty() {
+    let has_data = !data_items.is_empty();
+    if has_data {
         sections.push(ToolSection {
             title: "Agent data".into(),
             description: "Conversation history and configuration. Not recommended for removal."
@@ -200,18 +220,19 @@ pub fn analyze(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
 
     let detected = !sections.is_empty();
     let summary = if detected {
-        if versions_summary.is_empty() {
-            "Agent data found.".into()
-        } else {
-            format!("{}.", versions_summary.join(", "))
+        // "2 versions of Cursor Agent CLI and agent data."
+        let mut parts = versions_summary;
+        if has_data {
+            parts.push(if parts.is_empty() { "Agent data" } else { "agent data" }.into());
         }
+        format!("{}.", parts.join(" and "))
     } else {
         "No other AI agent CLIs found.".into()
     };
     (
         ToolReport {
             id: "ai-agents".into(),
-            name: "Other AI agents".into(),
+            name: report_name(&found),
             detected,
             version: None,
             total_bytes: outermost_total(&roots),
@@ -266,10 +287,26 @@ mod tests {
         );
         let (report, recs) = analyze(&ctx(&home));
         assert!(recs.is_empty());
-        assert_eq!(report.name, "Other AI agents");
+        assert_eq!(report.name, "Cursor Agent CLI");
+        assert_eq!(report.summary, "2 versions of Cursor Agent CLI.");
         assert!(report.sections[0]
             .items
             .iter()
             .all(|i| i.state == ItemState::Info));
+    }
+
+    #[test]
+    fn named_after_what_is_found() {
+        let dir = crate::test_support::sandbox();
+        let home = dir.path().canonicalize().unwrap();
+        write(&home.join(".local/share/cursor-agent/versions/2026.01.01-a/cursor-agent"), 10);
+        write(&home.join(".cursor/projects/p/state.json"), 10);
+        let (report, _) = analyze(&ctx(&home));
+        assert_eq!(report.name, "Cursor Agent CLI");
+        assert_eq!(report.summary, "1 version of Cursor Agent CLI and agent data.");
+
+        write(&home.join(".gemini/settings.json"), 10);
+        let (report, _) = analyze(&ctx(&home));
+        assert_eq!(report.name, "Cursor Agent CLI and Gemini CLI");
     }
 }

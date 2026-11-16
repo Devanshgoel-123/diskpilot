@@ -24,7 +24,7 @@ const tool = (id: string, name: string): ToolReport => ({
 });
 
 describe("Developer Tools", () => {
-  it("leaves AI agents to the AI Agents page and links there", () => {
+  it("leaves Claude Code and Codex to the AI Agents page and links there", () => {
     useApp.setState({
       devtools: {
         generatedAtMs: 1,
@@ -46,8 +46,10 @@ describe("Developer Tools", () => {
     );
     expect(screen.getByText("Node.js")).toBeVisible();
     expect(screen.queryByText("Claude Code summary")).toBeNull();
-    expect(screen.queryByText("GitHub Copilot")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /AI agents are on the AI Agents page/ }));
+    expect(screen.getByText("GitHub Copilot")).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Claude Code and Codex are on the AI Agents page/ }),
+    );
     expect(useApp.getState().page).toBe("agents");
   });
 });

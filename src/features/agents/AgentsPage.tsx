@@ -10,7 +10,6 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AppIcon } from "@/components/shared/AppIcon";
@@ -27,7 +26,7 @@ import {
 import { Panel } from "@/components/ui/panel";
 import { formatBytes, formatCount, formatRelative } from "@/lib/format";
 import { useApp } from "@/lib/store";
-import type { AgentReport, ToolReport } from "@/lib/types";
+import type { AgentReport } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 import {
@@ -40,8 +39,6 @@ import {
 import { type AgentTab, useAgents, useReviewable } from "./agentsStore";
 import { BrandMark } from "./logos";
 import { type Confirmation } from "./shared";
-import { AGENT_TOOL_IDS, MAIN_AGENT_IDS } from "@/features/developer/agentTools";
-import { ToolCard } from "@/features/developer/ToolCard";
 import { TranscriptSecrets } from "@/features/developer/TranscriptSecrets";
 
 /** The app bundle, when the agent has one; its own icon is the best logo. */
@@ -51,9 +48,6 @@ const AGENT_APP: Record<string, string> = {
   antigravity: "/Applications/Antigravity.app",
   "claude-desktop": "/Applications/Claude.app",
 };
-
-/** Rail entries for other AI tools are selected as `tool:<id>`. */
-const TOOL_PREFIX = "tool:";
 
 const REPO_ISSUES = "https://github.com/Devanshgoel-123/diskpilot/issues/new";
 const REQUESTABLE = ["Windsurf", "GitHub Copilot", "Gemini CLI", "Cline", "Zed", "Kiro"];
@@ -275,16 +269,6 @@ function Posture({ agent }: { agent: AgentReport }) {
 }
 
 /** The Claude app, Copilot and other agent CLIs, from the Developer Tools analysis. */
-function useOtherTools(): ToolReport[] {
-  return useApp(
-    useShallow((s) =>
-      (s.devtools?.tools ?? []).filter(
-        (t) => t.detected && AGENT_TOOL_IDS.has(t.id) && !MAIN_AGENT_IDS.has(t.id),
-      ),
-    ),
-  );
-}
-
 function RailItem({
   id,
   name,
@@ -330,18 +314,15 @@ function RailItem({
 }
 
 /**
- * Every agent on this Mac, with how many of its settings need a look, then
- * the other AI tools whose storage DiskPilot knows. Stays in view while the
- * selected one scrolls.
+ * Every agent on this Mac, with how many of its settings need a look. Stays
+ * in view while the selected one scrolls.
  */
 function AgentRail({
   agents,
-  tools,
   selected,
   onSelect,
 }: {
   agents: AgentReport[];
-  tools: ToolReport[];
   selected: string;
   onSelect: (id: string) => void;
 }) {
@@ -374,23 +355,6 @@ function AgentRail({
             </p>
           ) : null}
         </div>
-        {tools.length ? (
-          <div className="space-y-1">
-            <p className="px-2 text-2xs font-semibold text-subtle-foreground">Other AI tools</p>
-            <div className="space-y-px">
-              {tools.map((t) => (
-                <RailItem
-                  key={t.id}
-                  id={t.id}
-                  name={t.name}
-                  detail={[t.version, formatBytes(t.totalBytes)].filter(Boolean).join(" · ")}
-                  on={selected === TOOL_PREFIX + t.id}
-                  onSelect={() => onSelect(TOOL_PREFIX + t.id)}
-                />
-              ))}
-            </div>
-          </div>
-        ) : null}
       </div>
       {riskyTotal ? (
         <p className="mx-2 border-t border-border pt-3 text-xs text-muted-foreground">
@@ -400,21 +364,6 @@ function AgentRail({
         </p>
       ) : null}
     </nav>
-  );
-}
-
-/** An AI tool without its own settings view: what it stores and what can go. */
-function ToolDetail({ tool }: { tool: ToolReport }) {
-  const reviewable = useReviewable();
-  const review = useApp((s) => s.reviewInRecommendations);
-  return (
-    <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">
-        What this takes up on this Mac and what can be cleaned up. DiskPilot doesn&apos;t read its
-        settings.
-      </p>
-      <ToolCard key={tool.id} tool={tool} reviewable={reviewable} onReview={review} defaultOpen />
-    </div>
   );
 }
 
@@ -516,12 +465,8 @@ export function AgentsPage() {
   }, [devtoolsReady, analyzeDevTools]);
 
   const detected = useMemo(() => report?.agents.filter((a) => a.detected) ?? [], [report]);
-  const tools = useOtherTools();
-  const tool = selected?.startsWith(TOOL_PREFIX)
-    ? (tools.find((t) => TOOL_PREFIX + t.id === selected) ?? null)
-    : null;
-  const agent = tool ? null : (detected.find((a) => a.id === selected) ?? detected[0] ?? null);
-  const showRail = detected.length + tools.length > 1;
+  const agent = detected.find((a) => a.id === selected) ?? detected[0] ?? null;
+  const showRail = detected.length > 1;
 
   return (
     <>
@@ -573,32 +518,10 @@ export function AgentsPage() {
           ) : (
             <div className={cn("grid gap-8", showRail && "md:grid-cols-[208px_minmax(0,1fr)]")}>
               {showRail ? (
-                <AgentRail
-                  agents={detected}
-                  tools={tools}
-                  selected={tool ? TOOL_PREFIX + tool.id : (agent?.id ?? "")}
-                  onSelect={select}
-                />
+                <AgentRail agents={detected} selected={agent?.id ?? ""} onSelect={select} />
               ) : null}
               <div className="min-w-0 space-y-8">
-                {tool ? (
-                  <section aria-label={tool.name} className="space-y-4">
-                    <div className="flex items-center gap-3">
-                      <AgentLogo id={tool.id} size="md" />
-                      <div className="min-w-0">
-                        <h2 className="text-[17px] leading-[22px] font-semibold tracking-tight">
-                          {tool.name}
-                        </h2>
-                        <p className="truncate font-mono text-2xs text-subtle-foreground">
-                          {[tool.version, `${formatBytes(tool.totalBytes)} on disk`]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </p>
-                      </div>
-                    </div>
-                    <ToolDetail tool={tool} />
-                  </section>
-                ) : agent ? (
+                {agent ? (
                   <section aria-label={agent.name} className="space-y-4">
                     <div className="flex items-center gap-3">
                       <AgentLogo id={agent.id} size="md" />
