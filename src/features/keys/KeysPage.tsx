@@ -34,6 +34,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Panel } from "@/components/ui/panel";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import { formatCount, formatRelative, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
@@ -359,15 +360,31 @@ function KeyRow({
       </ul>
       <div className="flex shrink-0 items-center gap-1.5 md:justify-end">
         {file.canFixPermissions ? (
-          <Button
-            size="sm"
-            variant="soft"
-            disabled={!!busy}
-            onClick={() => void change(`perm:${file.path}`, () => api.keysMakePrivate(file.path))}
-          >
-            {busy === `perm:${file.path}` ? <Loader2 className="animate-spin" /> : <Lock />}
-            Make private
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="sm"
+                variant="soft"
+                disabled={!!busy}
+                onClick={() =>
+                  void change(`perm:${file.path}`, () => api.keysMakePrivate(file.path))
+                }
+              >
+                {busy === `perm:${file.path}` ? <Loader2 className="animate-spin" /> : <Lock />}
+                Make private
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="space-y-1.5">
+              <p>
+                Right now other accounts on this Mac, and programs running as them, can open this
+                file.
+              </p>
+              <p>
+                Make private lets only your account read and change it (permissions 600). The file
+                stays where it is and its contents don’t change.
+              </p>
+            </TooltipContent>
+          </Tooltip>
         ) : null}
         <Button
           size="sm"

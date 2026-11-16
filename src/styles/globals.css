@@ -208,6 +208,12 @@
     max-width: var(--content-max);
     padding: var(--gutter) var(--gutter) 40px;
   }
+  /* Keep room for the scrollbar on every page, so the content doesn't move
+     sideways when switching to a tab that is taller or shorter (seen with
+     "Show scroll bars: Always"). */
+  .overflow-y-auto:has(> .page-content) {
+    scrollbar-gutter: stable;
+  }
 }
 
 @layer utilities {

@@ -153,9 +153,14 @@ function ScanStatus() {
       <p className="text-xs text-muted-foreground">
         Scanned {formatRelative(summary.finishedAtMs)}
       </p>
-      <p className="truncate font-mono text-2xs text-subtle-foreground">
-        {tildify(summary.root, home)}
-      </p>
+      {/* A lone "~" reads like a stray character; name the usual case. */}
+      {tildify(summary.root, home) === "~" ? (
+        <p className="truncate text-2xs text-subtle-foreground">Home folder</p>
+      ) : (
+        <p className="truncate font-mono text-2xs text-subtle-foreground">
+          {tildify(summary.root, home)}
+        </p>
+      )}
     </div>
   );
 }
