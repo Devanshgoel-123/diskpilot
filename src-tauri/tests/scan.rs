@@ -337,6 +337,40 @@ fn app_containers_measured_last_give_identical_final_results() {
 }
 
 #[test]
+fn key_files_are_in_both_partial_and_final_results() {
+    let f = fixture();
+    with_app_containers(&f);
+    write(&f.home.join("code/web/.env"), 64);
+
+    let partials = Mutex::new(Vec::new());
+    let fin = scan_with_partial(
+        &opts(&f).deferring_app_containers(),
+        &AtomicBool::new(false),
+        &|_| {},
+        &|o| partials.lock().unwrap().push(o),
+    )
+    .unwrap();
+
+    let names = |o: &ScanOutcome| -> Vec<String> {
+        let mut v: Vec<String> = o
+            .key_files
+            .as_ref()
+            .expect("a scan reports its key files")
+            .iter()
+            .map(|k| k.path.display().to_string())
+            .collect();
+        v.sort();
+        v
+    };
+    let partials = partials.into_inner().unwrap();
+    assert_eq!(partials.len(), 1);
+    let env = f.home.join("code/web/.env").display().to_string();
+    // The final results replace the partial ones, so they must keep the keys.
+    assert_eq!(names(&fin), vec![env.clone()]);
+    assert_eq!(names(&partials[0]), vec![env]);
+}
+
+#[test]
 fn no_partial_result_without_app_containers() {
     let f = fixture();
     let calls = Mutex::new(0);

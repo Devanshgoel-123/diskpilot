@@ -922,8 +922,13 @@ fn build_outcome(
         heavy_directories,
         file_kinds,
     };
-    let key_files =
-        std::mem::take(&mut *shared.key_files.lock().unwrap_or_else(|e| e.into_inner()));
+    // Copied, not taken: the partial results are built first, and the final
+    // results replace them, so both need every key file found.
+    let key_files = shared
+        .key_files
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
     ScanOutcome {
         summary,
         index,
