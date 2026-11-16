@@ -215,7 +215,11 @@ mod tests {
         assert_eq!(planned, vec![nm.as_str(), cache.as_str()]);
         assert_eq!(plan.rejected.len(), 3);
         assert_eq!(plan.total_bytes, 200);
-        assert!(plan.warnings.iter().any(|w| w.contains("Trash")));
+        assert!(plan.warnings.iter().any(|w| w.contains(if cfg!(windows) {
+            "Recycle Bin"
+        } else {
+            "Trash"
+        })));
         assert!(plan.warnings.iter().any(|w| w.contains("Quit")));
     }
 
