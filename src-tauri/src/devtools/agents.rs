@@ -223,7 +223,14 @@ pub fn analyze(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
         // "2 versions of Cursor Agent CLI and agent data."
         let mut parts = versions_summary;
         if has_data {
-            parts.push(if parts.is_empty() { "Agent data" } else { "agent data" }.into());
+            parts.push(
+                if parts.is_empty() {
+                    "Agent data"
+                } else {
+                    "agent data"
+                }
+                .into(),
+            );
         }
         format!("{}.", parts.join(" and "))
     } else {
@@ -299,11 +306,17 @@ mod tests {
     fn named_after_what_is_found() {
         let dir = crate::test_support::sandbox();
         let home = dir.path().canonicalize().unwrap();
-        write(&home.join(".local/share/cursor-agent/versions/2026.01.01-a/cursor-agent"), 10);
+        write(
+            &home.join(".local/share/cursor-agent/versions/2026.01.01-a/cursor-agent"),
+            10,
+        );
         write(&home.join(".cursor/projects/p/state.json"), 10);
         let (report, _) = analyze(&ctx(&home));
         assert_eq!(report.name, "Cursor Agent CLI");
-        assert_eq!(report.summary, "1 version of Cursor Agent CLI and agent data.");
+        assert_eq!(
+            report.summary,
+            "1 version of Cursor Agent CLI and agent data."
+        );
 
         write(&home.join(".gemini/settings.json"), 10);
         let (report, _) = analyze(&ctx(&home));

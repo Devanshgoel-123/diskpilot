@@ -36,7 +36,7 @@ export function confirmationEmail(link) {
     link,
     "",
     `The link works for ${TOKEN_HOURS / 24} days. If this wasn't you, ignore this email: the address won't be used.`,
-    "To stop all email from DiskPilot at any time, reply with \"stop\".",
+    'To stop all email from DiskPilot at any time, reply with "stop".',
     "",
     "Devansh, DiskPilot",
   ].join("\n");
@@ -75,7 +75,10 @@ export async function startConfirmation(sql, email, send = sendWithResend) {
   const row = rows[0];
   if (!row) return "missing";
   if (row.confirmed_at) return "confirmed";
-  if (row.confirm_sent_at && Date.now() - new Date(row.confirm_sent_at).getTime() < RESEND_HOURS * 3600e3) {
+  if (
+    row.confirm_sent_at &&
+    Date.now() - new Date(row.confirm_sent_at).getTime() < RESEND_HOURS * 3600e3
+  ) {
     return "recently-sent";
   }
   const token = newToken();

@@ -26,8 +26,14 @@ function send(res, status, html) {
 
 const done = (ok) =>
   ok
-    ? page("Email confirmed", `<h1>You're confirmed</h1><p>Thanks. You'll hear about fixes and new versions of DiskPilot, nothing else.</p><p><a href="/">diskpilot.live</a></p>`)
-    : page("Link expired", `<h1>This link doesn't work any more</h1><p>It may have been used already or be more than two days old. DiskPilot sends a new one the next time it opens.</p>`);
+    ? page(
+        "Email confirmed",
+        `<h1>You're confirmed</h1><p>Thanks. You'll hear about fixes and new versions of DiskPilot, nothing else.</p><p><a href="/">diskpilot.live</a></p>`,
+      )
+    : page(
+        "Link expired",
+        `<h1>This link doesn't work any more</h1><p>It may have been used already or be more than two days old. DiskPilot sends a new one the next time it opens.</p>`,
+      );
 
 function formToken(body) {
   if (body && typeof body === "object") return body.token;
