@@ -2,7 +2,7 @@
 title: DiskPilot privacy
 h1: Privacy
 description: What DiskPilot sends from your Mac, why, and how to have your email changed or deleted.
-updated: 2026-11-12
+updated: 2026-11-17
 ---
 
 DiskPilot scans, analyses and cleans your Mac on the Mac itself. Nothing about your files, folders or scans leaves it. Three things do use the network, and this page lists each one.
@@ -16,7 +16,7 @@ From version 0.6.5, DiskPilot asks for your email address the first time it open
 - the macOS version, for example 15.1
 - whether the Mac has Apple silicon or an Intel processor
 
-It is sent once, when you sign up. If the Mac is offline at that moment, DiskPilot keeps it on the Mac and sends it the next time it opens. A copy stays in DiskPilot's data folder (`~/Library/Application Support/dev.diskpilot.app/signup.json`), readable only by your user account, so you are not asked again.
+It is sent when you sign up. From version 0.6.8, it is also sent again once after each update, so the version on record is the one you use; no confirmation email is sent for that. If the Mac is offline at that moment, DiskPilot keeps it on the Mac and sends it the next time it opens. A copy stays in DiskPilot's data folder (`~/Library/Application Support/dev.diskpilot.app/signup.json`), readable only by your user account, so you are not asked again.
 
 **Why:** DiskPilot has no accounts, so before 0.6.5 there was no way to tell people that a fix was out or that their copy was outdated, or to ask what they would like changed. The email is used for that: news about new versions and fixes, and the occasional request for feedback. A few emails a year at most.
 

@@ -109,7 +109,8 @@ pub fn run() {
                 }
                 state.restore.finish();
             });
-            // A signup saved while offline goes to diskpilot.live now.
+            // A signup saved while offline goes to diskpilot.live now, and
+            // after an update the new version is reported once.
             if let Some(dir) = app.state::<AppState>().data_dir.clone() {
                 std::thread::spawn(move || {
                     signup::send_pending(&dir, signup::send);

@@ -709,6 +709,8 @@ export interface Signup {
   signedUpAtMs: number;
   /** Whether diskpilot.live has received it (it is sent later when offline). */
   sent: boolean;
+  /** The version diskpilot.live last received; reported again after an update. */
+  sentVersion?: string;
 }
 
 // ---- AI agents ---------------------------------------------------------------

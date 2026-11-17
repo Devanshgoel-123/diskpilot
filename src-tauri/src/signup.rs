@@ -25,6 +25,11 @@ pub struct Signup {
     pub signed_up_at_ms: i64,
     /// Whether diskpilot.live has received it.
     pub sent: bool,
+    /// The DiskPilot version diskpilot.live last received, so an update is
+    /// reported once and the version on record stays current. Missing in
+    /// files saved before 0.6.8, which then report once.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sent_version: Option<String>,
 }
 
 /// What is sent: the email and the versions, nothing else.
@@ -35,6 +40,10 @@ pub struct Payload {
     pub app_version: String,
     pub os_version: String,
     pub arch: String,
+    /// True when this only reports a newer version for an address that was
+    /// already sent, so diskpilot.live sends no confirmation email for it.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub update: bool,
 }
 
 /// A trimmed, lowercased address if it looks like an email, else why not.
@@ -189,7 +198,12 @@ pub fn payload(email: &str) -> Payload {
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         os_version: os_version(),
         arch: std::env::consts::ARCH.to_string(),
+        update: false,
     }
+}
+
+fn current_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
 }
 
 /// Sends the signup to diskpilot.live. Ok once the server has stored it.
@@ -226,10 +240,12 @@ pub fn submit(
         email,
         signed_up_at_ms: now_ms,
         sent: false,
+        sent_version: None,
     };
     save(dir, &signup).map_err(|e| format!("Could not save the signup: {e}"))?;
     if send(&payload(&signup.email)).is_ok() {
         signup.sent = true;
+        signup.sent_version = Some(current_version());
         let _ = save(dir, &signup);
     }
     Ok(signup)
@@ -240,10 +256,20 @@ pub fn send_pending(dir: &Path, send: impl Fn(&Payload) -> Result<(), String>) -
     let Some(mut signup) = load(dir) else {
         return false;
     };
-    if signup.sent || send(&payload(&signup.email)).is_err() {
+    let current = current_version();
+    let update = signup.sent;
+    if update && signup.sent_version.as_deref() == Some(current.as_str()) {
+        return false;
+    }
+    let p = Payload {
+        update,
+        ..payload(&signup.email)
+    };
+    if send(&p).is_err() {
         return false;
     }
     signup.sent = true;
+    signup.sent_version = Some(current);
     save(dir, &signup).is_ok()
 }
 
@@ -329,6 +355,49 @@ mod tests {
         assert!(load(dir.path()).unwrap().sent);
         // Nothing is sent twice.
         assert!(!send_pending(dir.path(), |_| panic!("sent again")));
+    }
+
+    #[test]
+    fn an_update_reports_the_new_version_once() {
+        let dir = crate::test_support::sandbox();
+        // Saved by an older version, which kept no version.
+        save(
+            dir.path(),
+            &Signup {
+                email: "me@proton.me".into(),
+                signed_up_at_ms: 1,
+                sent: true,
+                sent_version: None,
+            },
+        )
+        .unwrap();
+        let sent = RefCell::new(Vec::new());
+        assert!(send_pending(dir.path(), |p| {
+            sent.borrow_mut().push((p.app_version.clone(), p.update));
+            Ok(())
+        }));
+        assert_eq!(sent.into_inner(), [(current_version(), true)]);
+        assert_eq!(
+            load(dir.path()).unwrap().sent_version.as_deref(),
+            Some(current_version().as_str())
+        );
+        assert!(!send_pending(dir.path(), |_| panic!("sent again")));
+
+        // A failed report is tried again on the next launch.
+        let mut s = load(dir.path()).unwrap();
+        s.sent_version = Some("0.0.1".into());
+        save(dir.path(), &s).unwrap();
+        assert!(!send_pending(dir.path(), |_| Err("offline".into())));
+        assert_eq!(
+            load(dir.path()).unwrap().sent_version.as_deref(),
+            Some("0.0.1")
+        );
+    }
+
+    #[test]
+    fn a_first_signup_is_not_marked_as_an_update() {
+        let v = serde_json::to_value(payload("a@b.com")).unwrap();
+        assert!(v.get("update").is_none());
     }
 
     #[test]

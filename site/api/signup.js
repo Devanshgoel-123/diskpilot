@@ -1,6 +1,7 @@
 // POST /api/signup: stores the email DiskPilot asks for on first launch,
 // with the app version, macOS version and CPU architecture. Nothing else is
-// accepted. The table is created on first use. The address only counts once
+// accepted. After an update the app sends the same again once, marked
+// `update`, so the version on record stays current. The table is created on first use. The address only counts once
 // its owner clicks the confirmation link (see lib/confirm.js). See /privacy.
 import { resolveMx } from "node:dns/promises";
 import { neon } from "@neondatabase/serverless";
@@ -142,6 +143,8 @@ function clean(body) {
     appVersion: version(body.appVersion),
     osVersion: version(body.osVersion),
     arch: ARCH.has(body.arch) ? body.arch : null,
+    // The app reporting a newer version for an address it already sent.
+    update: body.update === true,
   };
 }
 
@@ -212,6 +215,9 @@ export default async function handler(req, res) {
         arch = EXCLUDED.arch,
         last_seen = now(),
         times = signups.times + 1`;
+    // A version report after an update records the version only: it
+    // never sends another confirmation email.
+    if (s.update) return res.status(204).end();
     // The address only counts once its owner confirms it. A failed email
     // doesn't fail the signup: the app sends again on its next launch.
     try {
