@@ -16,6 +16,7 @@ import { TIER_META, TIER_ORDER } from "@/lib/tiers";
 import type { MarkerKind, Tier } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+import { applyRangeSelection } from "./cleanupSelection";
 import { CleanupDialog } from "./CleanupDialog";
 import { RecommendationRow } from "./RecommendationRow";
 
@@ -47,6 +48,7 @@ export function RecommendationsPage() {
     consumePreselect();
   }, [consumePreselect]);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [anchor, setAnchor] = useState<string | null>(null);
   const [dialog, setDialog] = useState<{ key: number; ids: string[] } | null>(null);
 
   const byTier = useMemo(() => {
@@ -70,16 +72,34 @@ export function RecommendationsPage() {
   const selection = summarizeSelection(recommendations, liveSelection);
   const max = Math.max(0, ...recommendations.map((r) => r.bytes));
 
-  const toggle = (id: string) =>
+  // Rows in the order they are shown, so a range respects the tier tab and
+  // the "No longer needed" filter.
+  const shown = filter === "all" ? TIER_ORDER.flatMap((t) => byTier[t]) : byTier[filter];
+
+  const toggle = (id: string, shiftKey: boolean) =>
     setSelected((prev) => {
+      const checked = !prev.has(id);
+      if (shiftKey) return applyRangeSelection(shown, anchor, id, checked, prev);
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (checked) next.add(id);
+      else next.delete(id);
       return next;
     });
 
-  const selectAllSafe = () =>
+  const toggleFromRow = (id: string, shiftKey: boolean) => {
+    toggle(id, shiftKey);
+    setAnchor(id);
+  };
+
+  const clearSelection = () => {
+    setSelected(new Set());
+    setAnchor(null);
+  };
+
+  const selectAllSafe = () => {
     setSelected(new Set(byTier.likelySafe.filter((r) => r.methods.length).map((r) => r.id)));
+    setAnchor(null);
+  };
 
   if (!summary) {
     return (
@@ -259,7 +279,7 @@ export function RecommendationsPage() {
                         max={max}
                         selected={liveSelection.has(r.id)}
                         expanded={expanded === r.id}
-                        onToggleSelect={() => toggle(r.id)}
+                        onToggleSelect={(shiftKey) => toggleFromRow(r.id, shiftKey)}
                         onToggleExpand={() => setExpanded((e) => (e === r.id ? null : r.id))}
                       />
                     ))}
@@ -277,7 +297,7 @@ export function RecommendationsPage() {
                 <span className="tabular font-medium">{selection.count}</span> selected,{" "}
                 <span className="tabular font-medium">{formatBytes(selection.bytes)}</span>
               </p>
-              <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+              <Button variant="ghost" size="sm" onClick={clearSelection}>
                 Clear selection
               </Button>
               <span className="text-xs text-subtle-foreground">
@@ -301,7 +321,7 @@ export function RecommendationsPage() {
             if (!open) setDialog(null);
           }}
           onFinished={() => {
-            setSelected(new Set());
+            clearSelection();
             void refreshRecommendations();
             void refreshHistory();
           }}

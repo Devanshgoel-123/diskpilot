@@ -1,5 +1,5 @@
 import { AppWindow, ChevronDown, FolderOpen, FolderTree, Terminal } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 import { AppIcon } from "@/components/shared/AppIcon";
 import { CategoryBadge } from "@/components/shared/CategoryBadge";
@@ -40,13 +40,27 @@ export function RecommendationRow({
   max: number;
   selected: boolean;
   expanded: boolean;
-  onToggleSelect: () => void;
+  onToggleSelect: (shiftKey: boolean) => void;
   onToggleExpand: () => void;
 }) {
   const home = useApp((s) => s.env?.homeDir);
   const openInExplorer = useApp((s) => s.openInExplorer);
   const actionable = rec.methods.length > 0;
   const color = TIER_META[rec.tier].color;
+  // The shift modifier lives on the click/keyboard event, not on `change`.
+  // Capture it here so `onChange` remains the single place that toggles the
+  // controlled input. A direct `change` event sees `false` and toggles alone.
+  const shiftKeyRef = useRef(false);
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === " ") shiftKeyRef.current = event.shiftKey;
+  };
+
+  const handleChange = () => {
+    const shiftHeld = shiftKeyRef.current;
+    shiftKeyRef.current = false;
+    onToggleSelect(shiftHeld);
+  };
 
   return (
     <li className={cn("border-b border-border last:border-0", selected && "bg-accent-soft/60")}>
@@ -56,7 +70,11 @@ export function RecommendationRow({
             <input
               type="checkbox"
               checked={selected}
-              onChange={onToggleSelect}
+              onClick={(event) => {
+                shiftKeyRef.current = event.shiftKey;
+              }}
+              onKeyDown={handleKeyDown}
+              onChange={handleChange}
               aria-label={`Select ${rec.title}`}
               className="size-3.5 accent-[var(--accent)]"
             />
