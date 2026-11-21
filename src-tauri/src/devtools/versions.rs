@@ -1347,7 +1347,10 @@ pub struct Options<'a> {
     pub min_recommended_bytes: u64,
 }
 
-pub const MIN_RECOMMENDED_BYTES: u64 = 1_000_000;
+/// Every flagged older version, leftover or spare installer can be reviewed,
+/// however small: a finding marked as no longer needed with no way to remove
+/// it reads as a dead end.
+pub const MIN_RECOMMENDED_BYTES: u64 = 0;
 
 pub fn analyze_with(ctx: &Ctx, env: &Options) -> (ToolReport, Vec<Recommendation>) {
     let mut sections = Vec::new();
@@ -1646,7 +1649,7 @@ mod tests {
     }
 
     #[test]
-    fn small_findings_are_listed_but_not_recommended() {
+    fn small_findings_can_still_be_reviewed() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path();
         write(&home.join("Library/Android/sdk/build-tools/35.0.0/s"), 5000);
@@ -1660,7 +1663,7 @@ mod tests {
                 min_recommended_bytes: MIN_RECOMMENDED_BYTES,
             },
         );
-        assert!(recs.is_empty());
+        assert_eq!(recs.len(), 1);
         let old = report
             .sections
             .iter()
@@ -1668,7 +1671,7 @@ mod tests {
             .find(|i| i.label == "Android build tools 35.0.0")
             .unwrap();
         assert_eq!(old.state, ItemState::Superseded);
-        assert!(old.recommendation_id.is_none());
+        assert_eq!(old.recommendation_id.as_deref(), Some(recs[0].id.as_str()));
     }
 }
 

@@ -197,10 +197,6 @@ fn workspace_label(target: &Path) -> String {
     }
 }
 
-/// Orphaned workspace storage smaller than this is listed but not turned into
-/// a recommendation, to keep Recommendations readable.
-const MIN_RECOMMENDED_BYTES: u64 = 1_000_000;
-
 fn analyze(ctx: &Ctx, p: EditorPaths) -> (ToolReport, Vec<Recommendation>) {
     let detected = exists(&p.app_support) || exists(&p.extensions) || exists(&p.app_bundle);
     let mut recs = Vec::new();
@@ -253,7 +249,9 @@ fn analyze(ctx: &Ctx, p: EditorPaths) -> (ToolReport, Vec<Recommendation>) {
             orphaned.0 += 1;
             orphaned.1 += bytes;
         }
-        if state == ItemState::Orphaned && bytes >= MIN_RECOMMENDED_BYTES {
+        // Every leftover can be reviewed, however small: one flagged as a
+        // leftover with no way to remove it reads as a dead end.
+        if state == ItemState::Orphaned {
             let rec = RecSpec {
                 source: p.id,
                 title: format!("{} workspace storage · {}", p.name, label),

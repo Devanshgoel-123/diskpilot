@@ -59,7 +59,9 @@ pub struct Agent {
     pub entries: &'static [Entry],
 }
 
-/// Items smaller than this are listed but not recommended.
+/// Caches and other agent data smaller than this are listed but not
+/// recommended. Leftovers (data for a deleted project or an uninstalled
+/// extension) are recommended at any size.
 const MIN_RECOMMENDED_BYTES: u64 = 1_000_000;
 /// A database backup older than this is considered stale.
 pub const BACKUP_STALE_DAYS: i64 = 30;
@@ -851,7 +853,7 @@ fn claude_projects(ctx: &Ctx, out: &mut Collected) {
             ),
         };
         let mut recommendation_id = None;
-        if state == ItemState::Orphaned && bytes >= MIN_RECOMMENDED_BYTES {
+        if state == ItemState::Orphaned {
             let rec = RecSpec {
                 source: CLAUDE_CODE_DATA.id,
                 title: format!("Claude Code sessions · {label}"),
@@ -1019,7 +1021,7 @@ fn copilot_extension_data(ctx: &Ctx, out: &mut Collected) {
             // Only judge when the editor's extension folder exists at all.
             let orphaned = exists(&ext_dir) && !installed.iter().any(|n| n.starts_with(&prefix));
             let mut recommendation_id = None;
-            if orphaned && bytes >= MIN_RECOMMENDED_BYTES {
+            if orphaned {
                 let rec = RecSpec {
                     source: COPILOT.id,
                     title: format!("{} data for uninstalled {id}", editor.name),
