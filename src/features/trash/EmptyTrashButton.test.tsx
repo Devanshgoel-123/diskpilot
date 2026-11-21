@@ -27,7 +27,7 @@ describe("EmptyTrashButton wording", () => {
     setOs("windows");
     render(<EmptyTrashButton />);
     // 2.5 billion bytes, in Windows units.
-    expect(await screen.findByRole("button", { name: "Empty Recycle Bin, 2.3 GB" })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "Empty Recycle Bin, 2.32 GB" })).toBeVisible();
     expect(screen.getByText("Empty Recycle Bin")).toBeVisible();
   });
 });
