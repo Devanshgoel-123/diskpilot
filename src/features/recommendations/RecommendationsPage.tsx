@@ -1,5 +1,5 @@
 import { ListChecks, ShieldCheck, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -47,6 +47,23 @@ export function RecommendationsPage() {
   useEffect(() => {
     consumePreselect();
   }, [consumePreselect]);
+  // ...and the list opens on them, so nobody has to scroll to find what was
+  // just picked. Waits for the list if recommendations are still loading.
+  const listRef = useRef<HTMLDivElement>(null);
+  const reveal = useRef<Set<string> | null>(
+    useApp.getState().preselect?.length ? new Set(useApp.getState().preselect) : null,
+  );
+  useEffect(() => {
+    const ids = reveal.current;
+    if (!ids || !listRef.current) return;
+    const first = [...listRef.current.querySelectorAll<HTMLElement>("[data-rec-id]")].find((el) =>
+      ids.has(el.dataset.recId ?? ""),
+    );
+    if (!first) return;
+    reveal.current = null;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    first.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
+  }, [recommendations]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [dialog, setDialog] = useState<{ key: number; ids: string[] } | null>(null);
 
@@ -106,7 +123,7 @@ export function RecommendationsPage() {
         description="Explained suggestions. Nothing is removed until you review and confirm it."
         actions={<EmptyTrashButton />}
       />
-      <div className="relative min-h-0 flex-1 overflow-y-auto">
+      <div ref={listRef} className="relative min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[1120px] space-y-6 px-6 pt-6 pb-24">
           <ResultsAge />
           <div

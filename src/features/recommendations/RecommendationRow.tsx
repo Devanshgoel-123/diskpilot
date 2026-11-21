@@ -50,7 +50,13 @@ export function RecommendationRow({
   const color = TIER_META[rec.tier].color;
 
   return (
-    <li className={cn("border-b border-border last:border-0", selected && "bg-accent-soft/60")}>
+    <li
+      data-rec-id={rec.id}
+      className={cn(
+        "scroll-mt-6 border-b border-border last:border-0",
+        selected && "bg-accent-soft/60",
+      )}
+    >
       <div className="flex items-center gap-3 px-2 py-2">
         <div className="flex w-5 shrink-0 justify-center">
           {actionable ? (
