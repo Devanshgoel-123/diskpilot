@@ -709,10 +709,16 @@ export interface AppFootprint {
    * uninstaller). Null when Uninstall opens Settings > Apps instead, and on macOS.
    */
   uninstallCommand: string | null;
+  /** Windows: a Microsoft Store app, which Windows removes when asked. */
+  storeApp: boolean;
 }
 
-/** What Uninstall did on Windows. */
-export type UninstallOutcome = "uninstaller" | "settings";
+/**
+ * What Uninstall did on Windows: started the program's uninstaller, removed
+ * the Store app, opened Settings at the Store app's own page (Windows would
+ * not remove it here), or opened Settings > Installed apps.
+ */
+export type UninstallOutcome = "uninstaller" | "removed" | "settingsApp" | "settings";
 
 /** Sandbox data named for an app that is no longer installed. */
 export interface Leftover {

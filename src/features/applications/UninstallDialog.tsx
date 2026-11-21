@@ -1,4 +1,4 @@
-import { ExternalLink, Loader2, RefreshCw, Terminal } from "lucide-react";
+import { ExternalLink, Loader2, RefreshCw, Terminal, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { CopyButton } from "@/components/shared/CopyButton";
@@ -14,10 +14,46 @@ import {
 import { api, errorMessage } from "@/lib/api";
 import type { AppFootprint, UninstallOutcome } from "@/lib/types";
 
+/** What the dialog says for each outcome, and before anything happens. */
+function wording(app: AppFootprint, command: string | null, outcome: UninstallOutcome | null) {
+  switch (outcome) {
+    case "uninstaller":
+      return {
+        title: "Finish in the uninstaller",
+        text: `The uninstaller for ${app.name} has started. Follow its steps, then refresh the list.`,
+      };
+    case "removed":
+      return {
+        title: `${app.name} was uninstalled`,
+        text: `Windows removed ${app.name} for your account. Refresh the list to update it.`,
+      };
+    case "settingsApp":
+      return {
+        title: "Finish in Settings",
+        text: `Windows did not let DiskPilot remove ${app.name} directly, so Settings is open on its own page. Choose Uninstall there if Windows offers it, then refresh the list.`,
+      };
+    case "settings":
+      return {
+        title: "Finish in Settings",
+        text: `Settings is open at Installed apps, and the name is copied. Press Ctrl+V in its search box to find ${app.name}, choose Uninstall, then refresh the list here.`,
+      };
+    default:
+      return {
+        title: `Uninstall ${app.name}`,
+        text: command
+          ? "DiskPilot starts the program's own uninstaller. It may ask questions of its own. DiskPilot does not delete any files itself."
+          : app.storeApp
+            ? "Windows removes this app for your account, the same as Uninstall in Settings. If Windows does not allow it here, Settings opens on this app's page instead."
+            : "This program can only be removed from Settings. DiskPilot opens Settings > Installed apps and copies the app's name, so you can paste it into the search box.",
+      };
+  }
+}
+
 /**
- * Windows: starts an app's own uninstaller, or opens Settings > Apps when it
- * has none DiskPilot can run. DiskPilot never deletes the program itself;
- * the person finishes in the uninstaller, then refreshes the list.
+ * Windows: starts an app's own uninstaller; removes a Store app through
+ * Windows (or opens its page in Settings when Windows declines); otherwise
+ * opens Settings > Apps with the name copied for its search box. DiskPilot
+ * never deletes a program's files itself.
  */
 export function UninstallDialog({
   app,
@@ -33,11 +69,21 @@ export function UninstallDialog({
   const [error, setError] = useState<string | null>(null);
   const command = app.uninstallCommand;
 
+  const say = wording(app, command, outcome);
+
   const start = async () => {
     setStarting(true);
     setError(null);
+    // Settings has no link to one desktop program; the name goes on the
+    // clipboard so its search box finds the app with a paste.
+    if (!command && !app.storeApp) {
+      await navigator.clipboard?.writeText(app.name).catch(() => undefined);
+    }
     try {
-      setOutcome(await api.uninstallApp(app.bundleId));
+      const result = await api.uninstallApp(app.bundleId);
+      setOutcome(result);
+      // Gone already: update the list behind the dialog right away.
+      if (result === "removed") onRefresh();
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -49,22 +95,8 @@ export function UninstallDialog({
     <Dialog open onOpenChange={(o) => !o && !starting && onClose()}>
       <DialogContent className="w-[min(560px,calc(100vw-32px))]">
         <DialogHeader>
-          <DialogTitle>
-            {outcome === "uninstaller"
-              ? "Finish in the uninstaller"
-              : outcome === "settings"
-                ? "Finish in Settings"
-                : `Uninstall ${app.name}`}
-          </DialogTitle>
-          <DialogDescription>
-            {outcome === "uninstaller"
-              ? `The uninstaller for ${app.name} has started. Follow its steps, then refresh the list.`
-              : outcome === "settings"
-                ? `Settings is open at Installed apps. Find ${app.name}, choose Uninstall, then refresh the list here.`
-                : command
-                  ? "DiskPilot starts the program's own uninstaller. It may ask questions of its own. DiskPilot does not delete any files itself."
-                  : "Windows removes this app from Settings. DiskPilot opens Settings > Apps > Installed apps, where you can uninstall it."}
-          </DialogDescription>
+          <DialogTitle>{say.title}</DialogTitle>
+          <DialogDescription>{say.text}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3 px-5 py-4 text-xs">
@@ -113,8 +145,20 @@ export function UninstallDialog({
                 Cancel
               </Button>
               <Button onClick={() => void start()} disabled={starting}>
-                {starting ? <Loader2 className="animate-spin" /> : <ExternalLink />}
-                {command ? "Start uninstaller" : "Open Settings"}
+                {starting ? (
+                  <Loader2 className="animate-spin" />
+                ) : app.storeApp && !command ? (
+                  <Trash2 />
+                ) : (
+                  <ExternalLink />
+                )}
+                {command
+                  ? "Start uninstaller"
+                  : app.storeApp
+                    ? starting
+                      ? "Uninstalling…"
+                      : "Uninstall"
+                    : "Open Settings"}
               </Button>
             </>
           )}

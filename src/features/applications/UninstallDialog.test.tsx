@@ -25,6 +25,7 @@ function app(over: Partial<AppFootprint> = {}): AppFootprint {
     publisher: "Igor Pavlov",
     version: "24.08",
     uninstallCommand: '"C:\\Program Files\\7-Zip\\Uninstall.exe"',
+    storeApp: false,
     ...over,
   };
 }
@@ -51,8 +52,10 @@ describe("UninstallDialog", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("opens Settings when there is no uninstaller to run", async () => {
+  it("opens Settings with the name copied when there is no uninstaller to run", async () => {
     uninstallApp.mockResolvedValue("settings");
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     render(
       <UninstallDialog
         app={app({ uninstallCommand: null })}
@@ -60,11 +63,46 @@ describe("UninstallDialog", () => {
         onRefresh={() => {}}
       />,
     );
-    expect(screen.getByText(/Settings > Apps > Installed apps/)).toBeInTheDocument();
+    expect(screen.getByText(/copies the app's name/)).toBeInTheDocument();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Open Settings" }));
     });
+    expect(writeText).toHaveBeenCalledWith("7-Zip");
     expect(screen.getByText("Finish in Settings")).toBeInTheDocument();
+    expect(screen.getByText(/Press Ctrl\+V/)).toBeInTheDocument();
+  });
+
+  it("uninstalls a Store app directly and refreshes the list", async () => {
+    uninstallApp.mockResolvedValue("removed");
+    const onRefresh = vi.fn();
+    render(
+      <UninstallDialog
+        app={app({ name: "YouTube", uninstallCommand: null, storeApp: true })}
+        onClose={() => {}}
+        onRefresh={onRefresh}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Open Settings" })).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Uninstall" }));
+    });
+    expect(screen.getByText("YouTube was uninstalled")).toBeInTheDocument();
+    expect(onRefresh).toHaveBeenCalled();
+  });
+
+  it("says Settings is on the app's own page when Windows declines", async () => {
+    uninstallApp.mockResolvedValue("settingsApp");
+    render(
+      <UninstallDialog
+        app={app({ name: "LockApp", uninstallCommand: null, storeApp: true })}
+        onClose={() => {}}
+        onRefresh={() => {}}
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Uninstall" }));
+    });
+    expect(screen.getByText(/Settings is open on its own page/)).toBeInTheDocument();
   });
 
   it("shows the engine's error and stays open", async () => {
