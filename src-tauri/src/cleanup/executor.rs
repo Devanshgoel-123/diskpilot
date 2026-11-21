@@ -33,6 +33,11 @@ pub trait FileOps: Sync {
     fn trash_many(&self, paths: &[PathBuf]) -> Vec<io::Result<()>> {
         paths.iter().map(|p| self.trash(p)).collect()
     }
+    /// Why each path must be left alone because a running program uses it
+    /// (see [`super::inuse`]), one entry per path in order.
+    fn in_use(&self, paths: &[PathBuf]) -> Vec<Option<String>> {
+        vec![None; paths.len()]
+    }
 }
 
 /// How many items are checked and moved to the Trash together.
@@ -89,6 +94,11 @@ fn describe_trash_error(e: &trash::Error) -> String {
 impl FileOps for RealFileOps {
     fn trash(&self, path: &Path) -> io::Result<()> {
         move_to_trash(path)
+    }
+
+    fn in_use(&self, paths: &[PathBuf]) -> Vec<Option<String>> {
+        let snapshot = super::inuse::Snapshot::take();
+        paths.iter().map(|p| snapshot.blocker(p)).collect()
     }
 
     fn delete(&self, path: &Path) -> io::Result<()> {
@@ -330,6 +340,19 @@ pub fn execute_with_progress(
                 Err(reason) => (skipped(plan, item, reason), None),
             })
             .collect();
+        // A dev server started since the review still stops its project here.
+        let candidates: Vec<PathBuf> = checked.iter().filter_map(|(_, p)| p.clone()).collect();
+        let mut busy = ops.in_use(&candidates).into_iter();
+        for (result, path) in checked.iter_mut() {
+            if path.is_none() {
+                continue;
+            }
+            if let Some(Some(reason)) = busy.next() {
+                result.status = ItemStatus::Skipped;
+                result.error = Some(reason);
+                *path = None;
+            }
+        }
 
         let ready: Vec<PathBuf> = checked.iter().filter_map(|(_, p)| p.clone()).collect();
         let mut outcomes = match plan.method {
@@ -529,6 +552,42 @@ mod tests {
         fn delete(&self, path: &Path) -> io::Result<()> {
             RealFileOps.delete(path)
         }
+    }
+
+    /// A Trash that sees a dev server running from one project.
+    struct BusyTrash(FakeTrash, PathBuf);
+
+    impl FileOps for BusyTrash {
+        fn trash(&self, path: &Path) -> io::Result<()> {
+            self.0.trash(path)
+        }
+        fn delete(&self, path: &Path) -> io::Result<()> {
+            self.0.delete(path)
+        }
+        fn in_use(&self, paths: &[PathBuf]) -> Vec<Option<String>> {
+            paths
+                .iter()
+                .map(|p| (*p == self.1).then(|| "node.exe (process 7) is running".into()))
+                .collect()
+        }
+    }
+
+    #[test]
+    fn items_a_running_program_uses_are_skipped_not_moved() {
+        let dir = crate::test_support::sandbox();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
+        let busy = home.join("app/node_modules");
+        let idle = home.join("old/node_modules");
+        fs::create_dir_all(&busy).unwrap();
+        fs::create_dir_all(&idle).unwrap();
+        let ops = BusyTrash(FakeTrash(Default::default()), busy.clone());
+
+        let record = execute(&plan(CleanupMethod::Trash, &[&busy, &idle]), &home, &home, &ops);
+        assert_eq!(*ops.0 .0.lock().unwrap(), vec![idle.clone()], "only the idle one moves");
+        assert_eq!(record.items[0].status, ItemStatus::Skipped);
+        assert!(record.items[0].error.as_deref().unwrap().contains("node.exe"));
+        assert_eq!(record.items[1].status, ItemStatus::Succeeded);
+        assert_eq!(record.bytes_trashed, 10);
     }
 
     fn plan(method: CleanupMethod, paths: &[&Path]) -> CleanupPlan {
