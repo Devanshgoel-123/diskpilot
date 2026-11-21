@@ -267,23 +267,55 @@ export function DuplicatesPage() {
   const [dialog, setDialog] = useState(false);
   const [preview, setPreview] = useState<{ group: DuplicateGroup; index: number } | null>(null);
 
+  // A search started on an earlier visit to this page that is still going.
+  const [resumed, setResumed] = useState(false);
+
+  const showReport = (r: DuplicateReport) => {
+    clearThumbnails();
+    setReport(r);
+    setKeep({});
+    setSelected(new Set());
+    setOpen(new Set(r.groups.slice(0, 3).map((g) => g.id)));
+  };
+
   useEffect(() => {
-    void api.getDuplicates().then((r) => r && setReport(r));
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const un = onDuplicatesProgress(setProgress);
-    return () => void un.then((f) => f());
+    void api.getDuplicates().then((r) => alive && r && setReport(r));
+    // Leaving the page does not stop a search, so pick it back up: show its
+    // progress and say so up front, rather than offering a button that fails.
+    let waiting = false;
+    const waitForSearch = async () => {
+      const busy = await api.duplicatesRunning().catch(() => false);
+      if (!alive) return;
+      if (busy) {
+        waiting = true;
+        setRunning(true);
+        setResumed(true);
+        timer = setTimeout(() => void waitForSearch(), 1000);
+      } else if (waiting) {
+        setRunning(false);
+        setResumed(false);
+        const r = await api.getDuplicates();
+        if (alive && r) showReport(r);
+      }
+    };
+    void waitForSearch();
+    return () => {
+      alive = false;
+      if (timer) clearTimeout(timer);
+      void un.then((f) => f());
+    };
   }, []);
 
   const search = async () => {
+    if (running) return;
     setRunning(true);
     setError(null);
     setProgress(null);
     try {
-      const r = await api.findDuplicates(minBytes);
-      clearThumbnails();
-      setReport(r);
-      setKeep({});
-      setSelected(new Set());
-      setOpen(new Set(r.groups.slice(0, 3).map((g) => g.id)));
+      showReport(await api.findDuplicates(minBytes));
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -393,6 +425,10 @@ export function DuplicatesPage() {
       {error ? (
         <p role="alert" className="border-b border-border px-6 py-2 text-xs text-critical">
           {error}
+        </p>
+      ) : resumed ? (
+        <p role="status" className="border-b border-border px-6 py-2 text-xs text-muted-foreground">
+          A duplicate search is already running. Its results will show here when it finishes.
         </p>
       ) : null}
       {running ? (

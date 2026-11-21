@@ -1080,6 +1080,13 @@ pub fn cancel_find_duplicates(state: State<'_, AppState>) -> bool {
     }
 }
 
+/// Whether a duplicate search is under way, so a page opened mid-search shows
+/// its progress instead of offering to start another.
+#[tauri::command]
+pub fn duplicates_running(state: State<'_, AppState>) -> bool {
+    state.duplicates().running.is_some()
+}
+
 /// The last duplicate search, if any, so the page survives navigation.
 #[tauri::command]
 pub fn get_duplicates(state: State<'_, AppState>) -> Option<DuplicateReport> {
