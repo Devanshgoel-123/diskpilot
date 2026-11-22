@@ -482,6 +482,22 @@ mod tests {
     }
 
     #[test]
+    fn sbt_ivy_and_coursier_caches_are_recognised() {
+        let p = FakeProbe::empty();
+        let ivy = dir("/Users/test/.ivy2/cache", &p);
+        assert_eq!(ivy.rule_id, "ivy.cache");
+        assert_eq!(ivy.category, Category::Cache);
+        let coursier = dir("/Users/test/Library/Caches/Coursier", &p);
+        assert_eq!(coursier.rule_id, "coursier.cache");
+        assert_eq!(coursier.category, Category::Cache);
+        let sbt = dir("/Users/test/.sbt", &p);
+        assert_eq!(sbt.rule_id, "sbt.home");
+        assert_eq!(sbt.category, Category::DeveloperTools);
+        // Ivy's published-locally artifacts are not the cache.
+        assert_ne!(dir("/Users/test/.ivy2/local", &p).rule_id, "ivy.cache");
+    }
+
+    #[test]
     fn chat_media_and_new_tool_locations_are_recognised() {
         let p = FakeProbe::empty();
         let groups = "/Users/test/Library/Group Containers";
