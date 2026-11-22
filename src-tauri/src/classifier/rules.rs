@@ -350,6 +350,30 @@ pub static DIR_RULES: &[DirRule] = &[
         "Downloaded Java dependencies. Maven re-downloads them on the next build."
     ),
     leaf!(
+        "ivy.cache",
+        HomeRelative(&[".ivy2", "cache"]),
+        Cache,
+        High,
+        "Ivy cache",
+        "Java and Scala dependencies downloaded by Ivy, used by older sbt and Ant builds. They download again on the next build."
+    ),
+    leaf!(
+        "coursier.cache",
+        HomeRelative(&["Library", "Caches", "Coursier"]),
+        Cache,
+        High,
+        "Coursier cache",
+        "Java and Scala dependencies downloaded by Coursier, used by sbt, Mill and Scala CLI, plus any JDKs installed with `cs java`. They download again when needed."
+    ),
+    leaf!(
+        "sbt.home",
+        HomeRelative(&[".sbt"]),
+        DeveloperTools,
+        Medium,
+        "sbt folder",
+        "sbt's launcher files and compiler caches, plus your global sbt settings and plugins. The caches download again; the settings and plugins do not."
+    ),
+    leaf!(
         "nuget.packages",
         HomeRelative(&[".nuget", "packages"]),
         Cache,
