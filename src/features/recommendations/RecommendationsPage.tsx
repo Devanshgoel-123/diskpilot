@@ -70,13 +70,38 @@ export function RecommendationsPage() {
   const selection = summarizeSelection(recommendations, liveSelection);
   const max = Math.max(0, ...recommendations.map((r) => r.bytes));
 
-  const toggle = (id: string) =>
+  // The last checkbox clicked. Shift-clicking another one applies its new state to every
+  // actionable row in between, in the order the list is shown.
+  const [anchor, setAnchor] = useState<string | null>(null);
+  const shownTiers = filter === "all" ? TIER_ORDER : [filter];
+  const actionableShown = shownTiers
+    .flatMap((t) => byTier[t])
+    .filter((r) => r.methods.length)
+    .map((r) => r.id);
+
+  const toggle = (id: string, shift: boolean) => {
+    const from = shift && anchor ? actionableShown.indexOf(anchor) : -1;
+    const to = actionableShown.indexOf(id);
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      const select = !prev.has(id);
+      const ids =
+        from >= 0 && to >= 0
+          ? actionableShown.slice(Math.min(from, to), Math.max(from, to) + 1)
+          : [id];
+      for (const x of ids) {
+        if (select) next.add(x);
+        else next.delete(x);
+      }
       return next;
     });
+    setAnchor(id);
+  };
+
+  const clearSelection = () => {
+    setSelected(new Set());
+    setAnchor(null);
+  };
 
   const selectAllSafe = () =>
     setSelected(new Set(byTier.likelySafe.filter((r) => r.methods.length).map((r) => r.id)));
@@ -95,8 +120,6 @@ export function RecommendationsPage() {
       </>
     );
   }
-
-  const tiers = filter === "all" ? TIER_ORDER : [filter];
 
   return (
     <>
@@ -207,7 +230,7 @@ export function RecommendationsPage() {
               />
             </Panel>
           ) : (
-            tiers.map((tier) =>
+            shownTiers.map((tier) =>
               byTier[tier].length ? (
                 <section key={tier} aria-label={TIER_META[tier].label}>
                   <header className="flex min-h-8 items-center gap-2 border-b border-border pb-2">
@@ -259,7 +282,7 @@ export function RecommendationsPage() {
                         max={max}
                         selected={liveSelection.has(r.id)}
                         expanded={expanded === r.id}
-                        onToggleSelect={() => toggle(r.id)}
+                        onToggleSelect={(shift) => toggle(r.id, shift)}
                         onToggleExpand={() => setExpanded((e) => (e === r.id ? null : r.id))}
                       />
                     ))}
@@ -277,7 +300,7 @@ export function RecommendationsPage() {
                 <span className="tabular font-medium">{selection.count}</span> selected,{" "}
                 <span className="tabular font-medium">{formatBytes(selection.bytes)}</span>
               </p>
-              <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+              <Button variant="ghost" size="sm" onClick={clearSelection}>
                 Clear selection
               </Button>
               <span className="text-xs text-subtle-foreground">
@@ -301,7 +324,7 @@ export function RecommendationsPage() {
             if (!open) setDialog(null);
           }}
           onFinished={() => {
-            setSelected(new Set());
+            clearSelection();
             void refreshRecommendations();
             void refreshHistory();
           }}
