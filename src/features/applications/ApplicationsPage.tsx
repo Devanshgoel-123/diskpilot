@@ -1,5 +1,5 @@
 import { AppWindow, ChevronRight, FolderOpen, PackageX, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -20,7 +20,11 @@ import { isWindows, words } from "@/lib/platform";
 import { WindowsSections } from "@/features/windows/sections";
 
 import { appSubtitle, dataKindLabel } from "./labels";
-import { UninstallDialog } from "./UninstallDialog";
+
+// Windows only: loads when an app is first uninstalled.
+const UninstallDialog = lazy(() =>
+  import("./UninstallDialog").then((m) => ({ default: m.UninstallDialog })),
+);
 
 type SortKey = "total" | "data" | "app" | "name";
 
@@ -401,11 +405,13 @@ export function ApplicationsPage() {
 
               <WindowsSections page="applications" />
               {uninstalling ? (
-                <UninstallDialog
-                  app={uninstalling}
-                  onClose={() => setUninstalling(null)}
-                  onRefresh={load}
-                />
+                <Suspense fallback={null}>
+                  <UninstallDialog
+                    app={uninstalling}
+                    onClose={() => setUninstalling(null)}
+                    onRefresh={load}
+                  />
+                </Suspense>
               ) : null}
             </>
           )}

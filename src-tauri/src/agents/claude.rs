@@ -615,8 +615,9 @@ mod tests {
         write(
             &home.join(".claude/plugins/installed_plugins.json"),
             &format!(
-                r#"{{"version":2,"plugins":{{"tools@mk":[{{"installPath":"{}","version":"1.2.0"}}]}}}}"#,
-                plugin_dir.display()
+                r#"{{"version":2,"plugins":{{"tools@mk":[{{"installPath":{},"version":"1.2.0"}}]}}}}"#,
+                // Escaped, so a Windows path's backslashes stay valid JSON.
+                Value::from(plugin_dir.display().to_string())
             ),
         );
         write(

@@ -1,5 +1,4 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { isTauri } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 
 import { isWindows } from "./platform";
 
@@ -30,9 +29,15 @@ export function applyTheme(t: ThemePreference): void {
     t === "dark" || (t === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.classList.toggle("dark", dark);
   // The Windows title bar is drawn by the system; match it to the app.
+  // The same call `getCurrentWindow().setTheme()` makes, without loading the
+  // whole window API for one Windows-only setting.
   if (isWindows() && isTauri()) {
-    getCurrentWindow()
-      .setTheme(t === "system" ? null : t)
-      .catch(() => undefined);
+    const internals = (
+      window as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }
+    ).__TAURI_INTERNALS__;
+    invoke("plugin:window|set_theme", {
+      label: internals?.metadata?.currentWindow?.label ?? "main",
+      value: t === "system" ? null : t,
+    }).catch(() => undefined);
   }
 }
