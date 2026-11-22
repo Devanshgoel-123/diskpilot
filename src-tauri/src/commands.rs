@@ -182,15 +182,27 @@ pub fn get_disk_info(state: State<'_, AppState>) -> AppResult<DiskInfo> {
     disk::disk_info(&state.home).map_err(|e| AppError::io(&state.home, &e))
 }
 
+/// Drives the user can choose to scan. On macOS only the home volume, so the
+/// interface shows no drive picker.
+#[tauri::command]
+pub async fn list_drives(state: State<'_, AppState>) -> AppResult<Vec<crate::model::DriveInfo>> {
+    let home = state.home.clone();
+    // Asking a sleeping removable drive for its size can take a moment.
+    blocking(move || Ok(disk::list_drives(&home))).await
+}
+
 // ---- Scanning ------------------------------------------------------------
 
 /// Start a background scan. Returns the scan id immediately; progress and
-/// completion arrive as events.
+/// completion arrive as events. `fast` reads the NTFS file table when
+/// DiskPilot runs as administrator on Windows (see [`is_elevated`]); it is
+/// ignored otherwise and the normal scan runs.
 #[tauri::command]
 pub fn start_scan(
     app: AppHandle,
     state: State<'_, AppState>,
     root: Option<String>,
+    fast: Option<bool>,
 ) -> AppResult<String> {
     let root = match root {
         Some(raw) => safety::parse_user_path(&raw)?,
@@ -207,12 +219,40 @@ pub fn start_scan(
         slot.running = Some(cancel.clone());
     }
     let id = format!("scan-{}", now_ms());
-    let opts = ScanOptions::new(id.clone(), root, state.home.clone()).deferring_app_containers();
+    let mut opts =
+        ScanOptions::new(id.clone(), root, state.home.clone()).deferring_app_containers();
+    opts.fast = fast.unwrap_or(false);
     std::thread::Builder::new()
         .name("diskpilot-scan".into())
         .spawn(move || run_scan(app, opts, cancel))
         .map_err(|e| AppError::Other(format!("Could not start scan thread: {e}")))?;
     Ok(id)
+}
+
+/// Whether DiskPilot runs with administrator rights, which the fast scan
+/// needs on Windows.
+#[tauri::command]
+pub fn is_elevated() -> bool {
+    crate::platform::is_elevated()
+}
+
+/// Start DiskPilot again with administrator rights, after the person
+/// confirmed. Windows shows its UAC prompt; this instance exits once the new
+/// one starts. Fails if they decline or on other platforms.
+#[tauri::command]
+pub fn relaunch_elevated(app: AppHandle) -> AppResult<()> {
+    match crate::platform::relaunch_elevated() {
+        Ok(()) => {
+            app.exit(0);
+            Ok(())
+        }
+        Err(e) if e.raw_os_error() == Some(1223) => Err(AppError::Other(
+            "Administrator rights were not granted.".to_string(),
+        )),
+        Err(e) => Err(AppError::Other(format!(
+            "Could not restart DiskPilot as administrator: {e}"
+        ))),
+    }
 }
 
 fn run_scan(app: AppHandle, opts: ScanOptions, cancel: Arc<AtomicBool>) {
@@ -506,8 +546,9 @@ pub async fn get_item_details(state: State<'_, AppState>, path: String) -> AppRe
     .await
 }
 
-/// Reveal an item in Finder. Uses `open -R` with the path passed as a single
-/// argument (no shell), and only for paths inside the scanned folder.
+/// Reveal an item in Finder (File Explorer on Windows). Uses `open -R` with
+/// the path passed as a single argument (no shell), and only for paths
+/// inside the scanned folder.
 #[tauri::command]
 pub fn reveal_in_finder(state: State<'_, AppState>, path: String) -> AppResult<()> {
     let outcome = last_scan(&state)?;
@@ -515,18 +556,29 @@ pub fn reveal_in_finder(state: State<'_, AppState>, path: String) -> AppResult<(
     if path.symlink_metadata().is_err() {
         return Err(SafetyError::Missing(path.display().to_string()).into());
     }
-    let status = std::process::Command::new("/usr/bin/open")
-        .arg("-R")
-        .arg(&path)
-        .status()
-        .map_err(|e| AppError::io(&path, &e))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(AppError::Other(format!(
-            "Finder could not reveal {}",
-            path.display()
-        )))
+    #[cfg(windows)]
+    return crate::winshell::reveal(&path).map_err(|e| {
+        AppError::Other(format!(
+            "File Explorer could not show {}: {}",
+            path.display(),
+            e.message()
+        ))
+    });
+    #[cfg(not(windows))]
+    {
+        let status = std::process::Command::new("/usr/bin/open")
+            .arg("-R")
+            .arg(&path)
+            .status()
+            .map_err(|e| AppError::io(&path, &e))?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(AppError::Other(format!(
+                "Finder could not reveal {}",
+                path.display()
+            )))
+        }
     }
 }
 
@@ -536,20 +588,43 @@ pub fn reveal_in_finder(state: State<'_, AppState>, path: String) -> AppResult<(
 pub fn open_owner_app(rule_id: String) -> AppResult<()> {
     let app = crate::recommend::policies::owner_app(&rule_id)
         .ok_or_else(|| AppError::Other("DiskPilot does not open an app for this item.".into()))?;
-    for id in app.bundle_ids {
-        let opened = std::process::Command::new("/usr/bin/open")
-            .args(["-b", id])
-            .stderr(std::process::Stdio::null())
-            .status()
-            .is_ok_and(|s| s.success());
-        if opened {
-            return Ok(());
+    #[cfg(windows)]
+    return crate::apps::win::open_owner_app(app.name).map_err(AppError::Other);
+    #[cfg(not(windows))]
+    {
+        for id in app.bundle_ids {
+            let opened = std::process::Command::new("/usr/bin/open")
+                .args(["-b", id])
+                .stderr(std::process::Stdio::null())
+                .status()
+                .is_ok_and(|s| s.success());
+            if opened {
+                return Ok(());
+            }
         }
+        Err(AppError::Other(format!(
+            "{} is not installed on this Mac, or macOS could not open it.",
+            app.name
+        )))
     }
-    Err(AppError::Other(format!(
-        "{} is not installed on this Mac, or macOS could not open it.",
-        app.name
-    )))
+}
+
+/// Start an installed program's own uninstaller, or open Settings > Apps
+/// (Windows). Called only after the person confirmed in the window, which
+/// shows the exact command first (`uninstallCommand`). `id` is the app's
+/// `bundleId` from `get_app_storage`; the command itself is read from the
+/// registry again here. DiskPilot never deletes a program's folder.
+#[tauri::command]
+pub async fn uninstall_app(id: String) -> AppResult<crate::apps::UninstallOutcome> {
+    blocking(move || crate::apps::uninstall(&id).map_err(AppError::Other)).await
+}
+
+/// Windows system areas (hibernation and page files, Windows.old, update
+/// caches, WinSxS, crash dumps) with their sizes and the Windows tool that
+/// reclaims each. Read-only. Empty on macOS.
+#[tauri::command]
+pub async fn get_system_extras() -> AppResult<Vec<crate::system_extras::SystemExtra>> {
+    blocking(|| Ok(crate::system_extras::system_extras())).await
 }
 
 /// A Quick Look thumbnail (JPEG or PNG bytes) of a file DiskPilot listed, so people
@@ -569,11 +644,14 @@ pub async fn file_thumbnail(
     let cache = state.thumbs.clone();
     blocking(move || {
         let path = previewable_file(&path)?;
+        ensure_local(&path)?;
         if let Some(saved) = cache.as_ref().and_then(|c| c.get(&path, size)) {
             return Ok(tauri::ipc::Response::new(saved));
         }
-        let made = crate::preview::thumbnail_png(&path, size)
-            .ok_or_else(|| AppError::Other("macOS could not make a preview of this file".into()))?;
+        let system = if cfg!(windows) { "Windows" } else { "macOS" };
+        let made = crate::preview::thumbnail_png(&path, size).ok_or_else(|| {
+            AppError::Other(format!("{system} could not make a preview of this file"))
+        })?;
         if let Some(c) = &cache {
             c.put(&path, size, &made);
         }
@@ -594,16 +672,28 @@ pub async fn open_listed_file(state: State<'_, AppState>, path: String) -> AppRe
     blocking(move || {
         let path = previewable_file(&path)?;
         if !opens_to_view(&path) {
-            return Err(AppError::Other(
-                "DiskPilot opens photos, videos, audio and documents only. Use Show in Finder for this file.".into(),
-            ));
+            let show = if cfg!(windows) {
+                "Show in File Explorer"
+            } else {
+                "Show in Finder"
+            };
+            return Err(AppError::Other(format!(
+                "DiskPilot opens photos, videos, audio and documents only. Use {show} for this file."
+            )));
         }
+        ensure_local(&path)?;
+        #[cfg(windows)]
+        return crate::winshell::shell_open(path.as_os_str(), None, true).map_err(|_| {
+            AppError::Other(format!("Windows has no app to open {}", path.display()))
+        });
+        #[cfg(not(windows))]
         let status = std::process::Command::new("/usr/bin/open")
             .arg("--")
             .arg(&path)
             .stderr(std::process::Stdio::null())
             .status()
             .map_err(|e| AppError::io(&path, &e))?;
+        #[cfg(not(windows))]
         if status.success() {
             Ok(())
         } else {
@@ -614,6 +704,23 @@ pub async fn open_listed_file(state: State<'_, AppState>, path: String) -> AppRe
         }
     })
     .await
+}
+
+/// Refuses a file that is online only (a OneDrive placeholder), since
+/// previewing or opening it would download it. Files are always local on a
+/// Mac as far as this check goes.
+fn ensure_local(path: &Path) -> AppResult<()> {
+    #[cfg(windows)]
+    if path
+        .symlink_metadata()
+        .is_ok_and(|m| !crate::platform::is_local(&m))
+    {
+        return Err(AppError::Other(
+            "This file is online only. DiskPilot does not download files to preview them.".into(),
+        ));
+    }
+    let _ = path;
+    Ok(())
 }
 
 /// Only paths that Files by type or the duplicate search listed, exactly as
@@ -658,6 +765,25 @@ fn opens_to_view(path: &Path) -> bool {
     })
 }
 
+/// Whether `path` is `canonical`, the path with every link resolved.
+#[cfg(not(windows))]
+fn same_path(path: &Path, canonical: &Path) -> bool {
+    path == canonical
+}
+
+/// Whether `path` is `canonical`, the path with every link resolved. On
+/// Windows, `canonicalize` returns the extended form (`\\?\C:\...`) and
+/// the case stored on disk, which NTFS ignores.
+#[cfg(windows)]
+fn same_path(path: &Path, canonical: &Path) -> bool {
+    let c = canonical.to_string_lossy();
+    let c = match c.strip_prefix(r"\\?\UNC\") {
+        Some(rest) => format!(r"\\{rest}"),
+        None => c.strip_prefix(r"\\?\").unwrap_or(&c).to_string(),
+    };
+    path.to_string_lossy().to_lowercase() == c.to_lowercase()
+}
+
 /// The path, if it is still a regular file reached without any symbolic
 /// link (a folder on the way swapped for a link would lead elsewhere).
 fn previewable_file(raw: &str) -> AppResult<PathBuf> {
@@ -668,7 +794,10 @@ fn previewable_file(raw: &str) -> AppResult<PathBuf> {
     if !meta.is_file() {
         return Err(AppError::Other("Only files can be previewed".into()));
     }
-    if path.canonicalize().ok().as_deref() != Some(path.as_path()) {
+    if !path
+        .canonicalize()
+        .is_ok_and(|real| same_path(&path, &real))
+    {
         return Err(AppError::Other(
             "This file moved since it was listed".into(),
         ));
@@ -996,15 +1125,20 @@ pub async fn create_cleanup_plan(
         &state.home,
         now,
     );
-    if scanned_at.is_none_or(|at| now - at > planner::REMEASURE_AFTER_MS) {
-        plan = blocking(move || {
+    let remeasure = scanned_at.is_none_or(|at| now - at > planner::REMEASURE_AFTER_MS);
+    plan = blocking(move || {
+        // Refuse up front what a running dev server or program is using, so
+        // the preview says what to stop instead of failing halfway.
+        let running = crate::cleanup::inuse::Snapshot::take();
+        planner::exclude_in_use(&mut plan, |p| running.blocker(p));
+        if remeasure {
             planner::refresh_sizes(&mut plan, |p| {
                 p.symlink_metadata().ok().map(|_| scanner::measure(p))
             });
-            Ok(plan)
-        })
-        .await?;
-    }
+        }
+        Ok(plan)
+    })
+    .await?;
     let mut plans = state.plans();
     plans.retain(|_, p| now - p.created_at_ms < planner::PLAN_TTL_MS);
     plans.insert(plan.id.clone(), plan.clone());
@@ -1197,6 +1331,13 @@ pub fn cancel_find_duplicates(state: State<'_, AppState>) -> bool {
         }
         None => false,
     }
+}
+
+/// Whether a duplicate search is under way, so a page opened mid-search shows
+/// its progress instead of offering to start another.
+#[tauri::command]
+pub fn duplicates_running(state: State<'_, AppState>) -> bool {
+    state.duplicates().running.is_some()
 }
 
 /// The last duplicate search, if any, so the page survives navigation.
@@ -1594,13 +1735,142 @@ pub async fn docker_diagnostics(
         if o.status.state != DockerState::Running {
             return Err(docker_error(docker::cli::DockerError::NotRunning));
         }
-        let raw = home.join("Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw");
-        let vm_disk = raw
-            .symlink_metadata()
-            .ok()
-            .filter(|m| m.is_file())
-            .map(|m| (scanner::allocated_bytes(&m), m.len()));
+        let vm_disk = if cfg!(windows) {
+            // Docker Desktop's data disk in WSL (docker_data.vhdx).
+            crate::wsl::find_disks(&home)
+                .into_iter()
+                .filter(|d| d.kind == crate::wsl::DiskKind::DockerData)
+                .find_map(|d| crate::wsl::file_size(&d.path))
+                .map(|s| (s.allocated, s.len))
+        } else {
+            let raw = home.join("Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw");
+            raw.symlink_metadata()
+                .ok()
+                .filter(|m| m.is_file())
+                .map(|m| (scanner::allocated_bytes(&m), m.len()))
+        };
         Ok(actions::diagnostics(&o, vm_disk))
+    })
+    .await
+}
+
+// ---- WSL and Docker virtual disks (Windows) --------------------------------
+
+/// Docker's own figure for what it uses, when Docker is running.
+fn docker_used(home: &Path) -> Option<u64> {
+    let cli = DockerCli::locate(home)?;
+    if docker::status(Some(&cli)).state != DockerState::Running {
+        return None;
+    }
+    docker::usage(&cli).ok().map(|u| u.total_bytes())
+}
+
+/// WSL 2 distributions' and Docker Desktop's virtual disks, with their size
+/// on the drive and, where it can be measured without starting anything,
+/// how much of it is free inside. Read-only.
+#[tauri::command]
+pub async fn wsl_disks(state: State<'_, AppState>) -> AppResult<crate::wsl::WslOverview> {
+    let home = state.home.clone();
+    blocking(move || {
+        let used = if cfg!(windows) {
+            docker_used(&home)
+        } else {
+            None
+        };
+        Ok(crate::wsl::overview(&home, used))
+    })
+    .await
+}
+
+/// How long a reviewed compaction can wait before it must be reviewed again.
+const WSL_REVIEW_TTL_MS: i64 = 10 * 60 * 1000;
+
+/// The preview for compacting a disk, or making it sparse, built from the
+/// disk as it is now.
+fn wsl_fresh_preview(
+    home: &Path,
+    disk_id: &str,
+    method: crate::wsl::compact::CompactMethod,
+    measure: bool,
+) -> AppResult<crate::wsl::compact::CompactPreview> {
+    use crate::wsl::compact;
+    if !cfg!(windows) {
+        return Err(AppError::Other(
+            "Virtual disks can only be compacted on Windows.".into(),
+        ));
+    }
+    let docker = docker_used(home);
+    let disk = if measure {
+        crate::wsl::overview(home, docker)
+            .disks
+            .into_iter()
+            .find(|d| d.id == disk_id)
+    } else {
+        compact::fresh_disk(home, disk_id)
+    }
+    .ok_or_else(|| AppError::Other("This disk is no longer there. Refresh the list.".into()))?;
+    let root = crate::wsl::system_root();
+    let hyperv = method == compact::CompactMethod::Compact && compact::hyperv_available(&root);
+    Ok(compact::build_preview(
+        &disk,
+        method,
+        hyperv,
+        docker.is_some(),
+        &root,
+    ))
+}
+
+#[tauri::command]
+pub async fn wsl_compact_preview(
+    state: State<'_, AppState>,
+    disk_id: String,
+    method: crate::wsl::compact::CompactMethod,
+) -> AppResult<crate::wsl::compact::CompactPreview> {
+    let home = state.home.clone();
+    let mut preview = blocking(move || wsl_fresh_preview(&home, &disk_id, method, true)).await?;
+    let now = now_ms();
+    preview.id = unique_id("wsl", now);
+    let mut reviews = state.wsl_reviews();
+    reviews.retain(|_, (_, at)| now - *at < WSL_REVIEW_TTL_MS);
+    if preview.blocked.is_none() {
+        reviews.insert(
+            preview.id.clone(),
+            (crate::wsl::compact::Reviewed::of(&preview), now),
+        );
+    }
+    Ok(preview)
+}
+
+/// Compact the disk (or make it sparse) the person reviewed by preview id
+/// and confirmed by typing its name. The disk and the exact steps are
+/// checked again first, and the result is recorded in cleanup history.
+#[tauri::command]
+pub async fn wsl_compact_execute(
+    state: State<'_, AppState>,
+    preview_id: String,
+    typed: String,
+) -> AppResult<crate::wsl::compact::CompactResult> {
+    let (reviewed, at) = state
+        .wsl_reviews()
+        .remove(&preview_id)
+        .ok_or_else(|| AppError::Other("This preview has expired. Review it again.".into()))?;
+    if now_ms() - at > WSL_REVIEW_TTL_MS {
+        return Err(AppError::Other(
+            "This preview has expired. Review it again.".into(),
+        ));
+    }
+    let home = state.home.clone();
+    let history = state.history.clone();
+    blocking(move || {
+        let mut fresh = wsl_fresh_preview(&home, &reviewed.disk_id, reviewed.method, false)?;
+        // The estimate came from the measured preview; keep what was shown.
+        fresh.id = preview_id;
+        let result =
+            crate::wsl::compact::execute(fresh, &reviewed, &typed).map_err(AppError::Other)?;
+        if let Some(h) = history {
+            h.record_cleanup(&result.record)?;
+        }
+        Ok(result)
     })
     .await
 }
@@ -1715,7 +1985,9 @@ fn unique_id(prefix: &str, now: i64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{opens_to_view, previewable_file, summary_for_window};
+    #[cfg(unix)]
+    use super::previewable_file;
+    use super::{opens_to_view, summary_for_window};
 
     #[test]
     fn the_window_gets_file_kind_totals_without_the_files() {
@@ -1769,6 +2041,13 @@ mod tests {
             "setup.pkg",
             "link.webloc",
             ".hidden.jpg",
+            "Setup.exe",
+            "setup.msi",
+            "run.bat",
+            "run.cmd",
+            "script.ps1",
+            "Shortcut.lnk",
+            "page.url",
         ];
         for n in yes {
             assert!(opens_to_view(std::path::Path::new(n)), "{n}");
@@ -1778,10 +2057,11 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[test]
     fn previews_only_regular_files_reached_without_links() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let photos = home.join("Photos");
         std::fs::create_dir_all(&photos).unwrap();
         std::fs::write(photos.join("a.jpg"), "x").unwrap();

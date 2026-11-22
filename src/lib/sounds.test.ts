@@ -42,7 +42,6 @@ vi.stubGlobal("AudioContext", FakeAudioContext);
 const sounds = await import("./sounds");
 
 beforeEach(() => {
-  sounds.stopScanSound();
   localStorage.clear();
   visibility = "visible";
   started.length = 0;
@@ -64,28 +63,14 @@ describe("sounds", () => {
     expect(started).toHaveLength(6);
   });
 
-  it("start the scan tone once, and fade it out when stopped", () => {
-    sounds.startScanSound();
-    sounds.startScanSound();
-    expect(started).toHaveLength(4); // three voices and the breathing
-    sounds.stopScanSound();
-    expect(stopped).toHaveLength(4);
-  });
-
-  it("stay silent while the window is hidden, and stop the tone when it hides", () => {
-    sounds.startScanSound();
+  it("stay silent while the window is hidden", () => {
     visibility = "hidden";
-    document.dispatchEvent(new Event("visibilitychange"));
-    expect(stopped).toHaveLength(4);
-    started.length = 0;
-    sounds.startScanSound();
+    sounds.playScanDone();
     sounds.playCleanupDone();
     expect(started).toHaveLength(0);
   });
 
-  it("stop the tone when sounds are turned off", () => {
-    sounds.startScanSound();
-    sounds.setSoundsEnabled(false);
-    expect(stopped).toHaveLength(4);
+  it("make no sound while a scan runs", () => {
+    expect(Object.keys(sounds)).not.toContain("startScanSound");
   });
 });

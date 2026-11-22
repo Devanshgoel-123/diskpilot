@@ -252,11 +252,15 @@ fn plugins(ctx: &Ctx, doc: Option<&DocumentMut>) -> Vec<Plugin> {
 /// Codex is installed when its app or command is, or it has been used. A
 /// `~/.codex/skills` folder alone (left by a skill installer) does not count.
 pub fn installed(ctx: &Ctx) -> bool {
+    #[cfg(not(windows))]
     const BINARIES: &[&str] = &[
         "/opt/homebrew/bin/codex",
         "/usr/local/bin/codex",
         "/Applications/Codex.app",
     ];
+    #[cfg(windows)]
+    const BINARIES: &[&str] = &[];
+    #[cfg(not(windows))]
     const HOME: &[&str] = &[
         ".local/bin/codex",
         ".npm-global/bin/codex",
@@ -264,6 +268,15 @@ pub fn installed(ctx: &Ctx) -> bool {
         ".codex/auth.json",
         ".codex/sessions",
         "Applications/Codex.app",
+    ];
+    // npm's global folder is where `npm i -g @openai/codex` puts the command.
+    #[cfg(windows)]
+    const HOME: &[&str] = &[
+        "AppData/Roaming/npm/codex.cmd",
+        "AppData/Roaming/npm/node_modules/@openai/codex",
+        ".codex/config.toml",
+        ".codex/auth.json",
+        ".codex/sessions",
     ];
     // `Path::exists` follows links, so a launcher left pointing at an
     // uninstalled Codex does not count.
@@ -397,6 +410,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn a_skills_folder_alone_is_not_an_install() {
         let dir = crate::test_support::sandbox();
         let home = dir.path().canonicalize().unwrap();

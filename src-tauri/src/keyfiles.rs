@@ -18,6 +18,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsStr;
 use std::io::Read;
+#[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Component, Path, PathBuf};
 
@@ -99,6 +100,9 @@ const SKIP_DIRS: &[&str] = &[
     ".cache",
     ".Trash",
     "Library",
+    // Windows: app data, the counterpart of ~/Library.
+    "AppData",
+    "$Recycle.Bin",
     "Applications",
     "extensions",
     ".local",
@@ -406,6 +410,7 @@ pub fn report(
     now_ms: i64,
     scanned_at_ms: Option<i64>,
 ) -> (KeysReport, Vec<Found>) {
+    #[cfg(unix)]
     let uid = unsafe { libc::getuid() };
     struct Item {
         found: Found,
@@ -456,9 +461,8 @@ pub fn report(
     for (i, git) in items.iter().zip(git) {
         let path = &i.found.path;
         let kind = i.found.kind;
-        let mode = i.meta.permissions().mode();
         let mut risks = Vec::new();
-        let others_read = mode & 0o044 != 0;
+        let others_read = others_can_read(&i.meta);
         if kind.secret() && others_read {
             risks.push(Risk {
                 kind: RiskKind::OthersCanRead,
@@ -526,7 +530,10 @@ pub fn report(
             bytes: i.meta.len(),
             modified_ms,
             label: labels.get(&key).cloned(),
+            #[cfg(unix)]
             can_fix_permissions: kind.secret() && others_read && i.meta.uid() == uid,
+            #[cfg(not(unix))]
+            can_fix_permissions: false,
             risks,
             path: key,
         });
@@ -643,14 +650,15 @@ pub fn save(data_dir: &Path, keys: &dyn KeySource, store: &Store) -> Result<(), 
     let tmp = data_dir.join(format!(".{STORE_FILE}.tmp"));
     {
         use std::io::Write;
-        use std::os::unix::fs::OpenOptionsExt;
         let _ = std::fs::remove_file(&tmp);
-        let mut f = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .open(&tmp)
-            .map_err(|e| AppError::io(&tmp, &e))?;
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut f = options.open(&tmp).map_err(|e| AppError::io(&tmp, &e))?;
         f.write_all(&blob).map_err(|e| AppError::io(&tmp, &e))?;
         f.sync_all().map_err(|e| AppError::io(&tmp, &e))?;
     }
@@ -730,8 +738,30 @@ pub fn set_label(store: &mut Store, path: &str, label: Option<Label>) -> Result<
     Ok(())
 }
 
+/// Whether accounts other than the owner may read the file. On Windows,
+/// files in the user folder are private to the account by default and
+/// their access lists are not checked here.
+#[cfg(unix)]
+fn others_can_read(meta: &std::fs::Metadata) -> bool {
+    meta.permissions().mode() & 0o044 != 0
+}
+#[cfg(not(unix))]
+fn others_can_read(_meta: &std::fs::Metadata) -> bool {
+    false
+}
+
 /// Make a key readable only by its owner (mode 600). Only regular files the
 /// user owns, never through a link.
+#[cfg(not(unix))]
+pub fn make_private(store: &Store, path: &str) -> Result<(), AppError> {
+    listed(store, path)?;
+    Err(AppError::Other(
+        "Changing permissions is not available on Windows.".into(),
+    ))
+}
+
+/// See the other `make_private`.
+#[cfg(unix)]
 pub fn make_private(store: &Store, path: &str) -> Result<(), AppError> {
     let f = listed(store, path)?;
     let meta = f
@@ -859,6 +889,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn report_flags_readable_shared_copied_and_never_includes_contents() {
         let dir = crate::test_support::sandbox();
         let home = dir.path().canonicalize().unwrap();
@@ -936,11 +967,14 @@ mod tests {
             memchr::memmem::find(&raw, b"AWS").is_none(),
             "no label in plain text"
         );
-        let mode = std::fs::metadata(dir.path().join(STORE_FILE))
-            .unwrap()
-            .permissions()
-            .mode();
-        assert_eq!(mode & 0o777, 0o600);
+        #[cfg(unix)]
+        {
+            let mode = std::fs::metadata(dir.path().join(STORE_FILE))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
 
         assert_eq!(load(dir.path(), &TestKey([7; 32])).unwrap(), store);
         assert!(
@@ -999,6 +1033,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn permissions_are_fixed_only_for_listed_files() {
         let dir = crate::test_support::sandbox();
         let f = dir.path().join("k.pem");

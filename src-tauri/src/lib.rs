@@ -19,9 +19,11 @@ pub mod duplicates;
 pub mod error;
 pub mod explorer;
 pub mod filekinds;
+pub mod fsmode;
 pub mod history;
 pub mod keyfiles;
 pub mod model;
+pub mod platform;
 pub mod preview;
 pub mod privacy;
 pub mod recommend;
@@ -32,12 +34,20 @@ pub mod secrets;
 pub mod signup;
 pub mod snapshot;
 pub mod state;
+pub mod system_extras;
 #[cfg(test)]
 pub mod test_support;
 pub mod thumbcache;
+#[cfg(unix)]
+pub mod trash;
+#[cfg(windows)]
+#[path = "recycle_bin.rs"]
 pub mod trash;
 pub mod tray;
 pub mod tray_icon;
+#[cfg(any(windows, test))]
+pub mod winshell;
+pub mod wsl;
 
 use tauri::Manager;
 
@@ -45,13 +55,23 @@ use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // Windows: opening DiskPilot again (Start menu, a second login item)
+    // brings back the running copy's window instead of a second tray icon.
+    // macOS does this itself.
+    #[cfg(windows)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        tray::show_main_window(app);
+    }));
+    builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
         // "Open at login" starts DiskPilot in the menu bar, without a window.
+        // On Windows the plugin adds a Run registry value with the same
+        // argument, so it starts in the notification area.
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![schedule::STARTED_AT_LOGIN]),
@@ -85,6 +105,7 @@ pub fn run() {
                 trash: std::sync::Mutex::default(),
                 duplicates: std::sync::Mutex::default(),
                 docker_reviews: std::sync::Mutex::default(),
+                wsl_reviews: std::sync::Mutex::default(),
                 // DiskPilot's own cache folder, e.g. ~/Library/Caches/dev.diskpilot.app.
                 thumbs: app
                     .path()
@@ -124,10 +145,13 @@ pub fn run() {
             commands::get_signup,
             commands::submit_signup,
             commands::get_disk_info,
+            commands::list_drives,
             commands::get_schedule,
             commands::set_schedule,
             commands::send_test_reminder,
             commands::start_scan,
+            commands::is_elevated,
+            commands::relaunch_elevated,
             commands::cancel_scan,
             commands::is_scan_running,
             commands::get_scan_summary,
@@ -138,6 +162,7 @@ pub fn run() {
             commands::get_item_details,
             commands::reveal_in_finder,
             commands::open_owner_app,
+            commands::uninstall_app,
             commands::file_thumbnail,
             commands::open_listed_file,
             commands::get_scan_history,
@@ -161,6 +186,7 @@ pub fn run() {
             commands::find_duplicates,
             commands::cancel_find_duplicates,
             commands::get_duplicates,
+            commands::duplicates_running,
             commands::plan_duplicate_cleanup,
             commands::plan_file_kind_cleanup,
             commands::analyze_dev_tools,
@@ -188,9 +214,14 @@ pub fn run() {
             commands::docker_execute,
             commands::docker_inspect,
             commands::docker_diagnostics,
+            commands::wsl_disks,
+            commands::wsl_compact_preview,
+            commands::wsl_compact_execute,
+            commands::get_system_extras,
         ])
         // The menu bar item keeps running when the window is closed; it, the
-        // Dock icon and Quit bring the window back or end the app.
+        // Dock icon and Quit bring the window back or end the app. On Windows
+        // the notification area icon does the same.
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {

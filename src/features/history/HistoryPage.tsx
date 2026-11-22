@@ -9,6 +9,7 @@ import { Panel, PanelHeader } from "@/components/ui/panel";
 import { useApp } from "@/lib/store";
 import type { ScanRecord } from "@/lib/types";
 import { usePage } from "@/lib/usePage";
+import { isWindows, words } from "@/lib/platform";
 
 import { ClearedStatsPanel } from "./ClearedStats";
 import { CleanupHistory } from "./CleanupHistory";
@@ -42,14 +43,17 @@ export function HistoryPage() {
 
   return (
     <>
-      <PageHeader title="History" description="Scans and cleanup actions on this Mac." />
+      <PageHeader
+        title="History"
+        description={`Scans and cleanup actions on this ${words().computer}.`}
+      />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="page-content space-y-4">
           <ClearedStatsPanel />
           <Panel>
             <PanelHeader
               title="Cleanup actions"
-              description="What was executed, the exact operations or commands, space reclaimed and errors. Moved-to-Trash items can be put back from the Trash until it is emptied; permanently deleted items cannot be restored."
+              description={`What was executed, the exact operations or commands, space reclaimed and errors. ${isWindows() ? "Items moved to the Recycle Bin can be restored from it" : "Moved-to-Trash items can be put back from the Trash"} until it is emptied; permanently deleted items cannot be restored.`}
             />
             <CleanupHistory />
           </Panel>

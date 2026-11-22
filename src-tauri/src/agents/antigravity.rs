@@ -17,7 +17,13 @@ use crate::model::Recommendation;
 
 pub const ID: &str = "antigravity";
 const NAME: &str = "Antigravity";
-const SETTINGS: &str = "Library/Application Support/Antigravity/User/settings.json";
+/// Antigravity's settings, in Application Support or `%APPDATA%`.
+fn settings_path(ctx: &Ctx) -> PathBuf {
+    ctx.home_path(&format!(
+        "{}/Antigravity/User/settings.json",
+        crate::devtools::APP_DATA
+    ))
+}
 const SKILL_DIRS: &[&str] = &[
     ".gemini/skills",
     ".gemini/config/skills",
@@ -69,7 +75,7 @@ fn setting_risk(key: &str, value: &Value) -> Option<String> {
 }
 
 fn permissions(ctx: &Ctx) -> Vec<Permission> {
-    let path = ctx.home_path(SETTINGS);
+    let path = settings_path(ctx);
     let Some(doc) = read_small(&path, 4 * 1024 * 1024).and_then(|t| parse_jsonc(&t)) else {
         return Vec::new();
     };
@@ -152,7 +158,7 @@ pub fn analyze(input: &Input) -> (AgentReport, Vec<Recommendation>) {
             id: ID.into(),
             name: NAME.into(),
             detected,
-            version: crate::devtools::app_version(std::path::Path::new("/Applications/Antigravity.app")),
+            version: tool.version.clone(),
             permissions: permissions(ctx),
             connections,
             plugins: editor_extensions(ctx, &ctx.home_path(".antigravity/extensions")),
@@ -192,8 +198,9 @@ mod tests {
             &home.join(".gemini/antigravity/mcp_config.json"),
             r#"{"mcpServers":{"web":{"serverUrl":"https://x.example.com/mcp"}}}"#,
         );
+        let c = ctx(&home);
         write(
-            &home.join(SETTINGS),
+            &settings_path(&c),
             "{\n  \"editor.fontSize\": 13,\n  \"antigravity.agent.terminalExecutionPolicy\": \"turbo\", // yolo\n  \"antigravity.agent.terminal.allowList\": [\"git status\"],\n}\n",
         );
         write(
@@ -201,7 +208,6 @@ mod tests {
             "---\nname: notes\ndescription: Notes.\n---\n",
         );
 
-        let c = ctx(&home);
         let data = home.join("data");
         let input = Input {
             ctx: &c,

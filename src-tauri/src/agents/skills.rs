@@ -199,7 +199,10 @@ fn collect_sessions(dir: &Path, since: i64, depth: usize, out: &mut Vec<(PathBuf
 /// counting lines that list many skills at once (the catalog an agent
 /// shows the model) or that come from the system or developer prompt.
 pub fn skills_read_in(bytes: &[u8]) -> Vec<String> {
-    let finder = memchr::memmem::Finder::new(b"/SKILL.md");
+    // `/SKILL.md` on macOS; `\\SKILL.md` (an escaped backslash) in Windows
+    // transcripts. Searching the name alone finds both.
+    let finder = memchr::memmem::Finder::new(b"SKILL.md");
+    let after_sep = |line: &[u8], h: usize| h > 0 && matches!(line[h - 1], b'/' | b'\\');
     let mut found: Vec<String> = Vec::new();
     // `pos` is always at the start of a line.
     let mut pos = 0;
@@ -212,7 +215,10 @@ pub fn skills_read_in(bytes: &[u8]) -> Vec<String> {
         let le = memchr::memchr(b'\n', &bytes[at..]).map_or(bytes.len(), |n| at + n);
         pos = le + 1;
         let line = &bytes[ls..le];
-        let hits: Vec<usize> = finder.find_iter(line).collect();
+        let hits: Vec<usize> = finder
+            .find_iter(line)
+            .filter(|&h| after_sep(line, h))
+            .collect();
         if hits.len() > 2
             || memchr::memmem::find(line, b"\"role\":\"developer\"").is_some()
             || memchr::memmem::find(line, b"\"role\":\"system\"").is_some()
@@ -221,7 +227,13 @@ pub fn skills_read_in(bytes: &[u8]) -> Vec<String> {
             continue;
         }
         for h in hits {
-            let before = &line[..h];
+            // The folder name ends at the separator before `SKILL.md`; a
+            // JSON-escaped Windows path has two backslashes there.
+            let mut end = h - 1;
+            while end > 0 && line[end - 1] == b'\\' {
+                end -= 1;
+            }
+            let before = &line[..end];
             let start = before
                 .iter()
                 .rposition(|&c| c == b'/' || c == b'\\' || c == b'"' || c == b' ')
@@ -346,6 +358,15 @@ mod tests {
 {"type":"function_call","arguments":"{\"cmd\":\"cat /h/.codex/skills/pdf/SKILL.md\"}"}
 "#;
         assert_eq!(skills_read_in(catalog), vec!["pdf".to_string()]);
+    }
+
+    #[test]
+    fn windows_paths_in_a_transcript_count_too() {
+        // JSON escapes each backslash, so the line holds `\\` between names.
+        let line = br#"{"type":"function_call","arguments":"{\"path\":\"C:\\Users\\me\\.codex\\skills\\deploy\\SKILL.md\"}"}
+{"type":"message","content":"see MYSKILL.md"}
+"#;
+        assert_eq!(skills_read_in(line), vec!["deploy".to_string()]);
     }
 
     #[test]

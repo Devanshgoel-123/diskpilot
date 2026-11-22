@@ -18,7 +18,9 @@ fn write(path: &Path, bytes: usize) {
 #[test]
 fn full_pipeline_removes_only_planned_regenerable_data() {
     let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
-    let home = dir.path().canonicalize().unwrap().join("home");
+    let home = diskpilot_lib::platform::canonicalize(dir.path())
+        .unwrap()
+        .join("home");
     // 60 MB of Xcode DerivedData (likely safe), a node_modules (review first),
     // and personal documents (no recommendation).
     write(

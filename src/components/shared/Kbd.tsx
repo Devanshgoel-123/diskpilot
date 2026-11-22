@@ -1,6 +1,7 @@
+import { keyLabel } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 
-/** One key, drawn like a keycap. */
+/** One key, drawn like a keycap, as this platform's keyboard prints it. */
 export function Kbd({ children, className }: { children: string; className?: string }) {
   return (
     <kbd
@@ -9,7 +10,7 @@ export function Kbd({ children, className }: { children: string; className?: str
         className,
       )}
     >
-      {children}
+      {keyLabel(children)}
     </kbd>
   );
 }

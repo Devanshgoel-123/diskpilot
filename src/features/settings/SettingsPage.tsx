@@ -8,12 +8,13 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { api, errorMessage } from "@/lib/api";
 import { formatBytes, formatRelative, tildify } from "@/lib/format";
-import { useShortcutsDialog } from "@/lib/shortcuts";
+import { keysText, useShortcutsDialog } from "@/lib/shortcuts";
 import { playScanDone, setSoundsEnabled, soundsEnabled } from "@/lib/sounds";
 import { useApp } from "@/lib/store";
 import type { ThemePreference } from "@/lib/theme";
 import type { Signup } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { isWindows, words } from "@/lib/platform";
 
 import { CONTACT_EMAIL, PRIVACY_URL } from "@/features/signup/signup";
 
@@ -55,12 +56,12 @@ function SavedResults() {
       description={
         fileBytes != null && summary ? (
           <>
-            Results from the scan {formatRelative(summary.finishedAtMs)} are kept on this Mac (
-            {formatBytes(fileBytes)}) so they appear right away next time. They hold folder names
-            and sizes, never file contents. A new scan replaces them.
+            Results from the scan {formatRelative(summary.finishedAtMs)} are kept on this{" "}
+            {words().computer} ({formatBytes(fileBytes)}) so they appear right away next time. They
+            hold folder names and sizes, never file contents. A new scan replaces them.
           </>
         ) : (
-          "The last scan is kept on this Mac so results appear right away next time. Nothing is saved yet."
+          `The last scan is kept on this ${words().computer} so results appear right away next time. Nothing is saved yet.`
         )
       }
       control={
@@ -148,8 +149,10 @@ export function SettingsPage() {
                   <span className="font-mono text-foreground">
                     {tildify(scanRoot ?? home ?? "~", home)}
                   </span>
-                  {scanRoot ? null : " (your home folder)"}. macOS may ask for permission to read
-                  protected folders such as Desktop, Documents and Downloads.
+                  {scanRoot ? null : ` (your ${words().homeFolder})`}.
+                  {isWindows()
+                    ? null
+                    : " macOS may ask for permission to read protected folders such as Desktop, Documents and Downloads."}
                 </>
               }
               control={
@@ -172,7 +175,11 @@ export function SettingsPage() {
             />
             <Setting
               label="Scan behavior"
-              description="Symbolic links are never followed, other volumes are skipped, and hard-linked files are counted once. Sizes are space allocated on disk."
+              description={
+                isWindows()
+                  ? "Links and junctions are never followed, other drives are skipped, and hard-linked files are counted once. Files kept online only by OneDrive are never opened, so nothing downloads. Sizes are space allocated on disk."
+                  : "Symbolic links are never followed, other volumes are skipped, and hard-linked files are counted once. Sizes are space allocated on disk."
+              }
               control={null}
             />
             <SavedResults />
@@ -183,7 +190,7 @@ export function SettingsPage() {
           <Section title="Safety">
             <Setting
               label="Cleanup safety"
-              description="Cleanup is always previewed with exact paths and confirmed by you. Items go to the Trash by default; permanent deletion is offered only for regenerable data. Every path is re-checked right before it is touched, protected system and home folders are refused, and symbolic links are never followed. A Docker volume is removed only when you choose it and confirm by typing a name."
+              description={`Cleanup is always previewed with exact paths and confirmed by you. Items go to the ${words().trash} by default; permanent deletion is offered only for regenerable data. Every path is re-checked right before it is touched, protected system and home folders are refused, and ${isWindows() ? "links and junctions are" : "symbolic links are"} never followed. A Docker volume is removed only when you choose it and confirm by typing a name.`}
               control={
                 <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Lock className="size-3" aria-hidden />
@@ -201,14 +208,16 @@ export function SettingsPage() {
           <Section title="About">
             <Setting
               label="Keyboard shortcuts"
-              description="Go to any page with ⌘1 to ⌘8, scan again with ⌘R, filter a list with ⌘F."
+              description={`Go to any page with ${keysText(["⌘", "1"])} to ${keysText(["⌘", "8"])}, scan again with ${keysText(["⌘", "R"])}, filter a list with ${keysText(["⌘", "F"])}.`}
               control={
                 <Button
                   variant="secondary"
                   onClick={() => useShortcutsDialog.getState().setOpen(true)}
                 >
                   Show all
-                  <kbd className="ml-1 font-mono text-2xs text-muted-foreground">⌘/</kbd>
+                  <kbd className="ml-1 font-mono text-2xs text-muted-foreground">
+                    {keysText(["⌘", "/"])}
+                  </kbd>
                 </Button>
               }
             />
@@ -234,7 +243,7 @@ function SoundsSetting() {
   return (
     <Setting
       label="Sounds"
-      description="A quiet tone while a scan runs, and a soft chime when a scan or cleanup finishes. Never while the window is hidden."
+      description="A soft chime when a scan or cleanup finishes. Never while the window is hidden."
       control={
         <Switch
           on={on}
@@ -258,12 +267,12 @@ function PrivacyNote() {
   }, []);
   return (
     <>
-      Scanning, analysis and cleanup run on this Mac, and nothing about your files is sent anywhere.{" "}
-      {signup ? `You signed up as ${signup.email}. ` : ""}DiskPilot sent that email with its
-      version, your macOS version and your kind of Mac to diskpilot.live, to tell you about updates
-      and ask for feedback. To change or delete it, write to {CONTACT_EMAIL}. Once a day DiskPilot
-      asks GitHub whether a new version is out. The optional assistant sends questions to the AI
-      provider you choose, only when you ask one.{" "}
+      Scanning, analysis and cleanup run on this {words().computer}, and nothing about your files is
+      sent anywhere. {signup ? `You signed up as ${signup.email}. ` : ""}DiskPilot sent that email
+      with its version, your {words().os} version and your kind of {words().computer} to
+      diskpilot.live, to tell you about updates and ask for feedback. To change or delete it, write
+      to {CONTACT_EMAIL}. Once a day DiskPilot asks GitHub whether a new version is out. The
+      optional assistant sends questions to the AI provider you choose, only when you ask one.{" "}
       <button
         type="button"
         className="underline underline-offset-2 hover:text-foreground"

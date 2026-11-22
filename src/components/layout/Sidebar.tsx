@@ -16,7 +16,7 @@ import {
 import { useShallow } from "zustand/react/shallow";
 
 import { formatCount, formatRelative, tildify } from "@/lib/format";
-import { shortcutLabel } from "@/lib/shortcuts";
+import { ariaKeys, shortcutKeys, shortcutLabel } from "@/lib/shortcuts";
 import { useApp, type PageId } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { UpdateBanner } from "@/components/layout/UpdateBanner";
@@ -53,7 +53,10 @@ function NavButton({ item }: { item: NavItem }) {
           .filter(Boolean)
           .join(" ") || undefined
       }
-      aria-keyshortcuts={shortcutLabel(item.id)?.replace("⌘", "Meta+") ?? undefined}
+      aria-keyshortcuts={(() => {
+        const keys = shortcutKeys(item.id);
+        return keys ? ariaKeys(keys) : undefined;
+      })()}
       aria-current={active ? "page" : undefined}
       className={cn(
         "flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] transition-colors duration-[120ms]",
@@ -224,8 +227,9 @@ export function Sidebar() {
       aria-label="Main"
       className="flex w-[220px] shrink-0 flex-col border-r border-border bg-sidebar"
     >
-      {/* Space for the macOS traffic lights; doubles as a window drag handle. */}
-      <div data-tauri-drag-region className="h-[38px] shrink-0" />
+      {/* Room for the macOS traffic lights (smaller under the Windows title bar);
+          doubles as a window drag handle. */}
+      <div data-tauri-drag-region className="h-[var(--titlebar-inset)] shrink-0" />
       <div data-tauri-drag-region className="flex items-center gap-2 px-4 pb-3">
         <img src="/logo.svg" alt="" className="pointer-events-none size-[22px]" />
         <span className="pointer-events-none text-[13px] font-semibold">DiskPilot</span>

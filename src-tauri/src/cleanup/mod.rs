@@ -7,4 +7,5 @@
 //! DiskPilot that removes files.
 
 pub mod executor;
+pub mod inuse;
 pub mod planner;

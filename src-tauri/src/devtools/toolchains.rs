@@ -186,6 +186,38 @@ pub fn rust(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
     )
 }
 
+const PYTHON_CACHES_MAC: &[(&str, &str, &str)] = &[
+    (
+        "pip cache",
+        "Library/Caches/pip",
+        "Clean with `pip cache purge`",
+    ),
+    ("uv cache", ".cache/uv", "Clean with `uv cache clean`"),
+    (
+        "Poetry cache",
+        "Library/Caches/pypoetry",
+        "Clean with `poetry cache clear --all .`",
+    ),
+];
+
+const PYTHON_CACHES_WINDOWS: &[(&str, &str, &str)] = &[
+    (
+        "pip cache",
+        "AppData/Local/pip/Cache",
+        "Clean with `pip cache purge`",
+    ),
+    (
+        "uv cache",
+        "AppData/Local/uv/cache",
+        "Clean with `uv cache clean`",
+    ),
+    (
+        "Poetry cache",
+        "AppData/Local/pypoetry/Cache",
+        "Clean with `poetry cache clear --all .`",
+    ),
+];
+
 pub fn python(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
     let mut sections = Vec::new();
     let venvs = project_items(
@@ -210,19 +242,11 @@ pub fn python(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
     }
     let caches = path_items(
         ctx,
-        &[
-            (
-                "pip cache",
-                "Library/Caches/pip",
-                "Clean with `pip cache purge`",
-            ),
-            ("uv cache", ".cache/uv", "Clean with `uv cache clean`"),
-            (
-                "Poetry cache",
-                "Library/Caches/pypoetry",
-                "Clean with `poetry cache clear --all .`",
-            ),
-        ],
+        if cfg!(windows) {
+            PYTHON_CACHES_WINDOWS
+        } else {
+            PYTHON_CACHES_MAC
+        },
     );
     if !caches.is_empty() {
         sections.push(ToolSection {
@@ -291,7 +315,7 @@ mod tests {
     #[test]
     fn marks_the_default_rust_toolchain() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         write(
             &home.join(".rustup/toolchains/stable-aarch64-apple-darwin/bin/rustc"),
             100,
@@ -320,7 +344,7 @@ mod tests {
     #[test]
     fn lists_hugging_face_models() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         write(
             &home.join(".cache/huggingface/hub/models--org--model-x/blobs/a"),
             5000,

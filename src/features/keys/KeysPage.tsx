@@ -40,6 +40,7 @@ import { formatCount, formatRelative, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { KeyFile, KeyKind } from "@/lib/types";
 import { usePage } from "@/lib/usePage";
+import { words } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
 import { useKeys } from "./keysStore";
@@ -233,7 +234,9 @@ function TrashDialog({ file, onClose }: { file: KeyFile | null; onClose: () => v
         {file ? (
           <>
             <DialogHeader>
-              <DialogTitle>Move {file.name} to the Trash?</DialogTitle>
+              <DialogTitle>
+                Move {file.name} to the {words().trash}?
+              </DialogTitle>
               <DialogDescription asChild>
                 <div className="space-y-2">
                   <p className="font-mono text-xs break-all text-foreground">
@@ -241,7 +244,7 @@ function TrashDialog({ file, onClose }: { file: KeyFile | null; onClose: () => v
                   </p>
                   <p>
                     Anything that still uses this {file.kindLabel.toLowerCase()} stops working. You
-                    can put it back from the Trash until you empty it.
+                    can put it back from the {words().trash} until you empty it.
                   </p>
                 </div>
               </DialogDescription>
@@ -259,7 +262,7 @@ function TrashDialog({ file, onClose }: { file: KeyFile | null; onClose: () => v
                 }}
               >
                 {busy ? <Loader2 className="animate-spin" /> : <Trash2 />}
-                Move to Trash
+                Move to {words().trash}
               </Button>
             </DialogFooter>
           </>
@@ -376,8 +379,8 @@ function KeyRow({
             </TooltipTrigger>
             <TooltipContent side="bottom" className="space-y-1.5">
               <p>
-                Right now other accounts on this Mac, and programs running as them, can open this
-                file.
+                Right now other accounts on this {words().computer}, and programs running as them,
+                can open this file.
               </p>
               <p>
                 Make private lets only your account read and change it (permissions 600). The file
@@ -390,7 +393,7 @@ function KeyRow({
           size="sm"
           variant="secondary"
           onClick={() => void api.revealInFinder(file.path)}
-          aria-label={`Show ${file.name} in Finder`}
+          aria-label={`${words().showInFileManager}: ${file.name}`}
         >
           <FolderOpen />
           Show
@@ -412,7 +415,7 @@ function KeyRow({
             <MenuSeparator />
             <MenuItem destructive onSelect={() => onTrash(file)}>
               <Trash2 />
-              Move to Trash…
+              Move to {words().trash}…
             </MenuItem>
           </MenuContent>
         </Menu>
@@ -472,7 +475,7 @@ export function KeysPage() {
     <>
       <PageHeader
         title="Keys & secrets"
-        description="Private keys, certificates and credential files on this Mac, and what makes each one risky."
+        description={`Private keys, certificates and credential files on this ${words().computer}, and what makes each one risky.`}
         actions={
           report?.scannedAtMs ? (
             <span className="text-xs text-subtle-foreground">
@@ -640,9 +643,10 @@ export function KeysPage() {
                 <Pager page={page} label="keys" className="border-t border-border px-3 py-1.5" />
               </Panel>
               <p className="text-xs leading-relaxed text-subtle-foreground">
-                Dependency folders, caches, ~/Library and test fixtures are not searched. Make
-                private sets a file so only your account can read it. Keys you no longer need are
-                safest in the Trash, and keys you still use are safest in a password manager.
+                Dependency folders, caches, {words().os === "Windows" ? "AppData" : "~/Library"} and
+                test fixtures are not searched. Make private sets a file so only your account can
+                read it. Keys you no longer need are safest in the {words().trash}, and keys you
+                still use are safest in a password manager.
               </p>
             </>
           )}

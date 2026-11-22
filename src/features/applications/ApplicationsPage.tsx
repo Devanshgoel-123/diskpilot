@@ -16,6 +16,11 @@ import { formatBytes, formatRelative, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { AppFootprint, AppStorageReport } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { isWindows, words } from "@/lib/platform";
+import { WindowsSections } from "@/features/windows/sections";
+
+import { appSubtitle, dataKindLabel } from "./labels";
+import { UninstallDialog } from "./UninstallDialog";
 
 type SortKey = "total" | "data" | "app" | "name";
 
@@ -25,6 +30,9 @@ const SORTS: { key: SortKey; label: string }[] = [
   { key: "app", label: "App size" },
   { key: "name", label: "Name" },
 ];
+
+/** Width of the Uninstall column on Windows, shared by the header and rows. */
+const UNINSTALL_COL = "w-[5.5rem] shrink-0";
 
 const total = (a: AppFootprint) => (a.appBytes ?? 0) + a.dataBytes;
 
@@ -50,7 +58,7 @@ function Reveal({ path }: { path: string }) {
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Show in Finder"
+          aria-label={words().showInFileManager}
           onClick={(e) => {
             e.stopPropagation();
             api.revealInFinder(path).catch(() => setFailed(true));
@@ -60,7 +68,7 @@ function Reveal({ path }: { path: string }) {
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        {failed ? "Only folders inside the last scan can be shown" : "Show in Finder"}
+        {failed ? "Only folders inside the last scan can be shown" : words().showInFileManager}
       </TooltipContent>
     </Tooltip>
   );
@@ -71,64 +79,90 @@ function AppRow({
   max,
   open,
   onToggle,
+  onUninstall,
 }: {
   app: AppFootprint;
   max: number;
   open: boolean;
   onToggle: () => void;
+  /** Windows only: offers Uninstall next to the row. */
+  onUninstall?: () => void;
 }) {
   const home = useApp((s) => s.env?.homeDir);
   const appShare = max ? ((app.appBytes ?? 0) / max) * 100 : 0;
   const dataShare = max ? (app.dataBytes / max) * 100 : 0;
-  return (
-    <li className="border-b border-border last:border-b-0">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        disabled={!app.locations.length}
-        className="grid w-full grid-cols-[minmax(0,1fr)_5.5rem_5.5rem_9rem_6.5rem_1rem] items-center gap-4 px-2 py-2 text-left transition-colors duration-[120ms] hover:bg-hover disabled:hover:bg-transparent"
-      >
-        <span className="flex min-w-0 items-center gap-3">
-          <AppIcon
-            path={app.appPath}
-            className="size-6"
-            fallback={<AppWindow className="size-6 p-0.5 text-subtle-foreground" aria-hidden />}
-          />
-          <span className="min-w-0">
-            <span className="block truncate text-[13px] font-medium">{app.name}</span>
+  const subtitle = appSubtitle(app);
+  const row = (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      disabled={!app.locations.length}
+      className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_5.5rem_5.5rem_9rem_6.5rem_1rem] items-center gap-4 px-2 py-2 text-left transition-colors duration-[120ms] hover:bg-hover disabled:hover:bg-transparent"
+    >
+      <span className="flex min-w-0 items-center gap-3">
+        <AppIcon
+          path={app.appPath}
+          className="size-6"
+          fallback={<AppWindow className="size-6 p-0.5 text-subtle-foreground" aria-hidden />}
+        />
+        <span className="min-w-0">
+          <span className="block truncate text-[13px] font-medium">{app.name}</span>
+          {isWindows() ? (
+            subtitle ? (
+              <span className="block truncate text-2xs text-subtle-foreground">{subtitle}</span>
+            ) : null
+          ) : (
             <span className="block truncate font-mono text-2xs text-subtle-foreground">
               {app.bundleId}
             </span>
-          </span>
-        </span>
-        <span className="tabular text-right text-[13px] text-muted-foreground">
-          {app.appBytes === null ? "System" : formatBytes(app.appBytes)}
-        </span>
-        <span className="tabular text-right text-[13px]">
-          {app.dataBytes ? formatBytes(app.dataBytes) : "—"}
-        </span>
-        <span className="flex h-1.5 overflow-hidden rounded-full bg-track" aria-hidden>
-          <span className="h-full bg-chart-other" style={{ width: `${appShare}%` }} />
-          <span className="h-full bg-accent" style={{ width: `${dataShare}%` }} />
-        </span>
-        <span className="tabular text-right text-xs text-subtle-foreground">
-          {app.dataModifiedMs ? formatRelative(app.dataModifiedMs) : ""}
-        </span>
-        <ChevronRight
-          className={cn(
-            "size-3.5 text-subtle-foreground transition-transform duration-[180ms]",
-            open && "rotate-90",
-            !app.locations.length && "invisible",
           )}
-          aria-hidden
-        />
-      </button>
+        </span>
+      </span>
+      <span className="tabular text-right text-[13px] text-muted-foreground">
+        {app.appBytes === null ? "System" : formatBytes(app.appBytes)}
+      </span>
+      <span className="tabular text-right text-[13px]">
+        {app.dataBytes ? formatBytes(app.dataBytes) : "—"}
+      </span>
+      <span className="flex h-1.5 overflow-hidden rounded-full bg-track" aria-hidden>
+        <span className="h-full bg-chart-other" style={{ width: `${appShare}%` }} />
+        <span className="h-full bg-accent" style={{ width: `${dataShare}%` }} />
+      </span>
+      <span className="tabular text-right text-xs text-subtle-foreground">
+        {app.dataModifiedMs ? formatRelative(app.dataModifiedMs) : ""}
+      </span>
+      <ChevronRight
+        className={cn(
+          "size-3.5 text-subtle-foreground transition-transform duration-[180ms]",
+          open && "rotate-90",
+          !app.locations.length && "invisible",
+        )}
+        aria-hidden
+      />
+    </button>
+  );
+  return (
+    <li className="border-b border-border last:border-b-0">
+      {onUninstall ? (
+        <div className="flex items-center">
+          {row}
+          <span className={cn(UNINSTALL_COL, "flex justify-end")}>
+            <Button variant="ghost" size="sm" onClick={onUninstall}>
+              Uninstall…
+            </Button>
+          </span>
+        </div>
+      ) : (
+        row
+      )}
       {open ? (
         <ul className="animate-in mb-2 ml-11 border-l border-border pl-3">
           {app.locations.map((l) => (
             <li key={l.path} className="flex items-center gap-3 py-1">
-              <span className="w-36 shrink-0 text-xs text-muted-foreground">{l.kind}</span>
+              <span className="w-36 shrink-0 text-xs text-muted-foreground">
+                {dataKindLabel(l.kind)}
+              </span>
               <span
                 className="min-w-0 flex-1 truncate font-mono text-2xs text-subtle-foreground"
                 title={l.path}
@@ -154,6 +188,7 @@ export function ApplicationsPage() {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("total");
   const [open, setOpen] = useState<string | null>(null);
+  const [uninstalling, setUninstalling] = useState<AppFootprint | null>(null);
 
   // Reload when a new scan finishes, since data sizes come from the scan.
   const scanId = summary?.id;
@@ -180,7 +215,12 @@ export function ApplicationsPage() {
     const q = query.trim().toLowerCase();
     const list = report?.apps ?? [];
     const filtered = q
-      ? list.filter((a) => a.name.toLowerCase().includes(q) || a.bundleId.toLowerCase().includes(q))
+      ? list.filter(
+          (a) =>
+            a.name.toLowerCase().includes(q) ||
+            a.bundleId.toLowerCase().includes(q) ||
+            !!a.publisher?.toLowerCase().includes(q),
+        )
       : list;
     return sortApps(filtered, sort);
   }, [report, query, sort]);
@@ -193,7 +233,11 @@ export function ApplicationsPage() {
     <>
       <PageHeader
         title="Applications"
-        description="Installed apps and the data each keeps in your Library."
+        description={
+          isWindows()
+            ? "Installed apps and the data each keeps in AppData."
+            : "Installed apps and the data each keeps in your Library."
+        }
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="page-content space-y-8">
@@ -224,9 +268,12 @@ export function ApplicationsPage() {
               <div className="flex flex-wrap items-end justify-between gap-6">
                 <dl className="flex flex-wrap gap-x-10 gap-y-3">
                   <Figure label="Apps" value={String(report.apps.length)} />
-                  <Figure label="In app bundles" value={formatBytes(appTotal)} />
                   <Figure
-                    label="App data in Library"
+                    label={isWindows() ? "In program folders" : "In app bundles"}
+                    value={formatBytes(appTotal)}
+                  />
+                  <Figure
+                    label={isWindows() ? "App data in AppData" : "App data in Library"}
                     value={report.dataScanned ? formatBytes(dataTotal) : "Not scanned"}
                   />
                   {report.leftovers.length ? (
@@ -268,8 +315,8 @@ export function ApplicationsPage() {
               {!report.dataScanned ? (
                 <div className="flex items-center justify-between gap-4 rounded-lg bg-panel-raised px-4 py-3">
                   <p className="text-[13px] text-muted-foreground">
-                    App sizes are shown. Scan your home folder to add each app&apos;s caches,
-                    containers and support files.
+                    App sizes are shown. Scan your {words().homeFolder} to add each app&apos;s
+                    caches, containers and support files.
                   </p>
                   <Button size="sm" disabled={scanning} onClick={() => void startScan()}>
                     {scanning ? "Scanning…" : "Scan"}
@@ -278,22 +325,25 @@ export function ApplicationsPage() {
               ) : null}
 
               <section aria-label="Applications">
-                <div className="grid grid-cols-[minmax(0,1fr)_5.5rem_5.5rem_9rem_6.5rem_1rem] gap-4 border-b border-border px-2 pb-1.5 text-xs text-subtle-foreground">
-                  <span>Name</span>
-                  <span className="text-right">App</span>
-                  <span className="text-right">Data</span>
-                  <span className="flex items-center gap-3">
-                    <span className="flex items-center gap-1">
-                      <span className="size-1.5 rounded-full bg-chart-other" aria-hidden />
-                      App
+                <div className="flex border-b border-border">
+                  <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_5.5rem_5.5rem_9rem_6.5rem_1rem] gap-4 px-2 pb-1.5 text-xs text-subtle-foreground">
+                    <span>Name</span>
+                    <span className="text-right">App</span>
+                    <span className="text-right">Data</span>
+                    <span className="flex items-center gap-3">
+                      <span className="flex items-center gap-1">
+                        <span className="size-1.5 rounded-full bg-chart-other" aria-hidden />
+                        App
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="size-1.5 rounded-full bg-accent" aria-hidden />
+                        Data
+                      </span>
                     </span>
-                    <span className="flex items-center gap-1">
-                      <span className="size-1.5 rounded-full bg-accent" aria-hidden />
-                      Data
-                    </span>
-                  </span>
-                  <span className="text-right">Data changed</span>
-                  <span />
+                    <span className="text-right">Data changed</span>
+                    <span />
+                  </div>
+                  {isWindows() ? <span className={UNINSTALL_COL} aria-hidden /> : null}
                 </div>
                 {apps.length ? (
                   <ul>
@@ -304,6 +354,7 @@ export function ApplicationsPage() {
                         max={max}
                         open={open === a.appPath}
                         onToggle={() => setOpen((o) => (o === a.appPath ? null : a.appPath))}
+                        onUninstall={isWindows() ? () => setUninstalling(a) : undefined}
                       />
                     ))}
                   </ul>
@@ -317,7 +368,7 @@ export function ApplicationsPage() {
               {report.leftovers.length ? (
                 <Section
                   title="Left behind by removed apps"
-                  description="Sandbox data from apps that are no longer installed. It can hold documents the app saved, so DiskPilot never removes it. Review it in Finder."
+                  description={`${isWindows() ? "Store app data" : "Sandbox data"} from apps that are no longer installed. It can hold documents the app saved, so DiskPilot never removes it. Review it in ${words().fileManager}.`}
                 >
                   <ul className="border-t border-border">
                     {report.leftovers.map((l) => (
@@ -333,7 +384,7 @@ export function ApplicationsPage() {
                         <div className="min-w-0 flex-1">
                           <p className="truncate font-mono text-xs">{l.name}</p>
                           <p className="text-2xs text-subtle-foreground">
-                            {l.kind}
+                            {dataKindLabel(l.kind)}
                             {l.modifiedMs ? `, changed ${formatRelative(l.modifiedMs)}` : ""}
                           </p>
                         </div>
@@ -346,6 +397,15 @@ export function ApplicationsPage() {
                     ))}
                   </ul>
                 </Section>
+              ) : null}
+
+              <WindowsSections page="applications" />
+              {uninstalling ? (
+                <UninstallDialog
+                  app={uninstalling}
+                  onClose={() => setUninstalling(null)}
+                  onRefresh={load}
+                />
               ) : null}
             </>
           )}

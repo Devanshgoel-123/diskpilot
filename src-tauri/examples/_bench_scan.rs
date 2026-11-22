@@ -8,6 +8,7 @@ fn main() {
     let root = args.next().map(Into::into).unwrap_or_else(|| home.clone());
     let runs: usize = args.next().and_then(|s| s.parse().ok()).unwrap_or(3);
     // PORTABLE=1 lists folders with read_dir + lstat instead of getattrlistbulk.
+    #[cfg(target_os = "macos")]
     diskpilot_lib::scanner::FORCE_PORTABLE.store(
         std::env::var_os("PORTABLE").is_some(),
         std::sync::atomic::Ordering::Relaxed,

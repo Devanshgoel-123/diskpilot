@@ -8,7 +8,9 @@
 
 use std::fs;
 use std::io;
+#[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
+#[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -30,6 +32,11 @@ pub trait FileOps: Sync {
     /// Moves several items to the Trash, with one result per path in order.
     fn trash_many(&self, paths: &[PathBuf]) -> Vec<io::Result<()>> {
         paths.iter().map(|p| self.trash(p)).collect()
+    }
+    /// Why each path must be left alone because a running program uses it
+    /// (see [`super::inuse`]), one entry per path in order.
+    fn in_use(&self, paths: &[PathBuf]) -> Vec<Option<String>> {
+        vec![None; paths.len()]
     }
 }
 
@@ -67,12 +74,31 @@ fn move_to_trash(path: &Path) -> io::Result<()> {
             .map_err(|e| io::Error::other(e.to_string()))
     }
     #[cfg(not(target_os = "macos"))]
-    trash::delete(path).map_err(|e| io::Error::other(e.to_string()))
+    trash::delete(path).map_err(|e| io::Error::other(describe_trash_error(&e)))
+}
+
+/// Windows aborts a Recycle Bin move when a file inside is open in another
+/// app; the `trash` crate reports only "Some operations were aborted".
+#[cfg(not(target_os = "macos"))]
+fn describe_trash_error(e: &trash::Error) -> String {
+    match e {
+        trash::Error::Unknown { description } if description.contains("aborted") => {
+            "Windows stopped the move, usually because a file inside is open in another app. \
+             Quit the app that uses it and try again. Some files may already be in the Recycle Bin."
+                .into()
+        }
+        other => other.to_string(),
+    }
 }
 
 impl FileOps for RealFileOps {
     fn trash(&self, path: &Path) -> io::Result<()> {
         move_to_trash(path)
+    }
+
+    fn in_use(&self, paths: &[PathBuf]) -> Vec<Option<String>> {
+        let snapshot = super::inuse::Snapshot::take();
+        paths.iter().map(|p| snapshot.blocker(p)).collect()
     }
 
     fn delete(&self, path: &Path) -> io::Result<()> {
@@ -108,6 +134,7 @@ impl FileOps for RealFileOps {
 /// - a sticky folder holds another user's items.
 ///
 /// Links are never followed.
+#[cfg(unix)]
 fn removal_blocker(dir: &Path, meta: &fs::Metadata) -> io::Result<Option<&'static str>> {
     const READ_ONLY: &str = "it contains read-only folders, so DiskPilot will not delete it";
     let parent_ok = dir.parent().is_some_and(writable);
@@ -170,9 +197,38 @@ fn item_blocker(path: &Path, meta: &fs::Metadata) -> Option<&'static str> {
     None
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn item_blocker(_path: &Path, _meta: &fs::Metadata) -> Option<&'static str> {
     None
+}
+
+/// Windows: refuses when an item inside is read-only (Windows would stop
+/// part-way through), or is in use by a running program, checked by asking
+/// for delete access to every file before anything is removed. Junctions and
+/// links are never followed; removing one removes only the link.
+#[cfg(windows)]
+fn removal_blocker(dir: &Path, meta: &fs::Metadata) -> io::Result<Option<&'static str>> {
+    const READ_ONLY: &str = "it contains read-only items, so DiskPilot will not delete it";
+    const IN_USE: &str = "a program is using files inside it, so DiskPilot will not delete it";
+    if crate::platform::read_only(meta) {
+        return Ok(Some(READ_ONLY));
+    }
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for entry in fs::read_dir(&d)? {
+            let path = entry?.path();
+            let m = path.symlink_metadata()?;
+            if crate::platform::read_only(&m) {
+                return Ok(Some(READ_ONLY));
+            }
+            if m.is_dir() {
+                stack.push(path);
+            } else if !m.file_type().is_symlink() && !crate::platform::deletable(&path) {
+                return Ok(Some(IN_USE));
+            }
+        }
+    }
+    Ok(None)
 }
 
 /// Whether `path` itself (not a link's target) has an extended ACL.
@@ -200,6 +256,7 @@ fn has_acl(path: &Path) -> bool {
 
 /// Whether this user may remove entries from `dir`, by the kernel's own
 /// check of ownership and permission bits. ACLs are checked separately.
+#[cfg(unix)]
 fn writable(dir: &Path) -> bool {
     let Ok(c_path) = std::ffi::CString::new(dir.as_os_str().as_bytes()) else {
         return false;
@@ -283,6 +340,19 @@ pub fn execute_with_progress(
                 Err(reason) => (skipped(plan, item, reason), None),
             })
             .collect();
+        // A dev server started since the review still stops its project here.
+        let candidates: Vec<PathBuf> = checked.iter().filter_map(|(_, p)| p.clone()).collect();
+        let mut busy = ops.in_use(&candidates).into_iter();
+        for (result, path) in checked.iter_mut() {
+            if path.is_none() {
+                continue;
+            }
+            if let Some(Some(reason)) = busy.next() {
+                result.status = ItemStatus::Skipped;
+                result.error = Some(reason);
+                *path = None;
+            }
+        }
 
         let ready: Vec<PathBuf> = checked.iter().filter_map(|(_, p)| p.clone()).collect();
         let mut outcomes = match plan.method {
@@ -372,6 +442,17 @@ pub fn execute_with_progress(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn an_aborted_recycle_bin_move_says_why() {
+        let e = trash::Error::Unknown {
+            description: "Some operations were aborted".into(),
+        };
+        let msg = super::describe_trash_error(&e);
+        assert!(msg.contains("open in another app"), "{msg}");
+        assert!(!msg.contains("trash` operation"));
+    }
+
     use super::*;
     use crate::model::{PlanItem, Tier};
     use std::sync::Mutex;
@@ -473,6 +554,55 @@ mod tests {
         }
     }
 
+    /// A Trash that sees a dev server running from one project.
+    struct BusyTrash(FakeTrash, PathBuf);
+
+    impl FileOps for BusyTrash {
+        fn trash(&self, path: &Path) -> io::Result<()> {
+            self.0.trash(path)
+        }
+        fn delete(&self, path: &Path) -> io::Result<()> {
+            self.0.delete(path)
+        }
+        fn in_use(&self, paths: &[PathBuf]) -> Vec<Option<String>> {
+            paths
+                .iter()
+                .map(|p| (*p == self.1).then(|| "node.exe (process 7) is running".into()))
+                .collect()
+        }
+    }
+
+    #[test]
+    fn items_a_running_program_uses_are_skipped_not_moved() {
+        let dir = crate::test_support::sandbox();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
+        let busy = home.join("app/node_modules");
+        let idle = home.join("old/node_modules");
+        fs::create_dir_all(&busy).unwrap();
+        fs::create_dir_all(&idle).unwrap();
+        let ops = BusyTrash(FakeTrash(Default::default()), busy.clone());
+
+        let record = execute(
+            &plan(CleanupMethod::Trash, &[&busy, &idle]),
+            &home,
+            &home,
+            &ops,
+        );
+        assert_eq!(
+            *ops.0 .0.lock().unwrap(),
+            vec![idle.clone()],
+            "only the idle one moves"
+        );
+        assert_eq!(record.items[0].status, ItemStatus::Skipped);
+        assert!(record.items[0]
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("node.exe"));
+        assert_eq!(record.items[1].status, ItemStatus::Succeeded);
+        assert_eq!(record.bytes_trashed, 10);
+    }
+
     fn plan(method: CleanupMethod, paths: &[&Path]) -> CleanupPlan {
         CleanupPlan {
             id: "plan".into(),
@@ -502,7 +632,7 @@ mod tests {
     #[test]
     fn deletes_planned_paths_and_records_results() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let target = home.join("proj/node_modules");
         fs::create_dir_all(target.join("pkg")).unwrap();
         fs::write(target.join("pkg/index.js"), "x").unwrap();
@@ -528,7 +658,7 @@ mod tests {
     #[test]
     fn an_extra_copy_stays_when_the_kept_copy_is_gone_or_changed() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let (a, b, c) = (home.join("a.bin"), home.join("b.bin"), home.join("c.bin"));
         for p in [&a, &b, &c] {
             fs::write(p, "same bytes").unwrap();
@@ -553,10 +683,11 @@ mod tests {
         assert_eq!(*fake.0.lock().unwrap(), vec![b.clone()]);
     }
 
+    #[cfg(unix)]
     #[test]
     fn deleting_a_folder_never_follows_links_out_of_it() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let outside = home.join("precious");
         fs::create_dir_all(&outside).unwrap();
         fs::write(outside.join("keep.txt"), "keep").unwrap();
@@ -578,11 +709,12 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn deleting_a_tree_with_read_only_folders_touches_nothing() {
         use std::os::unix::fs::PermissionsExt;
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         // Go's module cache: extracted modules are 0555 so builds cannot edit them.
         let target = home.join("go/pkg/mod");
         let module = target.join("golang.org/x/text@v0.1.0");
@@ -698,7 +830,7 @@ mod tests {
 
         for (what, setup, reason) in cases {
             let dir = crate::test_support::sandbox();
-            let home = dir.path().canonicalize().unwrap();
+            let home = crate::platform::canonicalize(dir.path()).unwrap();
             let target = home.join("holder/cache");
             fs::create_dir_all(target.join("sub")).unwrap();
             for f in ["a_sibling.txt", "z_sibling.txt", "sub/f.txt"] {
@@ -725,7 +857,7 @@ mod tests {
     #[test]
     fn a_file_that_became_a_folder_since_the_review_is_skipped() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let video = home.join("Movies/trip.mp4");
         fs::create_dir_all(&video).unwrap(); // was a file when planned
         fs::write(video.join("inside.txt"), "x").unwrap();
@@ -737,10 +869,11 @@ mod tests {
         assert_eq!(record.items[0].status, ItemStatus::Skipped);
     }
 
+    #[cfg(unix)]
     #[test]
     fn re_checks_safety_at_execution_time() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let real = home.join("real");
         fs::create_dir_all(real.join("cache")).unwrap();
         // The folder was swapped for a symlink after planning.
@@ -766,11 +899,17 @@ mod tests {
     #[test]
     fn refuses_protected_paths_even_if_planned() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
-        fs::create_dir_all(home.join("Library/Caches")).unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
+        // A folder the gate protects as a whole on each platform.
+        let caches = home.join(if cfg!(windows) {
+            "AppData/Local"
+        } else {
+            "Library/Caches"
+        });
+        fs::create_dir_all(&caches).unwrap();
         let ops = FakeTrash::default();
         let record = execute(
-            &plan(CleanupMethod::Trash, &[&home.join("Library/Caches"), &home]),
+            &plan(CleanupMethod::Trash, &[&caches, &home]),
             &home,
             &home,
             &ops,

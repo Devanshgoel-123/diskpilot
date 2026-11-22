@@ -19,9 +19,10 @@ import { formatBytes, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import { MODEL_LABELS } from "@/lib/models";
 import type { AssistantReply, Recommendation } from "@/lib/types";
+import { words } from "@/lib/platform";
 
-const SUGGESTIONS = [
-  "What is using the most space on my Mac?",
+const suggestions = () => [
+  `What is using the most space on my ${words().computer}?`,
   "What can I safely clean up right now?",
   "Which projects have node_modules I haven't touched in months?",
   "How much space does Docker use, and what could I remove?",
@@ -175,7 +176,7 @@ export function AssistantPage() {
           description={
             <>
               The assistant is optional. It uses your own API key from Anthropic, OpenAI or
-              OpenRouter, stored in the macOS Keychain, and can only read DiskPilot's data: it
+              OpenRouter, stored in {words().keyStore}, and can only read DiskPilot's data: it
               cannot delete, move or run anything. When you ask a question, the question and the
               storage data needed to answer it (names, paths and sizes, never file contents) are
               sent to the provider you choose.
@@ -217,7 +218,7 @@ export function AssistantPage() {
                   and Docker.
                 </p>
                 <div className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {SUGGESTIONS.map((s) => (
+                  {suggestions().map((s) => (
                     <button
                       key={s}
                       type="button"

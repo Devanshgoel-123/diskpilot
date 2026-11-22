@@ -110,13 +110,19 @@ pub fn definitions() -> Value {
 }
 
 fn tilde(path: &str, home: &Path) -> String {
-    let h = home.display().to_string();
-    if path == h {
-        "~".into()
-    } else if let Some(rest) = path.strip_prefix(&format!("{h}/")) {
-        format!("~/{rest}")
-    } else {
-        path.to_string()
+    match Path::new(path).strip_prefix(home) {
+        Ok(rest) if rest.as_os_str().is_empty() => "~".into(),
+        // Rebuilt from components so a path joined with '/' on Windows
+        // still reads with one kind of separator.
+        Ok(rest) => {
+            let sep = std::path::MAIN_SEPARATOR_STR;
+            let parts: Vec<_> = rest
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy())
+                .collect();
+            format!("~{sep}{}", parts.join(sep))
+        }
+        Err(_) => path.to_string(),
     }
 }
 
@@ -336,7 +342,7 @@ pub fn run(ctx: &ToolContext, name: &str, input: &Value) -> ToolOutput {
             // area check sees the folder that will actually be listed.
             let path = match safety::parse_user_path(&expanded)
                 .and_then(|p| {
-                    std::fs::canonicalize(&p)
+                    crate::platform::canonicalize(&p)
                         .map_err(|_| safety::SafetyError::Missing(p.display().to_string()))
                 })
                 .and_then(|p| safety::ensure_within(&p, &root).map(|_| p))
@@ -496,6 +502,21 @@ mod tests {
         assert!(out.highlight.is_empty());
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn private_areas_are_shown_as_totals_only_on_windows() {
+        let home = Path::new(r"C:\Users\test");
+        let (path, label) = shown(
+            r"C:\Users\test\AppData\Roaming\Microsoft\Credentials\4F1A2B",
+            home,
+        );
+        assert_eq!(label, Some("Accounts"));
+        assert_eq!(path, r"~\AppData\Roaming\Microsoft\Credentials");
+        let (path, label) = shown(r"C:\Users\test\Downloads\setup.exe", home);
+        assert_eq!((path.as_str(), label), (r"~\Downloads\setup.exe", None));
+    }
+
+    #[cfg(unix)]
     #[test]
     fn private_areas_are_shown_as_totals_only() {
         let home = Path::new("/Users/test");
@@ -514,7 +535,8 @@ mod tests {
     #[test]
     fn paths_are_shown_relative_to_home() {
         let home = Path::new("/Users/test");
-        assert_eq!(tilde("/Users/test/Library", home), "~/Library");
+        let sep = std::path::MAIN_SEPARATOR;
+        assert_eq!(tilde("/Users/test/Library", home), format!("~{sep}Library"));
         assert_eq!(tilde("/Users/test", home), "~");
         assert_eq!(tilde("/Users/tester/x", home), "/Users/tester/x");
     }

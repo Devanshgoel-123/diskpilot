@@ -15,6 +15,7 @@ import { api, errorMessage } from "@/lib/api";
 import { formatBytes, formatCount, formatRelative, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { SecretsReport, TranscriptFinding } from "@/lib/types";
+import { words } from "@/lib/platform";
 
 /** Matches the backend: a transcript used this recently may still be open. */
 const OPEN_WINDOW_MS = 2 * 60 * 1000;
@@ -67,8 +68,8 @@ export function TranscriptSecrets() {
           <p className="text-[13px] font-medium">Credentials in AI transcripts</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Claude Code, Codex CLI and Gemini CLI keep your conversations on disk, including keys
-            you pasted or that commands printed. This check runs on this Mac only and shows masked
-            values.
+            you pasted or that commands printed. This check runs on this {words().computer} only and
+            shows masked values.
           </p>
           {error ? <p className="mt-2 text-xs text-critical">{error}</p> : null}
         </div>
@@ -112,8 +113,8 @@ export function TranscriptSecrets() {
                       <button
                         type="button"
                         onClick={() => void api.revealInFinder(f.path)}
-                        aria-label="Show in Finder"
-                        title="Show in Finder"
+                        aria-label={words().showInFileManager}
+                        title={words().showInFileManager}
                         className="shrink-0 text-subtle-foreground hover:text-foreground"
                       >
                         <FolderOpen className="size-3.5" aria-hidden />

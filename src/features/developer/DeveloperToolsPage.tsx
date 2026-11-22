@@ -1,5 +1,5 @@
 import { Blocks, ChevronRight, Loader2, RefreshCw, Wrench } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -7,8 +7,10 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
-import { formatBytes, formatRelative } from "@/lib/format";
+import { formatBytes, formatCount, formatRelative } from "@/lib/format";
+import { words } from "@/lib/platform";
 import { useApp } from "@/lib/store";
+import { WindowsSections } from "@/features/windows/sections";
 
 import { AGENT_TOOL_IDS } from "./agentTools";
 import { ToolCard } from "./ToolCard";
@@ -49,12 +51,41 @@ export function DeveloperToolsPage() {
     [detected, reviewable],
   );
   // Same items as the "Review" buttons, so the totals always agree.
-  const reviewBytes = useMemo(() => {
-    const ids = new Set(reviewIds);
-    return recommendations
-      .filter((r) => ids.has(r.id))
-      .reduce((a, r) => a + r.estimatedReclaimBytes, 0);
-  }, [reviewIds, recommendations]);
+  const bytesOf = useCallback(
+    (ids: Iterable<string>) => {
+      const set = new Set(ids);
+      return recommendations
+        .filter((r) => set.has(r.id))
+        .reduce((a, r) => a + r.estimatedReclaimBytes, 0);
+    },
+    [recommendations],
+  );
+  const reviewBytes = useMemo(() => bytesOf(reviewIds), [bytesOf, reviewIds]);
+
+  // Pick items across tools, untick the ones to keep, then review the rest
+  // together. Ids that stop being reviewable (a new analysis) drop out.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const selected = useMemo(
+    () => new Set([...picked].filter((id) => reviewable.has(id))),
+    [picked, reviewable],
+  );
+  const select = useCallback(
+    (ids: string[], on: boolean) =>
+      setPicked((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) {
+          if (on) next.add(id);
+          else next.delete(id);
+        }
+        return next;
+      }),
+    [],
+  );
+  const allPicked = reviewIds.length > 0 && reviewIds.every((id) => selected.has(id));
+  const reviewSelected = () => {
+    reviewInRecommendations([...selected]);
+    setPicked(new Set());
+  };
 
   return (
     <>
@@ -110,9 +141,14 @@ export function DeveloperToolsPage() {
                     Analyzed {formatRelative(devtools.generatedAtMs)}
                   </p>
                   {reviewIds.length ? (
-                    <Button onClick={() => reviewInRecommendations(reviewIds)}>
-                      Review {reviewIds.length} items
-                    </Button>
+                    <>
+                      <Button variant="ghost" onClick={() => select(reviewIds, !allPicked)}>
+                        {allPicked ? "Clear selection" : "Select all"}
+                      </Button>
+                      <Button onClick={() => reviewInRecommendations(reviewIds)}>
+                        Review {reviewIds.length} items
+                      </Button>
+                    </>
                   ) : null}
                 </div>
               </div>
@@ -124,6 +160,8 @@ export function DeveloperToolsPage() {
                     tool={t}
                     reviewable={reviewable}
                     onReview={reviewInRecommendations}
+                    selected={selected}
+                    onSelect={select}
                   />
                 ))}
               </div>
@@ -146,9 +184,11 @@ export function DeveloperToolsPage() {
                 <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
               </button>
 
+              <WindowsSections page="developer" />
+
               {missing.length ? (
                 <p className="text-xs text-subtle-foreground">
-                  Not found on this Mac: {missing.map((t) => t.name).join(", ")}.
+                  Not found on this {words().computer}: {missing.map((t) => t.name).join(", ")}.
                 </p>
               ) : null}
               <p className="text-2xs leading-relaxed text-subtle-foreground">
@@ -161,6 +201,20 @@ export function DeveloperToolsPage() {
             </>
           )}
         </div>
+        {selected.size > 0 ? (
+          <div className="pointer-events-none sticky bottom-0 flex justify-center px-6 pb-4">
+            <div className="animate-in pointer-events-auto flex items-center gap-4 rounded-lg bg-panel-raised px-4 py-2.5 shadow-float">
+              <p className="text-[13px]">
+                <span className="tabular font-medium">{formatCount(selected.size)}</span> selected,{" "}
+                <span className="tabular font-medium">{formatBytes(bytesOf(selected))}</span>
+              </p>
+              <Button variant="ghost" size="sm" onClick={() => setPicked(new Set())}>
+                Clear selection
+              </Button>
+              <Button onClick={reviewSelected}>Review {formatCount(selected.size)} selected</Button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </>
   );
