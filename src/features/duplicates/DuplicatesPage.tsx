@@ -87,7 +87,8 @@ function GroupRow({
   open: boolean;
   onToggleOpen: () => void;
   onKeep: (path: string) => void;
-  onToggle: (path: string) => void;
+  /** `shift` extends from the last clicked copy, see `clickCopy`. */
+  onToggle: (path: string, shift: boolean) => void;
   onToggleGroup: () => void;
   /** Open the large preview at this copy. */
   onPreview: (index: number) => void;
@@ -189,7 +190,7 @@ function GroupRow({
                   type="checkbox"
                   checked={selected.has(f.path)}
                   disabled={isKept}
-                  onChange={() => onToggle(f.path)}
+                  onChange={(e) => onToggle(f.path, (e.nativeEvent as MouseEvent).shiftKey)}
                   aria-label={`Move ${tildify(f.path, home)} to Trash`}
                   className="size-3.5 shrink-0 accent-[var(--accent)] disabled:opacity-30"
                 />
@@ -266,6 +267,8 @@ export function DuplicatesPage() {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [dialog, setDialog] = useState(false);
   const [preview, setPreview] = useState<{ group: DuplicateGroup; index: number } | null>(null);
+  /** The copy checkbox clicked last: where a Shift-click range starts. */
+  const anchor = useRef<string | null>(null);
 
   useEffect(() => {
     void api.getDuplicates().then((r) => r && setReport(r));
@@ -283,6 +286,7 @@ export function DuplicatesPage() {
       setReport(r);
       setKeep({});
       setSelected(new Set());
+      anchor.current = null;
       setOpen(new Set(r.groups.slice(0, 3).map((g) => g.id)));
     } catch (e) {
       setError(errorMessage(e));
@@ -319,6 +323,38 @@ export function DuplicatesPage() {
       else next.add(path);
       return next;
     });
+
+  /**
+   * A click on a copy's checkbox. With Shift, every copy between the last
+   * clicked one and this one, as the list shows them, takes this copy's new
+   * state; the copies being kept are skipped. Without an anchor in view it is
+   * a plain click.
+   */
+  const clickCopy = (path: string, shift: boolean) => {
+    const from = anchor.current;
+    anchor.current = path;
+    const shown = groupPage.items.flatMap((g) => {
+      if (!open.has(g.id)) return [];
+      const kept = keptPath(g, keep);
+      return g.files.map((f) => ({ path: f.path, kept: f.path === kept }));
+    });
+    const a = shift && from !== null ? shown.findIndex((r) => r.path === from) : -1;
+    const b = shown.findIndex((r) => r.path === path);
+    if (a < 0 || b < 0) {
+      toggle(path);
+      return;
+    }
+    const range = shown.slice(Math.min(a, b), Math.max(a, b) + 1).filter((r) => !r.kept);
+    setSelected((s) => {
+      const check = !s.has(path);
+      const next = new Set(s);
+      for (const r of range) {
+        if (check) next.add(r.path);
+        else next.delete(r.path);
+      }
+      return next;
+    });
+  };
 
   const toggleGroup = (g: DuplicateGroup) =>
     setSelected((s) => {
@@ -461,7 +497,7 @@ export function DuplicatesPage() {
                     })
                   }
                   onKeep={(p) => setKept(g, p)}
-                  onToggle={toggle}
+                  onToggle={clickCopy}
                   onToggleGroup={() => toggleGroup(g)}
                   onPreview={(index) => setPreview({ group: g, index })}
                 />
