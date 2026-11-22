@@ -78,3 +78,31 @@ describe("items handed over from another page", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 });
+
+describe("small Developer Tools leftovers", () => {
+  const tiny = (id: string) => ({ ...rec(id, 4096), source: "windsurf" });
+
+  it("are not listed until handed over from Developer Tools", () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    useApp.setState({
+      summary: { root: "/home" } as unknown as ScanSummary,
+      recommendations: [rec("big", 3e9), tiny("ws1"), tiny("ws2")],
+      preselect: null,
+    });
+    const { container, getByText } = render(<RecommendationsPage />);
+    expect(container.querySelectorAll("[data-rec-id]")).toHaveLength(1);
+    getByText(/2 small leftovers under/);
+  });
+
+  it("are listed when Developer Tools hands them over", () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    useApp.setState({
+      summary: { root: "/home" } as unknown as ScanSummary,
+      recommendations: [rec("big", 3e9), tiny("ws1"), tiny("ws2")],
+      preselect: ["ws1"],
+    });
+    const { container } = render(<RecommendationsPage />);
+    expect(container.querySelector('[data-rec-id="ws1"]')).not.toBeNull();
+    expect(container.querySelector('[data-rec-id="ws2"]')).toBeNull();
+  });
+});

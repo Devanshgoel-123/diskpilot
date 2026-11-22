@@ -582,10 +582,23 @@ mod tests {
         fs::create_dir_all(&idle).unwrap();
         let ops = BusyTrash(FakeTrash(Default::default()), busy.clone());
 
-        let record = execute(&plan(CleanupMethod::Trash, &[&busy, &idle]), &home, &home, &ops);
-        assert_eq!(*ops.0 .0.lock().unwrap(), vec![idle.clone()], "only the idle one moves");
+        let record = execute(
+            &plan(CleanupMethod::Trash, &[&busy, &idle]),
+            &home,
+            &home,
+            &ops,
+        );
+        assert_eq!(
+            *ops.0 .0.lock().unwrap(),
+            vec![idle.clone()],
+            "only the idle one moves"
+        );
         assert_eq!(record.items[0].status, ItemStatus::Skipped);
-        assert!(record.items[0].error.as_deref().unwrap().contains("node.exe"));
+        assert!(record.items[0]
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("node.exe"));
         assert_eq!(record.items[1].status, ItemStatus::Succeeded);
         assert_eq!(record.bytes_trashed, 10);
     }

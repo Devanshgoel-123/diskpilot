@@ -25,7 +25,7 @@ function wording(app: AppFootprint, command: string | null, outcome: UninstallOu
     case "removed":
       return {
         title: `${app.name} was uninstalled`,
-        text: `Windows removed ${app.name} for your account. Refresh the list to update it.`,
+        text: `Windows removed ${app.name} and its data for your account. Refresh the list to update it.`,
       };
     case "settingsApp":
       return {
@@ -43,7 +43,7 @@ function wording(app: AppFootprint, command: string | null, outcome: UninstallOu
         text: command
           ? "DiskPilot starts the program's own uninstaller. It may ask questions of its own. DiskPilot does not delete any files itself."
           : app.storeApp
-            ? "Windows removes this app for your account, the same as Uninstall in Settings. If Windows does not allow it here, Settings opens on this app's page instead."
+            ? "Windows removes this app and its data on this PC for your account, the same as Uninstall in Settings. This cannot be undone. If Windows does not allow it here, Settings opens on this app's page instead."
             : "This program can only be removed from Settings. DiskPilot opens Settings > Installed apps and copies the app's name, so you can paste it into the search box.",
       };
   }

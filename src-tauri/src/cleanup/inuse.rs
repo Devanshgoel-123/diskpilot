@@ -100,8 +100,8 @@ impl Snapshot {
         let what = format!("{} (process {}){more}", first.name, first.pid);
         Some(match project {
             Some(_) => format!(
-                "{what} is running from this project. Stop its dev server first \
-                 (Ctrl+C in its terminal), then review the cleanup again."
+                "{what} is running in this project, such as its dev server. Stop it \
+                 first (Ctrl+C in its terminal), then review the cleanup again."
             ),
             None => format!(
                 "{what} is running from this folder. Quit it first, then review the cleanup again."
@@ -144,10 +144,7 @@ fn key(path: &str) -> String {
 }
 
 fn within(path: &Path, dir: &Path) -> bool {
-    let (p, d) = (
-        key(&path.to_string_lossy()),
-        key(&dir.to_string_lossy()),
-    );
+    let (p, d) = (key(&path.to_string_lossy()), key(&dir.to_string_lossy()));
     p == d || p.strip_prefix(&d).is_some_and(|rest| rest.starts_with('/'))
 }
 
@@ -195,7 +192,7 @@ mod tests {
         )]);
         let why = by_cwd.blocker(Path::new(NM)).expect("blocked");
         assert!(why.contains("node.exe (process 42)"), "{why}");
-        assert!(why.contains("Stop its dev server"), "{why}");
+        assert!(why.contains("such as its dev server"), "{why}");
 
         let by_cmd = Snapshot::of(vec![proc(
             "node.exe",
@@ -220,10 +217,30 @@ mod tests {
     #[test]
     fn terminals_editors_and_other_projects_do_not_block() {
         let snap = Snapshot::of(vec![
-            proc("powershell.exe", None, Some("C:/Users/me/app"), "powershell"),
-            proc("Code.exe", None, Some("C:/Users/me/app"), r"Code.exe C:\Users\me\app"),
-            proc("node.exe", None, Some("C:/Users/me/app-two"), "node C:/Users/me/app-two/x.js"),
-            proc("node", None, Some("/Users/me/other"), "node /Users/me/application/x.js"),
+            proc(
+                "powershell.exe",
+                None,
+                Some("C:/Users/me/app"),
+                "powershell",
+            ),
+            proc(
+                "Code.exe",
+                None,
+                Some("C:/Users/me/app"),
+                r"Code.exe C:\Users\me\app",
+            ),
+            proc(
+                "node.exe",
+                None,
+                Some("C:/Users/me/app-two"),
+                "node C:/Users/me/app-two/x.js",
+            ),
+            proc(
+                "node",
+                None,
+                Some("/Users/me/other"),
+                "node /Users/me/application/x.js",
+            ),
         ]);
         assert_eq!(snap.blocker(Path::new(NM)), None);
     }
@@ -231,16 +248,36 @@ mod tests {
     #[test]
     fn only_project_folders_look_at_the_project() {
         // A cache folder is not part of the project around it.
-        let snap = Snapshot::of(vec![proc("node.exe", None, Some("C:/Users/me/AppData/Local"), "node")]);
-        assert_eq!(snap.blocker(Path::new("C:/Users/me/AppData/Local/pip")), None);
+        let snap = Snapshot::of(vec![proc(
+            "node.exe",
+            None,
+            Some("C:/Users/me/AppData/Local"),
+            "node",
+        )]);
+        assert_eq!(
+            snap.blocker(Path::new("C:/Users/me/AppData/Local/pip")),
+            None
+        );
     }
 
     #[test]
     fn paths_compare_without_case_or_separator_differences() {
-        assert!(within(Path::new(r"\\?\C:\USERS\me\App\x"), Path::new("c:/users/me/app")));
-        assert!(!within(Path::new("C:/Users/me/apps"), Path::new("C:/Users/me/app")));
-        assert!(mentions("node C:/Users/me/app", Path::new(r"C:\Users\me\app")));
-        assert!(!mentions("node C:/Users/me/apple/x.js", Path::new(r"C:\Users\me\app")));
+        assert!(within(
+            Path::new(r"\\?\C:\USERS\me\App\x"),
+            Path::new("c:/users/me/app")
+        ));
+        assert!(!within(
+            Path::new("C:/Users/me/apps"),
+            Path::new("C:/Users/me/app")
+        ));
+        assert!(mentions(
+            "node C:/Users/me/app",
+            Path::new(r"C:\Users\me\app")
+        ));
+        assert!(!mentions(
+            "node C:/Users/me/apple/x.js",
+            Path::new(r"C:\Users\me\app")
+        ));
     }
 
     /// Needs Node on PATH: `cargo test -- --ignored sees_a_real_node`.
@@ -248,7 +285,9 @@ mod tests {
     #[ignore]
     fn sees_a_real_node_process_working_in_a_project() {
         let dir = crate::test_support::sandbox();
-        let project = crate::platform::canonicalize(dir.path()).unwrap().join("app");
+        let project = crate::platform::canonicalize(dir.path())
+            .unwrap()
+            .join("app");
         std::fs::create_dir_all(project.join("node_modules")).unwrap();
         let mut child = std::process::Command::new("node")
             .args(["-e", "setTimeout(() => {}, 20000)"])
@@ -262,7 +301,10 @@ mod tests {
         assert!(why.contains(&child.id().to_string()), "{why}");
         // Once it stops, the folder is free again.
         let _ = child.wait();
-        assert_eq!(Snapshot::take().blocker(&project.join("node_modules")), None);
+        assert_eq!(
+            Snapshot::take().blocker(&project.join("node_modules")),
+            None
+        );
     }
 
     #[test]

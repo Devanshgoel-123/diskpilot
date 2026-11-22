@@ -19,6 +19,7 @@ import { words } from "@/lib/platform";
 
 import { CleanupDialog } from "./CleanupDialog";
 import { RecommendationRow } from "./RecommendationRow";
+import { isSmallToolItem, SMALL_TOOL_ITEM_BYTES } from "./smallItems";
 
 type Filter = Tier | "all";
 
@@ -36,7 +37,14 @@ export function RecommendationsPage() {
     );
   const [filter, setFilter] = useState<Filter>("all");
   const [kind, setKind] = useState<MarkerKind | null>(null);
-  const kinds = useMemo(() => markerCounts(recommendations), [recommendations]);
+  // Items handed over from another page are always listed, however small.
+  const [handedOver] = useState(() => new Set(useApp.getState().preselect ?? []));
+  const visible = useMemo(
+    () => recommendations.filter((r) => !isSmallToolItem(r) || handedOver.has(r.id)),
+    [recommendations, handedOver],
+  );
+  const hiddenSmall = recommendations.length - visible.length;
+  const kinds = useMemo(() => markerCounts(visible), [visible]);
   // A kind that no longer has items (e.g. after a cleanup) stops filtering.
   const activeKind = kinds.some((k) => k.kind === kind) ? kind : null;
   const consumePreselect = useApp((s) => s.consumePreselect);
@@ -73,12 +81,12 @@ export function RecommendationsPage() {
       reviewFirst: [],
       keep: [],
     };
-    for (const r of recommendations) {
+    for (const r of visible) {
       if (activeKind && r.marker?.kind !== activeKind) continue;
       groups[r.tier].push(r);
     }
     return groups;
-  }, [recommendations, activeKind]);
+  }, [visible, activeKind]);
 
   // Drop selections that no longer exist (e.g. after a cleanup).
   const liveSelection = useMemo(() => {
@@ -86,7 +94,7 @@ export function RecommendationsPage() {
     return new Set([...selected].filter((id) => ids.has(id)));
   }, [selected, recommendations]);
   const selection = summarizeSelection(recommendations, liveSelection);
-  const max = Math.max(0, ...recommendations.map((r) => r.bytes));
+  const max = Math.max(0, ...visible.map((r) => r.bytes));
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -226,7 +234,7 @@ export function RecommendationsPage() {
             </div>
           </div>
 
-          {recommendations.length === 0 ? (
+          {visible.length === 0 && hiddenSmall === 0 ? (
             <Panel>
               <EmptyState
                 icon={Sparkles}
@@ -271,6 +279,13 @@ export function RecommendationsPage() {
               ) : null,
             )
           )}
+          {hiddenSmall > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {formatCount(hiddenSmall)} small {hiddenSmall === 1 ? "leftover" : "leftovers"} under{" "}
+              {formatBytes(SMALL_TOOL_ITEM_BYTES)} {hiddenSmall === 1 ? "is" : "are"} not listed
+              here. Pick them in Developer Tools to review them.
+            </p>
+          ) : null}
         </div>
 
         {selection.count > 0 ? (

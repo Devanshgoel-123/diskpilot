@@ -895,7 +895,9 @@ mod imp {
         // to finish must not block a thread that shell (STA) calls may use.
         let family = family.to_string();
         std::thread::spawn(move || {
-            use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
+            use windows::Win32::System::Com::{
+                CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED,
+            };
             // SAFETY: no reserved pointer; balanced below when it succeeded.
             let com = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }.is_ok();
             let result = remove_store_app_now(&family);
@@ -929,7 +931,10 @@ mod imp {
             {
                 return Err("part of Windows".into());
             }
-            let full = package.Id().and_then(|id| id.FullName()).map_err(|e| e.message())?;
+            let full = package
+                .Id()
+                .and_then(|id| id.FullName())
+                .map_err(|e| e.message())?;
             // Waits for Windows to finish; this runs off the UI thread.
             let result = manager
                 .RemovePackageAsync(&full)
@@ -937,8 +942,15 @@ mod imp {
                 .map_err(|e| e.message())?;
             let code = result.ExtendedErrorCode().map_err(|e| e.message())?;
             if code.is_err() {
-                let text = result.ErrorText().map(|t| t.to_string()).unwrap_or_default();
-                return Err(if text.is_empty() { code.message() } else { text });
+                let text = result
+                    .ErrorText()
+                    .map(|t| t.to_string())
+                    .unwrap_or_default();
+                return Err(if text.is_empty() {
+                    code.message()
+                } else {
+                    text
+                });
             }
             removed += 1;
         }
@@ -952,7 +964,9 @@ mod imp {
     fn valid_family(family: &str) -> bool {
         let mut parts = family.split('_');
         let ok = |s: &str| {
-            !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+            !s.is_empty()
+                && s.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
         };
         matches!((parts.next(), parts.next(), parts.next()), (Some(a), Some(b), None) if ok(a) && ok(b))
     }
