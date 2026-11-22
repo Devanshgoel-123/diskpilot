@@ -28,7 +28,10 @@ const report: DuplicateReport = {
 };
 
 vi.mock("@/lib/api", () => ({
-  api: { getDuplicates: () => Promise.resolve(report) },
+  api: {
+    getDuplicates: () => Promise.resolve(report),
+    duplicatesRunning: () => Promise.resolve(false),
+  },
   errorMessage: (e: unknown) => String(e),
   onDuplicatesProgress: () => Promise.resolve(() => {}),
 }));

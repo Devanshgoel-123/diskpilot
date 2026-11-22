@@ -15,6 +15,7 @@ import type {
   DisconnectedServer,
 } from "@/lib/types";
 import { usePage } from "@/lib/usePage";
+import { words } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
 import { ToolCard } from "@/features/developer/ToolCard";
@@ -833,7 +834,7 @@ export function SkillsList({
             <Section
               title="Your skills"
               count={ownInactive.length}
-              description="Not used in 30 days. Review them to move their folders to the Trash."
+              description={`Not used in 30 days. Review them to move their folders to the ${words().trash}.`}
             >
               <PagedList
                 items={ownInactive}
@@ -891,8 +892,8 @@ export function SkillsList({
       )}
       <Footnote>
         {agent.usageNote} A skill counts as inactive after 30 days without use; skills installed in
-        the last 14 days never do. Reviewed skills are moved to the Trash, not deleted, so you can
-        put them back.
+        the last 14 days never do. Reviewed skills are moved to the {words().trash}, not deleted, so
+        you can put them back.
       </Footnote>
     </div>
   );
@@ -910,6 +911,22 @@ export function CleanupList({ agent }: { agent: AgentReport }) {
     (i) => i.recommendationId && reviewable.has(i.recommendationId),
   );
   const total = items.reduce((a, i) => a + i.bytes, 0);
+  // Items picked in the "stores" list below, reviewed together. Ids that stop
+  // being reviewable (after a cleanup) drop out.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const selected = useMemo(
+    () => new Set([...picked].filter((id) => reviewable.has(id))),
+    [picked, reviewable],
+  );
+  const select = (ids: string[], on: boolean) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (on) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
   return (
     <div className="space-y-6">
       {!items.length ? (
@@ -917,7 +934,7 @@ export function CleanupList({ agent }: { agent: AgentReport }) {
       ) : (
         <Section
           title={`${formatBytes(total)} can be freed`}
-          description="Caches, logs, old versions and inactive skills. Each one goes through the usual review and is moved to the Trash, so you can undo it from History."
+          description={`Caches, logs, old versions and inactive skills. Each one goes through the usual review and is moved to the ${words().trash}, so you can undo it from History.`}
           action={
             <Button
               size="sm"
@@ -963,8 +980,32 @@ export function CleanupList({ agent }: { agent: AgentReport }) {
         <Section
           title={`Everything ${agent.name} stores`}
           description="Versions, conversation data, caches and settings, with what each one is. History and settings are listed for reference and never suggested for removal."
+          action={
+            selected.size ? (
+              <div className="flex items-center gap-1.5">
+                <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>
+                  Clear selection
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    reviewInRecommendations([...selected]);
+                    setPicked(new Set());
+                  }}
+                >
+                  Review {selected.size} selected
+                </Button>
+              </div>
+            ) : undefined
+          }
         >
-          <ToolCard tool={stored} reviewable={reviewable} onReview={reviewInRecommendations} />
+          <ToolCard
+            tool={stored}
+            reviewable={reviewable}
+            onReview={reviewInRecommendations}
+            selected={selected}
+            onSelect={select}
+          />
         </Section>
       ) : null}
     </div>

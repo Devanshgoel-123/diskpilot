@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { formatCount } from "@/lib/format";
+import { isWindows } from "@/lib/platform";
 import { useApp } from "@/lib/store";
 
 /** Protected folders worth naming, matched against unreadable paths. */
@@ -21,7 +22,7 @@ function list(names: string[]): string {
 }
 
 /**
- * Shown when the scan could not read folders macOS protects. Only the user can
+ * macOS only. Shown when the scan could not read folders macOS protects. Only the user can
  * grant Full Disk Access; DiskPilot opens the right settings page.
  */
 export function PrivateFoldersNotice() {
@@ -31,6 +32,8 @@ export function PrivateFoldersNotice() {
   const [asked, setAsked] = useState(false);
 
   useEffect(() => {
+    // Windows has no Full Disk Access; folders it cannot read are listed in Scan details.
+    if (isWindows()) return;
     const check = () =>
       void api
         .getFullDiskAccess()
@@ -48,7 +51,8 @@ export function PrivateFoldersNotice() {
       .slice(0, 3);
   }, [summary]);
 
-  if (!summary || scanning || access !== "denied" || summary.errorCount === 0) return null;
+  if (isWindows() || !summary || scanning || access !== "denied" || summary.errorCount === 0)
+    return null;
 
   const others = summary.errorCount - named.length;
   return (

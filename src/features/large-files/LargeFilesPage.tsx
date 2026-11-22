@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ALL_CATEGORIES, CATEGORY_META } from "@/lib/categories";
 import { basename, formatBytes, formatCount, formatRelative, tildify } from "@/lib/format";
+import { parentOf } from "@/lib/paths";
 import { useApp } from "@/lib/store";
 import type { Category, Classification } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -30,11 +31,6 @@ interface Row {
   modifiedMs: number | null;
   fileCount: number | null;
   classification: Classification;
-}
-
-function parentOf(path: string): string {
-  const i = path.lastIndexOf("/");
-  return i > 0 ? path.slice(0, i) : "/";
 }
 
 export function LargeFilesPage() {

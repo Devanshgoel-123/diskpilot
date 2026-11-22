@@ -31,6 +31,8 @@ import { useKindFiles } from "./useKindFiles";
 import { useApp } from "@/lib/store";
 import type { CleanupRecord, FileEntry, FileKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { parentOf, relativeParts } from "@/lib/paths";
+import { isWindows, words } from "@/lib/platform";
 
 const KINDS: Record<FileKind, { label: string; icon: LucideIcon }> = {
   videos: { label: "Videos", icon: Film },
@@ -50,17 +52,10 @@ const AGES = [
 ] as const;
 type AgeId = (typeof AGES)[number]["id"];
 
-function parentOf(path: string): string {
-  const i = path.lastIndexOf("/");
-  return i > 0 ? path.slice(0, i) : "/";
-}
-
 /** The first folder under home, e.g. "Downloads", or "" for files at home. */
 function topFolder(path: string, home: string | undefined): string {
-  if (!home || !path.startsWith(`${home}/`)) return "";
-  const rest = path.slice(home.length + 1);
-  const i = rest.indexOf("/");
-  return i > 0 ? rest.slice(0, i) : "";
+  const rel = home ? relativeParts(path, home) : null;
+  return rel && rel.length > 1 ? (rel[0] ?? "") : "";
 }
 
 /**
@@ -177,7 +172,7 @@ function FileKindsView() {
     <PageHeader
       title="Storage"
       actions={<StorageTabs />}
-      description="Your own files by type, outside apps, ~/Library and hidden folders. DiskPilot never marks these safe to delete: you decide."
+      description={`Your own files by type, outside apps, ${isWindows() ? "" : "~/Library and "}hidden folders. DiskPilot never marks these safe to delete: you decide.`}
     />
   );
 
@@ -392,7 +387,7 @@ function FileKindsView() {
                     hiddenChosen
                       ? ` (${formatCount(hiddenChosen)} not shown with this type and filters)`
                       : ""
-                  } · about ${formatBytes(chosenBytes)} freed once the Trash is emptied`
+                  } · about ${formatBytes(chosenBytes)} freed once the ${words().trash} is emptied`
                 : "Select files you no longer need. Press Space on a row to preview it."}
             </p>
             <Button

@@ -111,8 +111,18 @@ const SAFE_ORPHAN: &str =
 const RISK_ORPHAN: &str =
     "If a download is running right now, its files can look unused until it finishes. Wait for `ollama pull` to finish first.";
 
+/// Ollama's model folder: `OLLAMA_MODELS` on Windows when set (the
+/// installer's documented way to move models to another drive), otherwise
+/// `~/.ollama/models`.
+fn ollama_models(ctx: &Ctx) -> PathBuf {
+    cfg!(windows)
+        .then(|| ctx.env_path("OLLAMA_MODELS"))
+        .flatten()
+        .unwrap_or_else(|| ctx.home_path(".ollama/models"))
+}
+
 fn ollama(ctx: &Ctx, sections: &mut Vec<ToolSection>, recs: &mut Vec<Recommendation>) {
-    let models_dir = ctx.home_path(".ollama/models");
+    let models_dir = ollama_models(ctx);
     let blobs = models_dir.join("blobs");
     if !exists(&blobs) {
         return;
@@ -266,19 +276,16 @@ pub fn analyze(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
     ollama(ctx, &mut sections, &mut recs);
     lm_studio(ctx, &mut sections);
 
-    let roots: Vec<(PathBuf, u64)> = [
-        ".ollama/models",
-        ".lmstudio/models",
-        ".cache/lm-studio/models",
-    ]
-    .iter()
-    .map(|r| ctx.home_path(r))
-    .filter(|p| exists(p))
-    .map(|p| {
-        let b = ctx.size(&p);
-        (p, b)
-    })
-    .collect();
+    let roots: Vec<(PathBuf, u64)> = [".lmstudio/models", ".cache/lm-studio/models"]
+        .iter()
+        .map(|r| ctx.home_path(r))
+        .chain([ollama_models(ctx)])
+        .filter(|p| exists(p))
+        .map(|p| {
+            let b = ctx.size(&p);
+            (p, b)
+        })
+        .collect();
     let models: usize = sections
         .iter()
         .filter(|s| s.title.ends_with("models"))
@@ -339,7 +346,7 @@ mod tests {
     #[test]
     fn recommends_only_unreferenced_and_partial_blobs() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let blobs = home.join(".ollama/models/blobs");
         write(&blobs.join("sha256-aaa"), 300);
         write(&blobs.join("sha256-bbb"), 200);
@@ -372,7 +379,7 @@ mod tests {
     #[test]
     fn lists_lm_studio_models_without_recommending() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         write(&home.join(".lmstudio/models/pub/model-gguf/m.gguf"), 1000);
         let (report, recs) = analyze(&ctx(&home));
         assert!(recs.is_empty());
@@ -382,7 +389,7 @@ mod tests {
     #[test]
     fn absent_when_nothing_installed() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let (report, recs) = analyze(&ctx(&home));
         assert!(!report.detected && recs.is_empty());
     }

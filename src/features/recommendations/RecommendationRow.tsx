@@ -16,6 +16,7 @@ import { useApp } from "@/lib/store";
 import { TIER_META } from "@/lib/tiers";
 import type { Recommendation } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { words } from "@/lib/platform";
 
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -50,7 +51,13 @@ export function RecommendationRow({
   const color = TIER_META[rec.tier].color;
 
   return (
-    <li className={cn("border-b border-border last:border-0", selected && "bg-accent-soft/60")}>
+    <li
+      data-rec-id={rec.id}
+      className={cn(
+        "scroll-mt-6 border-b border-border last:border-0",
+        selected && "bg-accent-soft/60",
+      )}
+    >
       <div className="flex min-h-11 items-center gap-3 px-2 py-1.5">
         <div className="flex w-5 shrink-0 justify-center">
           {actionable ? (
@@ -129,7 +136,7 @@ export function RecommendationRow({
                 <span className="block text-subtle-foreground">
                   DiskPilot can:{" "}
                   {rec.methods
-                    .map((m) => (m === "trash" ? "move to Trash" : "delete permanently"))
+                    .map((m) => (m === "trash" ? `move to ${words().trash}` : "delete permanently"))
                     .join(" or ")}
                 </span>
               ) : (
@@ -184,7 +191,7 @@ export function RecommendationRow({
             ) : null}
             <Button variant="ghost" size="sm" onClick={() => void api.revealInFinder(rec.path)}>
               <FolderOpen />
-              Reveal in Finder
+              {words().revealInFileManager}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => openInExplorer(rec.path)}>
               <FolderTree />

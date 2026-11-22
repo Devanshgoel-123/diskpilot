@@ -283,7 +283,7 @@ mod tests {
     #[test]
     fn flags_derived_data_for_deleted_projects() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let dd = home.join("Library/Developer/Xcode/DerivedData");
         let live_proj = home.join("code/Live.xcodeproj");
         std::fs::create_dir_all(&live_proj).unwrap();

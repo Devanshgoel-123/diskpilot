@@ -20,16 +20,23 @@ import { TrashGlyph } from "@/features/trash/TrashGlyph";
 import { useTrash } from "@/features/trash/trashStore";
 import { useCountUp } from "@/features/trash/useCountUp";
 import { playCleanupDone } from "@/lib/sounds";
-import type { CleanupMethod, CleanupPlan, CleanupProgress, CleanupRecord } from "@/lib/types";
+import type {
+  CleanupMethod,
+  CleanupPlan,
+  CleanupProgress,
+  CleanupRecord,
+  PlanRejection,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { words } from "@/lib/platform";
 
 import "./cleanup.css";
 
-const METHODS: { id: CleanupMethod; title: string; text: string }[] = [
+const methods = (): { id: CleanupMethod; title: string; text: string }[] => [
   {
     id: "trash",
-    title: "Move to Trash",
-    text: "Recoverable until you empty the Trash. Space is freed when you do.",
+    title: `Move to ${words().trash}`,
+    text: `Recoverable until you empty the ${words().trash}. Space is freed when you do.`,
   },
   {
     id: "delete",
@@ -126,14 +133,19 @@ export function CleanupDialog({
   const count = plan?.items.length ?? 0;
   const destructiveLabel =
     method === "trash"
-      ? `Move ${count} item${count === 1 ? "" : "s"} to Trash`
+      ? `Move ${count} item${count === 1 ? "" : "s"} to ${words().trash}`
       : `Delete ${count} item${count === 1 ? "" : "s"} permanently`;
 
   return (
     <Dialog open={open} onOpenChange={close}>
       <DialogContent className="w-[min(720px,calc(100vw-32px))]">
         {record ? (
-          <ResultView record={record} home={home} onClose={() => close(false)} />
+          <ResultView
+            record={record}
+            leftOut={plan?.rejected ?? []}
+            home={home}
+            onClose={() => close(false)}
+          />
         ) : (
           <>
             <DialogHeader>
@@ -145,7 +157,7 @@ export function CleanupDialog({
 
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
               <div role="radiogroup" aria-label="Cleanup method" className="grid grid-cols-2 gap-2">
-                {METHODS.map((m) => {
+                {methods().map((m) => {
                   const allowed = allowedMethods.includes(m.id);
                   return (
                     <button
@@ -203,6 +215,12 @@ export function CleanupDialog({
                     </span>
                     <span className="tabular text-foreground">{formatBytes(plan.totalBytes)}</span>
                   </p>
+                  {plan.rejected.length && count > 0 ? (
+                    <p className="mb-1.5 text-2xs text-muted-foreground">
+                      Only these {formatCount(count)} are removed. The rest are listed below with
+                      the reason.
+                    </p>
+                  ) : null}
                   <ul
                     aria-label="Items in this cleanup"
                     className="divide-y divide-border rounded-lg border border-border"
@@ -229,18 +247,15 @@ export function CleanupDialog({
                   </ul>
                   <Pager page={reviewPage} label="items" className="mt-2" />
                   {plan.rejected.length ? (
-                    <div className="mt-3">
-                      <p className="mb-1 text-xs text-muted-foreground">
-                        Excluded by the safety checks
-                      </p>
-                      <ul className="space-y-1">
-                        {plan.rejected.map((r) => (
-                          <li key={r.recommendationId} className="text-2xs text-subtle-foreground">
-                            <span className="font-mono">{tildify(r.path, home)}</span> — {r.reason}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+                    <Skipped
+                      rejected={plan.rejected}
+                      home={home}
+                      title={
+                        count === 0
+                          ? `None of these can be removed right now`
+                          : `${formatCount(plan.rejected.length)} ${plan.rejected.length === 1 ? "item is" : "items are"} left out and will not be touched`
+                      }
+                    />
                   ) : null}
                 </div>
               ) : null}
@@ -291,7 +306,7 @@ function Working({ plan, progress }: { plan: CleanupPlan; progress: CleanupProgr
   const done = progress?.itemsDone ?? 0;
   const bytes = useCountUp(progress?.bytesDone ?? 0, 420);
   const fraction = total ? done / total : 0;
-  const verb = plan.method === "trash" ? "Moving to the Trash" : "Deleting";
+  const verb = plan.method === "trash" ? `Moving to the ${words().trash}` : "Deleting";
   return (
     <div className="cl-working py-4" aria-live="polite">
       <p className="flex items-baseline gap-2">
@@ -331,16 +346,59 @@ function Working({ plan, progress }: { plan: CleanupPlan; progress: CleanupProgr
   );
 }
 
+/** Items kept out of a cleanup, each with why: a running dev server, say. */
+function Skipped({
+  rejected,
+  home,
+  title,
+}: {
+  rejected: PlanRejection[];
+  home: string | undefined;
+  title: string;
+}) {
+  return (
+    <div
+      role="status"
+      className="tinted mt-3 rounded-lg border px-3 py-2.5"
+      style={{ "--tint": "var(--tier-review)" } as CSSProperties}
+    >
+      <p className="flex items-center gap-2 text-xs font-medium">
+        <AlertTriangle
+          className="size-3.5 shrink-0"
+          style={{ color: "var(--tier-review)" }}
+          aria-hidden
+        />
+        {title}
+      </p>
+      <ul aria-label="Not removed" className="mt-1.5 space-y-1.5 pl-5.5">
+        {rejected.map((r) => (
+          <li key={`${r.recommendationId}|${r.path}`} className="text-2xs">
+            <span className="selectable block truncate font-mono" title={r.path}>
+              {r.path ? tildify(r.path, home) : "Unknown item"}
+            </span>
+            <span className="text-muted-foreground">{r.reason}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function ResultView({
   record,
+  leftOut,
   home,
   onClose,
 }: {
   record: CleanupRecord;
+  /** Items the preview already left out; they were never attempted. */
+  leftOut: PlanRejection[];
   home: string | undefined;
   onClose: () => void;
 }) {
   const ok = record.items.filter((i) => i.status === "succeeded").length;
+  const asked = record.items.length + leftOut.length;
+  const notDone = asked - ok;
   // Anything not done comes first, so it is seen without scrolling.
   const items = useMemo(
     () => [
@@ -359,23 +417,31 @@ function ResultView({
           ) : (
             <CheckCircle2 className="size-4 text-good" aria-hidden />
           )}
-          {record.status === "succeeded"
-            ? "Cleanup complete"
-            : record.status === "partial"
+          {record.status === "failed"
+            ? "Cleanup failed"
+            : notDone > 0
               ? "Cleanup partly complete"
-              : "Cleanup failed"}
+              : "Cleanup complete"}
         </DialogTitle>
         <DialogDescription>
-          {formatCount(ok)} of {formatCount(record.items.length)} items done.{" "}
+          {formatCount(ok)} of {formatCount(asked)} items done
+          {notDone > 0 ? `; ${formatCount(notDone)} not removed, listed first with why` : ""}.{" "}
           {record.bytesTrashed > 0
-            ? `${formatBytes(record.bytesTrashed)} moved to the Trash. Empty the Trash to free the space.`
+            ? `${formatBytes(record.bytesTrashed)} moved to the ${words().trash}. Empty the ${words().trash} to free the space.`
             : null}
           {record.bytesFreed > 0 ? `${formatBytes(record.bytesFreed)} freed.` : null} Sizes
           elsewhere reflect the last scan until you rescan.
         </DialogDescription>
       </DialogHeader>
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-2">
-        <ul aria-label="Cleanup results" className="divide-y divide-border">
+        {leftOut.length ? (
+          <Skipped
+            rejected={leftOut}
+            home={home}
+            title={`${formatCount(leftOut.length)} not removed: left out before the cleanup started`}
+          />
+        ) : null}
+        <ul aria-label="Cleanup results" className="mt-2 divide-y divide-border">
           {resultPage.items.map((i) => (
             <li key={i.target}>
               <div className="py-2">
@@ -412,7 +478,7 @@ function ResultView({
             }}
           >
             <TrashGlyph />
-            Empty Trash…
+            {words().emptyTrash}…
           </Button>
         ) : null}
         <Button onClick={onClose}>Done</Button>

@@ -6,8 +6,9 @@ import { type CleanupStats, cleanupStats } from "@/lib/cleanupStats";
 import { formatBytes, formatCount } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { words } from "@/lib/platform";
 
-/** Lifetime stats from this Mac's cleanup history; refreshes after each cleanup. */
+/** Lifetime stats from this computer's cleanup history; refreshes after each cleanup. */
 function useCleanupStats(): CleanupStats | null {
   const cleanups = useApp((s) => s.cleanups);
   const [stats, setStats] = useState<CleanupStats | null>(null);
@@ -105,8 +106,8 @@ export function ClearedStatsPanel() {
         ))}
       </div>
       <p className="text-2xs text-subtle-foreground">
-        Counts files and Docker data DiskPilot deleted or moved to the Trash. Emptying the Trash is
-        not counted again. Kept on this Mac only; nothing is sent.
+        Counts files and Docker data DiskPilot deleted or moved to the {words().trash}. Emptying the{" "}
+        {words().trash} is not counted again. Kept on this {words().computer} only; nothing is sent.
       </p>
     </section>
   );

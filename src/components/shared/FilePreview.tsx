@@ -7,6 +7,9 @@ import { api, errorMessage } from "@/lib/api";
 import { formatBytes, formatRelative, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import { anySmallThumbnail, cachedThumbnail, loadThumbnail } from "@/lib/thumbnails";
+import { basename, parentOf } from "@/lib/paths";
+import { modifierHeld, words } from "@/lib/platform";
+import { keysText } from "@/lib/shortcuts";
 
 export interface PreviewFile {
   path: string;
@@ -22,13 +25,8 @@ export interface PreviewFile {
 
 const LARGE = 512;
 
-function nameOf(path: string) {
-  return path.slice(path.lastIndexOf("/") + 1);
-}
-function folderOf(path: string) {
-  const i = path.lastIndexOf("/");
-  return i > 0 ? path.slice(0, i) : "/";
-}
+const nameOf = basename;
+const folderOf = parentOf;
 
 /**
  * A large preview of one file at a time, like Quick Look in Finder: Space or
@@ -102,10 +100,10 @@ export function FilePreview({
           } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
             e.preventDefault();
             move(-1);
-          } else if (e.key === "Backspace" && e.metaKey && canSelect && file) {
+          } else if (e.key === "Backspace" && modifierHeld(e) && canSelect && file) {
             e.preventDefault();
             onToggleSelect?.(file.path);
-          } else if (e.key === "o" && e.metaKey && file) {
+          } else if (e.key === "o" && modifierHeld(e) && file) {
             e.preventDefault();
             open(file.path);
           }
@@ -118,7 +116,7 @@ export function FilePreview({
                 <button
                   type="button"
                   onClick={() => open(file.path)}
-                  title="Open in its app (⌘O)"
+                  title={`Open in its app (${keysText(["⌘", "O"])})`}
                   aria-label={`Open ${nameOf(file.path)}`}
                   className="flex size-full cursor-zoom-in items-center justify-center"
                 >
@@ -132,7 +130,7 @@ export function FilePreview({
               ) : url === null ? (
                 <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
                   <File className="size-10 text-subtle-foreground" aria-hidden />
-                  macOS has no preview for this kind of file.
+                  {words().os} has no preview for this kind of file.
                 </div>
               ) : placeholder ? (
                 // The row's small thumbnail, enlarged and softened, until the
@@ -193,14 +191,14 @@ export function FilePreview({
               ) : null}
               <Button variant="ghost" size="sm" onClick={() => void api.revealInFinder(file.path)}>
                 <FolderOpen className="size-3.5" aria-hidden />
-                Show in Finder
+                {words().showInFileManager}
               </Button>
               {canSelect ? (
                 <Button
                   variant={file.selected ? "secondary" : "default"}
                   size="sm"
                   onClick={() => onToggleSelect?.(file.path)}
-                  title="Select for Trash (⌘⌫)"
+                  title={`Select for ${words().trash} (${keysText(["⌘", "⌫"])})`}
                   aria-pressed={!!file.selected}
                 >
                   {file.selected ? (
@@ -208,7 +206,7 @@ export function FilePreview({
                   ) : (
                     <Trash2 className="size-3.5" aria-hidden />
                   )}
-                  {file.selected ? "Selected for Trash" : "Select for Trash"}
+                  {file.selected ? `Selected for ${words().trash}` : `Select for ${words().trash}`}
                 </Button>
               ) : null}
             </div>

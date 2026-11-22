@@ -1,7 +1,8 @@
 //! The menu bar glyph: DiskPilot's goggles inside a ring that fills with the
 //! share of the startup disk in use, so the icon itself shows how full the
 //! disk is. Drawn in code as a macOS template image (black with alpha), so
-//! the system tints it for light and dark menu bars.
+//! the system tints it for light and dark menu bars. Windows does not tint
+//! tray icons, so there it is drawn in a color that suits the taskbar.
 
 /// 18 pt at 2x.
 pub const SIZE: u32 = 36;
@@ -71,6 +72,11 @@ fn coverage(x: f32, y: f32, used: f32) -> f32 {
 
 /// RGBA pixels for a disk with `used` (0..1) of its space taken.
 pub fn render(used: f64) -> Vec<u8> {
+    render_in(used, [0, 0, 0])
+}
+
+/// [`render`] in a color (RGB) instead of black.
+pub fn render_in(used: f64, rgb: [u8; 3]) -> Vec<u8> {
     let used = if used.is_finite() {
         used.clamp(0.0, 1.0) as f32
     } else {
@@ -88,7 +94,8 @@ pub fn render(used: f64) -> Vec<u8> {
                     sum += coverage(x, y, used);
                 }
             }
-            out.extend_from_slice(&[0, 0, 0, (sum / n * 255.0).round() as u8]);
+            out.extend_from_slice(&rgb);
+            out.push((sum / n * 255.0).round() as u8);
         }
     }
     out
@@ -131,6 +138,15 @@ mod tests {
         assert_eq!(alpha(&img, SIZE - 1, SIZE - 1), 0);
         assert_eq!(render(f64::NAN), render(0.0));
         assert_eq!(render(7.0), render(1.0));
+    }
+
+    #[test]
+    fn draws_in_a_color() {
+        let img = render_in(0.5, [255, 255, 255]);
+        let (x, y) = ring_px(0.25);
+        let i = ((y * SIZE + x) * 4) as usize;
+        assert_eq!(&img[i..i + 4], &[255, 255, 255, 255]);
+        assert_eq!(alpha(&img, 0, 0), 0);
     }
 
     /// Writes previews for eyeballing: `cargo test tray_icon -- --ignored`.

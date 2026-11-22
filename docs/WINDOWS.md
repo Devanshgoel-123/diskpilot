@@ -82,11 +82,46 @@ The `trash` crate already supports the Windows Recycle Bin, so the executor's
 Trash-first behavior carries over. Permanent deletion stays limited to
 regenerable data.
 
-## App icons
+## Applications
 
-Installed-app icons come from the shell (`SHGetFileInfoW` or
-`IShellItemImageFactory`) instead of `NSWorkspace`, keeping the rule that no
-third-party logos ship with DiskPilot.
+Installed programs come from the registry's Uninstall keys (all users in the
+64-bit and 32-bit views, and the current user), filtered like Settings > Apps:
+system components, updates (`ParentKeyName`, `ReleaseType`) and entries
+without an uninstaller are hidden. Store apps come from the per-user package
+repository in the registry (`AppModel\Repository\Packages`), limited to
+packages with a data folder in `AppData\Local\Packages`, which leaves out
+frameworks; this is much faster than `Get-AppxPackage`.
+
+- Size: the measured install folder, or `EstimatedSize` when the program
+  registered no usable folder (a drive root or Program Files itself is
+  ignored). Programs inside the Windows folder show no size, like system apps
+  on macOS.
+- Data: folders in `AppData\Roaming`, `AppData\Local`, `AppData\LocalLow`,
+  `AppData\Local\Packages` and `ProgramData` named after a program, with
+  vendor folders such as `Google\Chrome` looked into.
+- Leftovers: only Store app data in `AppData\Local\Packages` whose package
+  is no longer installed, the equivalent of macOS containers. Other AppData
+  folders often belong to tools with no uninstaller, so they are not called
+  leftovers.
+- Uninstall: DiskPilot never deletes a program's folder. After the person
+  confirms (the window shows the exact command), it starts the program's own
+  `UninstallString` with `ShellExecuteEx`, never through a shell. Windows
+  Installer entries run `msiexec.exe /X{product}`. Store apps, and entries
+  that would start a script host, open Settings > Apps instead.
+- Icons come from the shell (`IShellItemImageFactory` on `DisplayIcon`, or
+  the Store app's `shell:AppsFolder` item) instead of `NSWorkspace`, keeping
+  the rule that no third-party logos ship with DiskPilot.
+
+## Shell
+
+- Previews: `IShellItemImageFactory` thumbnails, never for an online-only
+  cloud file (drawing one would download it).
+- Show in File Explorer: `SHOpenFolderAndSelectItems`.
+- Tray: left click opens the window, right click shows the menu; closing the
+  window keeps DiskPilot in the notification area. A second launch brings the
+  running copy's window back.
+- Notifications need the AppUserModelID the installer registers; a copy run
+  from `target` may show none.
 
 ## Distribution
 

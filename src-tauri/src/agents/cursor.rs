@@ -146,7 +146,7 @@ pub fn analyze(input: &Input) -> (AgentReport, Vec<Recommendation>) {
             id: ID.into(),
             name: NAME.into(),
             detected: tool.detected || exists(&ctx.home_path(".cursor")),
-            version: crate::devtools::app_version(std::path::Path::new("/Applications/Cursor.app")),
+            version: tool.version.clone(),
             permissions: permissions(ctx),
             connections,
             plugins: editor_extensions(ctx, &ctx.home_path(".cursor/extensions")),

@@ -15,7 +15,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{File, Metadata};
 use std::io::{self, Read};
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -23,6 +22,7 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+use crate::platform;
 use crate::scanner::{now_ms, to_ms};
 
 pub const EVENT_DUPLICATES_PROGRESS: &str = "duplicates://progress";
@@ -193,7 +193,7 @@ fn list_files(
         *unreadable += 1;
         return Vec::new();
     };
-    let dev = root_meta.dev();
+    let dev = platform::device(&root_meta);
     let mut seen_inodes: HashSet<(u64, u64)> = HashSet::new();
     let mut out = Vec::new();
     let mut examined = 0u64;
@@ -212,7 +212,7 @@ fn list_files(
                 *unreadable += 1;
                 continue;
             };
-            if meta.dev() != dev || meta.file_type().is_symlink() {
+            if platform::device(&meta) != dev || meta.file_type().is_symlink() {
                 continue;
             }
             let name = entry.file_name().to_string_lossy().into_owned();
@@ -222,14 +222,27 @@ fn list_files(
                 }
                 continue;
             }
-            if !meta.is_file() || name.starts_with('.') {
+            // Hidden files, and cloud files whose data is not on this computer:
+            // reading one to compare it would download it.
+            if !meta.is_file()
+                || name.starts_with('.')
+                || platform::hidden(&meta)
+                || !platform::is_local(&meta)
+            {
                 continue;
             }
             examined += 1;
             if examined % 500 == 0 {
                 tick(examined, &path);
             }
-            if meta.len() < min_bytes || !seen_inodes.insert((meta.dev(), meta.ino())) {
+            if meta.len() < min_bytes {
+                continue;
+            }
+            // Hard links to one file are not copies. Windows needs to open the
+            // file to know its identity, so it is only asked for files that
+            // are big enough to matter.
+            let id = platform::identity(&meta).or_else(|| platform::identity_at(&path));
+            if id.is_some_and(|id| !seen_inodes.insert((id.volume, id.index))) {
                 continue;
             }
             out.push(Candidate {
@@ -527,8 +540,11 @@ pub fn same_contents(a: &Path, b: &Path) -> io::Result<bool> {
     if !regular(&ma) || !regular(&mb) || ma.len() != mb.len() {
         return Ok(false);
     }
-    if ma.dev() == mb.dev() && ma.ino() == mb.ino() {
-        return Ok(false);
+    let id = |p: &Path, m: &Metadata| platform::identity(m).or_else(|| platform::identity_at(p));
+    if let (Some(ia), Some(ib)) = (id(a, &ma), id(b, &mb)) {
+        if (ia.volume, ia.index) == (ib.volume, ib.index) {
+            return Ok(false);
+        }
     }
     let (mut fa, mut fb) = (File::open(a)?, File::open(b)?);
     let (mut ba, mut bb) = (vec![0u8; 256 * 1024], vec![0u8; 256 * 1024]);
@@ -679,7 +695,7 @@ mod tests {
     #[test]
     fn groups_only_identical_contents() {
         let dir = crate::test_support::sandbox();
-        let root = dir.path().canonicalize().unwrap();
+        let root = crate::platform::canonicalize(dir.path()).unwrap();
         let a = big(7, 200_000);
         let mut b = a.clone();
         *b.last_mut().unwrap() = 8; // same size and prefix, different end
@@ -709,7 +725,7 @@ mod tests {
     #[test]
     fn small_files_compare_by_whole_contents() {
         let dir = crate::test_support::sandbox();
-        let root = dir.path().canonicalize().unwrap();
+        let root = crate::platform::canonicalize(dir.path()).unwrap();
         write(&root.join("x"), &big(1, 5000));
         write(&root.join("y"), &big(1, 5000));
         write(&root.join("z"), &big(2, 5000));
@@ -718,10 +734,11 @@ mod tests {
         assert_eq!(r.groups[0].files.len(), 2);
     }
 
+    #[cfg(unix)]
     #[test]
     fn skips_hard_links_hidden_folders_bundles_and_symlinks() {
         let dir = crate::test_support::sandbox();
-        let root = dir.path().canonicalize().unwrap();
+        let root = crate::platform::canonicalize(dir.path()).unwrap();
         let data = big(3, 10_000);
         write(&root.join("a"), &data);
         std::fs::hard_link(root.join("a"), root.join("a-link")).unwrap();
@@ -741,7 +758,7 @@ mod tests {
         use std::ffi::CString;
         use std::os::unix::ffi::OsStrExt;
         let dir = crate::test_support::sandbox();
-        let root = dir.path().canonicalize().unwrap();
+        let root = crate::platform::canonicalize(dir.path()).unwrap();
         write(&root.join("orig"), &big(9, 300_000));
         let src = CString::new(root.join("orig").as_os_str().as_bytes()).unwrap();
         let dst = CString::new(root.join("clone").as_os_str().as_bytes()).unwrap();
@@ -758,7 +775,7 @@ mod tests {
     #[test]
     fn verifies_contents_before_removal() {
         let dir = crate::test_support::sandbox();
-        let root = dir.path().canonicalize().unwrap();
+        let root = crate::platform::canonicalize(dir.path()).unwrap();
         write(&root.join("a"), &big(4, 300_000));
         write(&root.join("b"), &big(4, 300_000));
         let mut c = big(4, 300_000);
@@ -772,7 +789,7 @@ mod tests {
     #[test]
     fn removal_keeps_one_copy_and_rechecks_contents() {
         let dir = crate::test_support::sandbox();
-        let root = dir.path().canonicalize().unwrap();
+        let root = crate::platform::canonicalize(dir.path()).unwrap();
         write(&root.join("a"), &big(6, 10_000));
         write(&root.join("b"), &big(6, 10_000));
         write(&root.join("c"), &big(6, 10_000));
@@ -805,7 +822,7 @@ mod tests {
     #[test]
     fn forgetting_removed_copies_updates_groups() {
         let dir = crate::test_support::sandbox();
-        let root = dir.path().canonicalize().unwrap();
+        let root = crate::platform::canonicalize(dir.path()).unwrap();
         write(&root.join("a"), &big(5, 10_000));
         write(&root.join("b"), &big(5, 10_000));
         let mut r = run(&root, 1);

@@ -1,18 +1,40 @@
-/** Formatting helpers. Sizes use decimal units (1 GB = 10^9 bytes), like Finder. */
+import { isWindows } from "./platform";
+
+/**
+ * Formatting helpers. Sizes match the system's own: decimal units on macOS
+ * (1 GB = 10^9 bytes), like Finder, and units of 1024 on Windows, which File
+ * Explorer and Settings also label "GB". Otherwise a 492 GB disk here shows
+ * as 458 GB in Windows.
+ */
 
 const UNITS = ["B", "KB", "MB", "GB", "TB", "PB"] as const;
 
 export function formatBytes(bytes: number | null | undefined, digits = 1): string {
   if (bytes == null || !Number.isFinite(bytes)) return "—";
-  if (bytes < 1000) return `${Math.max(0, Math.round(bytes))} B`;
+  const base = isWindows() ? 1024 : 1000;
+  if (bytes < base) return `${Math.max(0, Math.round(bytes))} B`;
   let value = bytes;
   let unit = 0;
-  while (value >= 1000 && unit < UNITS.length - 1) {
-    value /= 1000;
+  while (value >= base && unit < UNITS.length - 1) {
+    value /= base;
     unit += 1;
   }
+  if (isWindows()) return `${windowsDigits(value)} ${UNITS[unit]}`;
   const fixed = value >= 100 ? 0 : digits;
   return `${value.toFixed(fixed)} ${UNITS[unit]}`;
+}
+
+/**
+ * Three significant digits, cut off rather than rounded, as Settings and File
+ * Explorer show them: 358.78 GB used reads "358 GB" and 99.28 GB free reads
+ * "99.2 GB" there, so rounding to "359 GB" and "99.3 GB" would disagree with
+ * the numbers people check against.
+ */
+function windowsDigits(value: number): string {
+  const decimals = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  const scale = 10 ** decimals;
+  // The small nudge keeps 1.15 (stored as 1.1499…) from cutting to 1.14.
+  return (Math.floor(value * scale + 1e-9) / scale).toFixed(decimals);
 }
 
 export function formatCount(n: number | null | undefined): string {
@@ -69,15 +91,5 @@ export function formatDate(ms: number | null | undefined): string {
   });
 }
 
-/** Replace the home folder prefix with `~` for compact display. */
-export function tildify(path: string, home: string | undefined): string {
-  if (!home) return path;
-  if (path === home) return "~";
-  if (path.startsWith(home + "/")) return "~" + path.slice(home.length);
-  return path;
-}
-
-export function basename(path: string): string {
-  const parts = path.split("/").filter(Boolean);
-  return parts[parts.length - 1] ?? path;
-}
+// Path display lives in paths.ts; re-exported for existing imports.
+export { basename, tildify } from "./paths";

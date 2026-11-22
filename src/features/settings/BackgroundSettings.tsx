@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { api, errorMessage } from "@/lib/api";
 import type { Schedule } from "@/lib/types";
+import { isWindows, words } from "@/lib/platform";
 
 import { Section, Setting } from "./parts";
 
@@ -47,14 +48,16 @@ export function BackgroundSettings() {
     }
   };
 
-  // macOS asks once whether DiskPilot may send notifications.
+  // The system asks once whether DiskPilot may send notifications.
   const toggleReminder = async (on: boolean) => {
     if (!schedule) return;
     if (on) {
       const granted = (await isPermissionGranted()) || (await requestPermission()) === "granted";
       if (!granted) {
         setError(
-          "macOS is not letting DiskPilot send notifications. Allow them in System Settings > Notifications > DiskPilot, then turn this on again.",
+          isWindows()
+            ? "Windows is not letting DiskPilot send notifications. Allow them in Settings > System > Notifications > DiskPilot, then turn this on again."
+            : "macOS is not letting DiskPilot send notifications. Allow them in System Settings > Notifications > DiskPilot, then turn this on again.",
         );
         return;
       }
@@ -75,13 +78,15 @@ export function BackgroundSettings() {
     }
   };
 
+  const w = words();
+  const atLoginLabel = isWindows() ? "Open at sign-in" : "Open at login";
   const needsLogin = schedule && (schedule.rescan !== "off" || schedule.reminder) && !atLogin;
 
   return (
     <Section title="In the background" id="background">
       <Setting
-        label="Open at login"
-        description="Start DiskPilot in the menu bar when you log in, without opening its window."
+        label={atLoginLabel}
+        description={`Start DiskPilot in the ${w.tray} when you ${w.logIn}, without opening its window.`}
         control={
           <input
             type="checkbox"
@@ -89,7 +94,7 @@ export function BackgroundSettings() {
             checked={!!atLogin}
             disabled={atLogin === null}
             onChange={(e) => void toggleLogin(e.target.checked)}
-            aria-label="Open at login"
+            aria-label={atLoginLabel}
             className="size-4 accent-[var(--accent)]"
           />
         }
@@ -147,8 +152,8 @@ export function BackgroundSettings() {
         <div className="space-y-1 px-4 py-2.5 text-xs" aria-live="polite">
           {needsLogin ? (
             <p className="text-muted-foreground">
-              These run while DiskPilot is open or in the menu bar. Turn on Open at login so they
-              continue after you restart your Mac.
+              These run while DiskPilot is open or in the {w.tray}. Turn on {atLoginLabel} so they
+              continue after you restart your {w.computer}.
             </p>
           ) : null}
           {error ? <p className="text-critical">{error}</p> : null}

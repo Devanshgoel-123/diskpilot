@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { EmptyTrashButton } from "@/features/trash/EmptyTrashButton";
 import { useTrash } from "@/features/trash/trashStore";
 import { formatBytes, formatCount } from "@/lib/format";
+import { words } from "@/lib/platform";
 
 /**
  * Cleanup moves items to the Trash, so the space only comes back once the
@@ -31,12 +32,12 @@ export function TrashWaitingNotice() {
         <div>
           <p className="text-foreground">
             <span className="tabular font-medium">{formatBytes(summary.totalBytes)}</span> is
-            waiting in the Trash ({formatCount(summary.items)}{" "}
+            waiting in the {words().trash} ({formatCount(summary.items)}{" "}
             {summary.items === 1 ? "item" : "items"}).
           </p>
           <p className="mt-0.5 text-muted-foreground">
-            Moving items to the Trash keeps them recoverable. The space comes back when the Trash is
-            emptied.
+            Moving items to the {words().trash} keeps them recoverable. The space comes back when
+            the {words().trash} is emptied.
           </p>
         </div>
       </div>

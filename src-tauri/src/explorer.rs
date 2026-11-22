@@ -5,7 +5,6 @@
 
 use std::cmp::Reverse;
 use std::fs;
-use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
 use crate::classifier::{Classifier, FsProbe, Resolved};
@@ -137,7 +136,7 @@ pub fn item_details(
         created_ms: meta.created().ok().and_then(to_ms),
         modified_ms: meta.modified().ok().and_then(to_ms),
         accessed_ms: meta.accessed().ok().and_then(to_ms),
-        readonly: meta.permissions().readonly() || meta.mode() & 0o200 == 0,
+        readonly: crate::platform::read_only(&meta),
         symlink_target: if kind == EntryKind::Symlink {
             fs::read_link(path).ok().map(|t| t.display().to_string())
         } else {

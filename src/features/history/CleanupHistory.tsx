@@ -1,4 +1,13 @@
-import { Box, CheckCircle2, ChevronDown, FileX, MinusCircle, XCircle } from "lucide-react";
+import {
+  Box,
+  CheckCircle2,
+  ChevronDown,
+  FileX,
+  HardDriveDownload,
+  MinusCircle,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react";
 import { useState } from "react";
 
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -9,11 +18,24 @@ import { useApp } from "@/lib/store";
 import type { ActionStatus, CleanupRecord, ItemStatus } from "@/lib/types";
 import { usePage } from "@/lib/usePage";
 import { cn } from "@/lib/utils";
+import { words } from "@/lib/platform";
 
 const STATUS_LABEL: Record<ActionStatus, string> = {
   succeeded: "Succeeded",
   partial: "Partly succeeded",
   failed: "Failed",
+};
+
+const KIND_ICON: Record<CleanupRecord["kind"], LucideIcon> = {
+  files: FileX,
+  docker: Box,
+  trash: FileX,
+  wsl: HardDriveDownload,
+};
+
+/** Shown before the date for kinds the title alone does not name. */
+const KIND_LABEL: Partial<Record<CleanupRecord["kind"], string>> = {
+  wsl: "Virtual disk",
 };
 
 function ItemIcon({ status }: { status: ItemStatus }) {
@@ -26,7 +48,8 @@ function ItemIcon({ status }: { status: ItemStatus }) {
 
 function Row({ record, home }: { record: CleanupRecord; home: string | undefined }) {
   const [open, setOpen] = useState(false);
-  const Icon = record.kind === "docker" ? Box : FileX;
+  const Icon = KIND_ICON[record.kind] ?? FileX;
+  const kindLabel = KIND_LABEL[record.kind];
   return (
     <li className="border-b border-border last:border-0">
       <button
@@ -38,12 +61,17 @@ function Row({ record, home }: { record: CleanupRecord; home: string | undefined
         <Icon className="size-3.5 shrink-0 text-subtle-foreground" aria-hidden />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px]">{record.title}</p>
-          <p className="text-2xs text-subtle-foreground">{formatDate(record.startedAtMs)}</p>
+          <p className="text-2xs text-subtle-foreground">
+            {kindLabel ? `${kindLabel} · ` : ""}
+            {formatDate(record.startedAtMs)}
+          </p>
         </div>
         <div className="tabular text-right text-xs">
           {record.bytesFreed > 0 ? <p>{formatBytes(record.bytesFreed)} freed</p> : null}
           {record.bytesTrashed > 0 ? (
-            <p className="text-muted-foreground">{formatBytes(record.bytesTrashed)} to Trash</p>
+            <p className="text-muted-foreground">
+              {formatBytes(record.bytesTrashed)} to {words().trash}
+            </p>
           ) : null}
           {record.bytesFreed === 0 && record.bytesTrashed === 0 ? <p>—</p> : null}
         </div>

@@ -16,7 +16,6 @@
 //! readable only by the user, like the agent's own config.
 
 use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -60,7 +59,7 @@ fn read(path: &Path) -> Result<Snapshot> {
         len: bytes.len() as u64,
         bytes,
         modified: meta.modified().ok(),
-        mode: meta.permissions().mode() & 0o7777,
+        mode: crate::fsmode::mode(&meta),
     })
 }
 
@@ -76,7 +75,7 @@ fn backup(data_dir: Option<&Path>, agent: &str, path: &Path, bytes: &[u8]) -> Re
     };
     let dir = data_dir.join("agent-config-backups");
     std::fs::create_dir_all(&dir).map_err(|e| AppError::io(&dir, &e))?;
-    let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
+    let _ = crate::fsmode::set_mode(&dir, 0o700);
     let file = path
         .file_name()
         .map(|n| n.to_string_lossy().trim_start_matches('.').to_string())
@@ -116,33 +115,21 @@ fn write_atomic(path: &Path, bytes: &[u8], mode: u32) -> Result<()> {
         .unwrap_or_default();
     let tmp = dir.join(format!(".{name}.diskpilot-{}", std::process::id()));
     let result = (|| {
-        let mut f = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode_compat(mode)
-            .open(&tmp)
-            .map_err(|e| AppError::io(&tmp, &e))?;
+        let mut f = crate::fsmode::create_with(
+            std::fs::OpenOptions::new().write(true).create_new(true),
+            mode,
+        )
+        .open(&tmp)
+        .map_err(|e| AppError::io(&tmp, &e))?;
         f.write_all(bytes).map_err(|e| AppError::io(&tmp, &e))?;
         f.sync_all().map_err(|e| AppError::io(&tmp, &e))?;
-        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(mode))
-            .map_err(|e| AppError::io(&tmp, &e))?;
+        crate::fsmode::set_mode(&tmp, mode).map_err(|e| AppError::io(&tmp, &e))?;
         std::fs::rename(&tmp, path).map_err(|e| AppError::io(path, &e))
     })();
     if result.is_err() {
         let _ = std::fs::remove_file(&tmp);
     }
     result
-}
-
-trait ModeCompat {
-    fn mode_compat(&mut self, mode: u32) -> &mut Self;
-}
-
-impl ModeCompat for std::fs::OpenOptions {
-    fn mode_compat(&mut self, mode: u32) -> &mut Self {
-        use std::os::unix::fs::OpenOptionsExt;
-        self.mode(mode)
-    }
 }
 
 /// Apply `change` to a file's text. `change` returns the new text, or `None`
@@ -362,8 +349,11 @@ pub fn forget(data_dir: Option<&Path>, id: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
 
     #[test]
+    #[cfg(unix)]
     fn json_edits_keep_key_order_permissions_and_a_backup() {
         let dir = crate::test_support::sandbox();
         let data = dir.path().join("data");
@@ -460,6 +450,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn a_symlinked_config_is_edited_at_its_target() {
         let dir = crate::test_support::sandbox();
         let target = dir.path().join("dotfiles-settings.json");

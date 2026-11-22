@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setOs } from "./platform";
 import {
   SHORTCUT_GROUPS,
+  actionText,
+  ariaKeys,
   focusFilter,
+  keyLabel,
+  keysText,
   runShortcut,
   shortcutFor,
   shortcutLabel,
@@ -24,6 +29,7 @@ function app(over: Partial<Parameters<typeof runShortcut>[1]> = {}) {
 }
 
 beforeEach(() => {
+  setOs("macos");
   document.body.innerHTML = "";
   useShortcutsDialog.setState({ open: false });
 });
@@ -50,6 +56,24 @@ describe("shortcuts", () => {
   it("labels pages for tooltips", () => {
     expect(shortcutLabel("overview")).toBe("⌘1");
     expect(shortcutLabel("assistant")).toBeNull();
+    expect(ariaKeys(["⌘", "R"])).toBe("Meta+R");
+    expect(actionText("Select or unselect for the Trash")).toBe("Select or unselect for the Trash");
+  });
+
+  it("uses Ctrl and PC key names on Windows", () => {
+    setOs("windows");
+    expect(shortcutFor(key("2", { metaKey: false, ctrlKey: true }))?.page).toBe("explorer");
+    expect(shortcutFor(key("r", { metaKey: false, ctrlKey: true }))?.command).toBe("scan");
+    // The Windows key is not the shortcut modifier.
+    expect(shortcutFor(key("2"))).toBeNull();
+    expect(shortcutFor(key("2", { ctrlKey: true }))).toBeNull();
+    expect(shortcutLabel("overview")).toBe("Ctrl+1");
+    expect(keysText(["⌘", "⌫"])).toBe("Ctrl+Backspace");
+    expect(keyLabel("⌘")).toBe("Ctrl");
+    expect(ariaKeys(["⌘", "R"])).toBe("Control+R");
+    expect(actionText("Select or unselect for the Trash")).toBe(
+      "Select or unselect for the Recycle Bin",
+    );
   });
 
   it("goes to pages and scans, but not while a window is open", () => {

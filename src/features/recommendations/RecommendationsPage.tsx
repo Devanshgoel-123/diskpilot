@@ -1,5 +1,5 @@
 import { ListChecks, ShieldCheck, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -15,9 +15,11 @@ import { useApp } from "@/lib/store";
 import { TIER_META, TIER_ORDER } from "@/lib/tiers";
 import type { MarkerKind, Tier } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { words } from "@/lib/platform";
 
 import { CleanupDialog } from "./CleanupDialog";
 import { RecommendationRow } from "./RecommendationRow";
+import { isSmallToolItem, SMALL_TOOL_ITEM_BYTES } from "./smallItems";
 
 type Filter = Tier | "all";
 
@@ -35,7 +37,14 @@ export function RecommendationsPage() {
     );
   const [filter, setFilter] = useState<Filter>("all");
   const [kind, setKind] = useState<MarkerKind | null>(null);
-  const kinds = useMemo(() => markerCounts(recommendations), [recommendations]);
+  // Items handed over from another page are always listed, however small.
+  const [handedOver] = useState(() => new Set(useApp.getState().preselect ?? []));
+  const visible = useMemo(
+    () => recommendations.filter((r) => !isSmallToolItem(r) || handedOver.has(r.id)),
+    [recommendations, handedOver],
+  );
+  const hiddenSmall = recommendations.length - visible.length;
+  const kinds = useMemo(() => markerCounts(visible), [visible]);
   // A kind that no longer has items (e.g. after a cleanup) stops filtering.
   const activeKind = kinds.some((k) => k.kind === kind) ? kind : null;
   const consumePreselect = useApp((s) => s.consumePreselect);
@@ -46,6 +55,23 @@ export function RecommendationsPage() {
   useEffect(() => {
     consumePreselect();
   }, [consumePreselect]);
+  // ...and the list opens on them, so nobody has to scroll to find what was
+  // just picked. Waits for the list if recommendations are still loading.
+  const listRef = useRef<HTMLDivElement>(null);
+  const reveal = useRef<Set<string> | null>(
+    useApp.getState().preselect?.length ? new Set(useApp.getState().preselect) : null,
+  );
+  useEffect(() => {
+    const ids = reveal.current;
+    if (!ids || !listRef.current) return;
+    const first = [...listRef.current.querySelectorAll<HTMLElement>("[data-rec-id]")].find((el) =>
+      ids.has(el.dataset.recId ?? ""),
+    );
+    if (!first) return;
+    reveal.current = null;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    first.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
+  }, [recommendations]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [dialog, setDialog] = useState<{ key: number; ids: string[] } | null>(null);
 
@@ -55,12 +81,12 @@ export function RecommendationsPage() {
       reviewFirst: [],
       keep: [],
     };
-    for (const r of recommendations) {
+    for (const r of visible) {
       if (activeKind && r.marker?.kind !== activeKind) continue;
       groups[r.tier].push(r);
     }
     return groups;
-  }, [recommendations, activeKind]);
+  }, [visible, activeKind]);
 
   // Drop selections that no longer exist (e.g. after a cleanup).
   const liveSelection = useMemo(() => {
@@ -68,7 +94,7 @@ export function RecommendationsPage() {
     return new Set([...selected].filter((id) => ids.has(id)));
   }, [selected, recommendations]);
   const selection = summarizeSelection(recommendations, liveSelection);
-  const max = Math.max(0, ...recommendations.map((r) => r.bytes));
+  const max = Math.max(0, ...visible.map((r) => r.bytes));
 
   // The last checkbox clicked. Shift-clicking another one applies its new state to every
   // actionable row in between, in the order the list is shown.
@@ -128,7 +154,7 @@ export function RecommendationsPage() {
         description="Explained suggestions. Nothing is removed until you review and confirm it."
         actions={<EmptyTrashButton />}
       />
-      <div className="relative min-h-0 flex-1 overflow-y-auto">
+      <div ref={listRef} className="relative min-h-0 flex-1 overflow-y-auto">
         <div className="page-content space-y-6 pb-24">
           <ResultsAge />
           <div
@@ -203,7 +229,8 @@ export function RecommendationsPage() {
           <div className="flex items-center justify-between gap-3">
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <ShieldCheck className="size-3.5 text-good" aria-hidden />
-              Trash first. Every path is re-checked by the safety layer before anything happens.
+              {words().trash} first. Every path is re-checked by the safety layer before anything
+              happens.
             </p>
             <div className="flex items-center gap-2">
               {filter !== "all" || activeKind ? (
@@ -221,7 +248,7 @@ export function RecommendationsPage() {
             </div>
           </div>
 
-          {recommendations.length === 0 ? (
+          {visible.length === 0 && hiddenSmall === 0 ? (
             <Panel>
               <EmptyState
                 icon={Sparkles}
@@ -291,6 +318,13 @@ export function RecommendationsPage() {
               ) : null,
             )
           )}
+          {hiddenSmall > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {formatCount(hiddenSmall)} small {hiddenSmall === 1 ? "leftover" : "leftovers"} under{" "}
+              {formatBytes(SMALL_TOOL_ITEM_BYTES)} {hiddenSmall === 1 ? "is" : "are"} not listed
+              here. Pick them in Developer Tools or AI Agents to review them.
+            </p>
+          ) : null}
         </div>
 
         {selection.count > 0 ? (

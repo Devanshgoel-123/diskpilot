@@ -2,7 +2,7 @@ import type { ActionStatus } from "@/lib/types";
 
 /** One cleanup action's totals, as stored on this Mac. */
 export interface CleanupActivity {
-  kind: "files" | "docker" | "trash";
+  kind: "files" | "docker" | "trash" | "wsl";
   finishedAtMs: number;
   status: ActionStatus;
   bytesFreed: number;

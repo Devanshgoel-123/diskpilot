@@ -525,7 +525,6 @@ fn stamp(meta: &std::fs::Metadata) -> (u64, Option<std::time::SystemTime>) {
 /// the keys. Returns how many keys were replaced.
 pub fn remove_from_file(home: &Path, path: &Path, now: i64) -> Result<u64, RemoveError> {
     use std::io::Write;
-    use std::os::unix::fs::PermissionsExt;
 
     if !is_transcript(home, path) {
         return Err(RemoveError::NotATranscript);
@@ -567,9 +566,7 @@ pub fn remove_from_file(home: &Path, path: &Path, now: i64) -> Result<u64, Remov
             out.write_all(&redacted)?;
         }
         let file = out.into_inner().map_err(|e| e.into_error())?;
-        file.set_permissions(std::fs::Permissions::from_mode(
-            before.permissions().mode() & 0o7777,
-        ))?;
+        crate::fsmode::set_file_mode(&file, crate::fsmode::mode(&before))?;
         file.sync_all()?;
         // An agent that appended meanwhile would lose those lines.
         if stamp(&path.metadata()?) != stamp(&before) {
@@ -643,7 +640,7 @@ mod tests {
     #[test]
     fn reports_files_with_counts_and_first_line() {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         let key = fake("hf_", "a1B2c3D4e5F6g7H8i9J0kLmNoPqRsTuVw");
         let log = home.join(".claude/projects/-Users-x-app/s1.jsonl");
         std::fs::create_dir_all(log.parent().unwrap()).unwrap();
@@ -686,6 +683,7 @@ mod tests {
             "{{\"t\":\"use {key} now\"}}\n{{\"t\":\"clean\"}}\n{{\"k\":\"{pem}\",\"n\":1}}\n"
         );
         let log = transcript(&home, &body);
+        #[cfg(unix)]
         std::fs::set_permissions(&log, std::os::unix::fs::PermissionsExt::from_mode(0o600))
             .unwrap();
 
@@ -698,8 +696,12 @@ mod tests {
         for l in after.lines() {
             serde_json::from_str::<serde_json::Value>(l).unwrap();
         }
-        let mode = std::os::unix::fs::PermissionsExt::mode(&log.metadata().unwrap().permissions());
-        assert_eq!(mode & 0o777, 0o600);
+        #[cfg(unix)]
+        {
+            let mode =
+                std::os::unix::fs::PermissionsExt::mode(&log.metadata().unwrap().permissions());
+            assert_eq!(mode & 0o777, 0o600);
+        }
         assert!(scan_file(&log, &AtomicBool::new(false)).is_empty());
     }
 
@@ -730,12 +732,15 @@ mod tests {
             remove_from_file(&home, &outside, LATER),
             Err(RemoveError::NotATranscript)
         ));
-        let link = home.join(".claude/projects/-Users-x-app/link.jsonl");
-        std::os::unix::fs::symlink(&outside, &link).unwrap();
-        assert!(matches!(
-            remove_from_file(&home, &link, LATER),
-            Err(RemoveError::NotATranscript)
-        ));
+        #[cfg(unix)]
+        {
+            let link = home.join(".claude/projects/-Users-x-app/link.jsonl");
+            std::os::unix::fs::symlink(&outside, &link).unwrap();
+            assert!(matches!(
+                remove_from_file(&home, &link, LATER),
+                Err(RemoveError::NotATranscript)
+            ));
+        }
         assert_eq!(
             std::fs::read_to_string(&outside).unwrap(),
             format!("{key}\n")

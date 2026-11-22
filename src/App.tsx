@@ -21,7 +21,7 @@ import { ShortcutsDialog } from "@/components/layout/ShortcutsDialog";
 import { WhatsNewAfterUpdate } from "@/components/layout/WhatsNewAfterUpdate";
 import { runShortcut, useShortcutsDialog } from "@/lib/shortcuts";
 import { startUpdateChecks } from "@/lib/updates";
-import { playScanDone, startScanSound, stopScanSound } from "@/lib/sounds";
+import { playScanDone } from "@/lib/sounds";
 
 // Pages most people open rarely load on first use, so the window starts with
 // less code to parse; they are fetched in the background once it has drawn.
@@ -80,20 +80,15 @@ function StatusBanner() {
   );
 }
 
-/** A quiet tone while a scan runs, and a soft chime when it completes. */
+/** A soft chime when a scan completes. */
 function ScanSounds() {
   const scanning = useApp((s) => s.scanning);
   const status = useApp((s) => s.lastStatus?.status);
   const was = useRef(false);
   useEffect(() => {
-    if (scanning && !was.current) startScanSound();
-    if (!scanning && was.current) {
-      stopScanSound();
-      if (status === "completed") playScanDone();
-    }
+    if (!scanning && was.current && status === "completed") playScanDone();
     was.current = scanning;
   }, [scanning, status]);
-  useEffect(() => () => stopScanSound(), []);
   return null;
 }
 
@@ -129,7 +124,7 @@ export function App() {
     if (inDesktopApp()) startUpdateChecks();
   }, []);
 
-  // Shortcuts from the menu bar item.
+  // Shortcuts from the menu bar (tray) item.
   useEffect(() => {
     if (!inDesktopApp()) return;
     const un = onTrayNavigate((target) => {

@@ -1,8 +1,19 @@
 //! Local-only: scans a root with read_dir+lstat and with getattrlistbulk and
 //! reports where the results differ.
+#[cfg(target_os = "macos")]
 use diskpilot_lib::scanner::{scan, ScanOptions, FORCE_PORTABLE};
+#[cfg(target_os = "macos")]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(target_os = "macos")]
 use std::time::Instant;
+
+/// getattrlistbulk exists on macOS only.
+#[cfg(not(target_os = "macos"))]
+fn main() {
+    eprintln!("This check compares macOS listing methods.");
+}
+
+#[cfg(target_os = "macos")]
 fn main() {
     let home = dirs::home_dir().unwrap();
     let root: std::path::PathBuf = std::env::args()

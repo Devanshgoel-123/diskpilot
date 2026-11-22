@@ -25,8 +25,17 @@ fn fixture() -> Fixture {
     // Not the system temp dir: on macOS it lives under /private/var/folders,
     // which the classifier (correctly) treats as system cache.
     let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
-    let home = dir.path().canonicalize().unwrap().join("home");
-    write(&home.join("Library/Caches/com.example/blob.bin"), 200_000);
+    let home = diskpilot_lib::platform::canonicalize(dir.path())
+        .unwrap()
+        .join("home");
+    // App caches: ~/Library/Caches on macOS, the profile's temporary
+    // folder on Windows.
+    let caches = if cfg!(windows) {
+        "AppData/Local/Temp"
+    } else {
+        "Library/Caches"
+    };
+    write(&home.join(caches).join("com.example/blob.bin"), 200_000);
     write(
         &home.join("Library/Developer/Xcode/DerivedData/App-x/Build/out.o"),
         300_000,
@@ -99,7 +108,13 @@ fn classifies_developer_artifacts() {
         .collect();
     assert!(rules.contains(&"node.node-modules"));
     assert!(rules.contains(&"node.next-build"));
-    assert!(rules.contains(&"xcode.derived-data"));
+    // Windows has no Xcode folders; the DerivedData folder is still
+    // recognized by name.
+    assert!(rules.contains(&if cfg!(windows) {
+        "xcode.local-derived-data"
+    } else {
+        "xcode.derived-data"
+    }));
     // The dist/ inside node_modules is part of node_modules, not separate.
     assert!(!rules.contains(&"node.dist"));
 }
@@ -115,6 +130,7 @@ fn largest_files_are_sorted_and_not_assumed_disposable() {
     assert_eq!(mystery.classification.category, Category::Unknown);
 }
 
+#[cfg(unix)]
 #[test]
 fn symlinks_are_not_followed() {
     let f = fixture();
@@ -127,6 +143,7 @@ fn symlinks_are_not_followed() {
     assert!(!o.summary.largest_files.iter().any(|f| f.name == "huge.bin"));
 }
 
+#[cfg(unix)]
 #[test]
 fn hard_links_are_counted_once() {
     let f = fixture();
@@ -139,6 +156,28 @@ fn hard_links_are_counted_once() {
     assert!(with_link < baseline + 100_000, "{baseline} -> {with_link}");
 }
 
+/// Windows listings do not report link counts; files in pnpm's
+/// `node_modules/.pnpm` (and the Windows folder) are checked by file id.
+#[cfg(windows)]
+#[test]
+fn hard_links_are_counted_once() {
+    let f = fixture();
+    let pnpm = f.home.join("code/web/node_modules/.pnpm");
+    let a = pnpm.join("lodash@4.17.21/node_modules/lodash/lodash.js");
+    write(&a, 500_000);
+    let b = pnpm.join("lodash-es@4.17.21/node_modules/lodash-es/lodash.js");
+    fs::create_dir_all(b.parent().unwrap()).unwrap();
+    let before = run(&f).summary;
+    let baseline = before.total_bytes;
+    fs::hard_link(&a, &b).unwrap();
+    let after = run(&f).summary;
+    let with_link = after.total_bytes;
+    assert!(with_link < baseline + 100_000, "{baseline} -> {with_link}");
+    // Both names are still counted as files.
+    assert_eq!(after.file_count, before.file_count + 1);
+}
+
+#[cfg(unix)]
 #[test]
 fn unreadable_folders_are_reported_not_fatal() {
     use std::os::unix::fs::PermissionsExt;
@@ -242,6 +281,7 @@ fn heavy_directories_are_where_files_live() {
     assert!(!heavy.contains(&f.home.to_str().unwrap()));
 }
 
+#[cfg(unix)]
 #[test]
 fn measure_matches_the_scanner_and_ignores_symlinks() {
     let f = fixture();
@@ -285,6 +325,8 @@ fn with_app_containers(f: &Fixture) {
     fs::create_dir_all(f.home.join("Library/Containers/com.example.empty/Data/a/b")).unwrap();
 }
 
+// Measuring other apps' containers last is a macOS-only step.
+#[cfg(target_os = "macos")]
 #[test]
 fn app_containers_measured_last_give_identical_final_results() {
     let f = fixture();
@@ -336,6 +378,8 @@ fn app_containers_measured_last_give_identical_final_results() {
     assert_eq!(progress.containers_done, 3);
 }
 
+// Partial results come from deferring macOS app containers.
+#[cfg(target_os = "macos")]
 #[test]
 fn key_files_are_in_both_partial_and_final_results() {
     let f = fixture();
@@ -411,7 +455,12 @@ fn personal_files_are_grouped_by_type() {
     write(&f.home.join("Movies/tiny.mp4"), 1_000);
     // Files that belong to an app or a tool are not listed.
     write(&f.home.join("Movies/Edit.fcpbundle/Media/a.mp4"), 5 * mb);
-    write(&f.home.join("Library/Caches/app/v.mp4"), 5 * mb);
+    let app_cache = if cfg!(windows) {
+        "AppData/Local/app/v.mp4"
+    } else {
+        "Library/Caches/app/v.mp4"
+    };
+    write(&f.home.join(app_cache), 5 * mb);
     write(&f.home.join(".hidden/v.mp4"), 5 * mb);
     write(&f.home.join("code/web/node_modules/x/v.mp4"), 5 * mb);
     write(&f.home.join("code/web/.next/static/v.mp4"), 5 * mb);

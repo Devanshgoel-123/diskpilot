@@ -81,10 +81,13 @@ pub fn build_plan(
     }
 
     match method {
-        CleanupMethod::Trash => warnings.push(
+        CleanupMethod::Trash => warnings.push(if cfg!(windows) {
+            "Items go to the Recycle Bin. Their space is freed only when you empty the Recycle Bin; until then you can restore them."
+                .into()
+        } else {
             "Items go to the Trash. Their space is freed only when you empty the Trash; until then you can put them back."
-                .into(),
-        ),
+                .into()
+        }),
         CleanupMethod::Delete => warnings.push(
             "Permanently deleted items cannot be restored by DiskPilot.".into(),
         ),
@@ -99,6 +102,23 @@ pub fn build_plan(
         rejected,
         warnings,
     }
+}
+
+/// Move items a running program is using (a project's dev server, say) to
+/// `rejected`, with what to stop. `blocker` says why an item is in use.
+pub fn exclude_in_use(plan: &mut CleanupPlan, blocker: impl Fn(&Path) -> Option<String>) {
+    let items = std::mem::take(&mut plan.items);
+    for item in items {
+        match blocker(Path::new(&item.path)) {
+            None => plan.items.push(item),
+            Some(reason) => plan.rejected.push(PlanRejection {
+                recommendation_id: item.recommendation_id,
+                path: item.path,
+                reason,
+            }),
+        }
+    }
+    plan.total_bytes = plan.items.iter().map(|i| i.bytes).sum();
 }
 
 /// Results older than this are re-measured when a preview is built.
@@ -165,7 +185,7 @@ mod tests {
 
     fn fixture() -> (tempfile::TempDir, std::path::PathBuf) {
         let dir = crate::test_support::sandbox();
-        let home = dir.path().canonicalize().unwrap();
+        let home = crate::platform::canonicalize(dir.path()).unwrap();
         std::fs::create_dir_all(home.join("proj/node_modules")).unwrap();
         std::fs::create_dir_all(home.join("Library/Caches/com.x")).unwrap();
         (dir, home)
@@ -212,7 +232,11 @@ mod tests {
         assert_eq!(planned, vec![nm.as_str(), cache.as_str()]);
         assert_eq!(plan.rejected.len(), 3);
         assert_eq!(plan.total_bytes, 200);
-        assert!(plan.warnings.iter().any(|w| w.contains("Trash")));
+        assert!(plan.warnings.iter().any(|w| w.contains(if cfg!(windows) {
+            "Recycle Bin"
+        } else {
+            "Trash"
+        })));
         assert!(plan.warnings.iter().any(|w| w.contains("Quit")));
     }
 
@@ -234,6 +258,7 @@ mod tests {
         assert_eq!(plan.rejected.len(), 1);
     }
 
+    #[cfg(unix)]
     #[test]
     fn rejects_protected_and_symlinked_targets() {
         let (_d, home) = fixture();
@@ -256,6 +281,36 @@ mod tests {
         );
         assert!(plan.items.is_empty(), "{:?}", plan.items);
         assert_eq!(plan.rejected.len(), 2);
+    }
+
+    #[test]
+    fn items_in_use_are_refused_with_what_to_stop() {
+        let (_d, home) = fixture();
+        let nm = home.join("proj/node_modules").display().to_string();
+        let cache = home.join("Library/Caches/com.x").display().to_string();
+        let recs = vec![
+            rec(&nm, "node.node-modules", vec![CleanupMethod::Trash]),
+            rec(&cache, "library.caches", vec![CleanupMethod::Trash]),
+        ];
+        let ids = vec![nm.clone(), cache.clone()];
+        let mut plan = build_plan(
+            "p".into(),
+            &recs,
+            &ids,
+            CleanupMethod::Trash,
+            &home,
+            &home,
+            0,
+        );
+        exclude_in_use(&mut plan, |p| {
+            (p == Path::new(&nm)).then(|| "node.exe (process 7) is running".to_string())
+        });
+        assert_eq!(plan.items.len(), 1);
+        assert_eq!(plan.items[0].path, cache);
+        assert_eq!(plan.total_bytes, 100);
+        assert_eq!(plan.rejected.len(), 1);
+        assert_eq!(plan.rejected[0].path, nm);
+        assert!(plan.rejected[0].reason.contains("node.exe"));
     }
 
     #[test]

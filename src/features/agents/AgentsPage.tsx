@@ -27,6 +27,7 @@ import { Panel } from "@/components/ui/panel";
 import { formatBytes, formatCount, formatRelative } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { AgentReport } from "@/lib/types";
+import { isWindows, words } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
 import {
@@ -41,7 +42,7 @@ import { BrandMark } from "./logos";
 import { type Confirmation } from "./shared";
 import { TranscriptSecrets } from "@/features/developer/TranscriptSecrets";
 
-/** The app bundle, when the agent has one; its own icon is the best logo. */
+/** The app bundle on macOS, when the agent has one; its own icon is the best logo. */
 const AGENT_APP: Record<string, string> = {
   codex: "/Applications/Codex.app",
   cursor: "/Applications/Cursor.app",
@@ -73,7 +74,7 @@ export function AgentLogo({ id, size = "md" }: { id: string; size?: "sm" | "md" 
         )}
     </span>
   );
-  const app = AGENT_APP[id];
+  const app = isWindows() ? undefined : AGENT_APP[id];
   if (!app) return fallback;
   return <AppIcon path={app} className={cn("shrink-0", box)} fallback={fallback} />;
 }
@@ -314,7 +315,7 @@ function RailItem({
 }
 
 /**
- * Every agent on this Mac, with how many of its settings need a look. Stays
+ * Every agent on this computer, with how many of its settings need a look. Stays
  * in view while the selected one scrolls.
  */
 function AgentRail({
@@ -512,7 +513,7 @@ export function AgentsPage() {
               <EmptyState
                 icon={loading ? Loader2 : Blocks}
                 title={loading ? "Reading agent settings…" : "Not checked yet"}
-                description="Reads the settings of the coding agents on this Mac. Nothing is changed."
+                description={`Reads the settings of the coding agents on this ${words().computer}. Nothing is changed.`}
               />
             </Panel>
           ) : (

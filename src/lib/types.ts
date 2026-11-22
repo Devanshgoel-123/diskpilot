@@ -35,6 +35,19 @@ export interface DiskInfo {
   usedBytes: number;
 }
 
+/** A drive the user can scan (`list_drives`). macOS lists only the home volume. */
+export interface DriveInfo {
+  /** Where it is mounted, such as `C:\` or `/`. */
+  root: string;
+  /** Volume label, such as "Data"; empty when it has none. */
+  label: string;
+  fileSystem: string;
+  totalBytes: number;
+  availableBytes: number;
+  usedBytes: number;
+  kind: "fixed" | "removable";
+}
+
 export interface AppEnvironment {
   homeDir: string;
   os: string;
@@ -279,7 +292,7 @@ export interface CleanupItemResult {
 
 export interface CleanupRecord {
   id: string;
-  kind: "files" | "docker" | "trash";
+  kind: "files" | "docker" | "trash" | "wsl";
   title: string;
   startedAtMs: number;
   finishedAtMs: number;
@@ -505,6 +518,85 @@ export interface DiagnosticFinding {
   bytes: number | null;
 }
 
+// ---- WSL and Docker virtual disks (src-tauri/src/wsl) ----------------------
+
+export type VirtualDiskKind = "distro" | "dockerData" | "dockerSystem";
+
+export interface VirtualDisk {
+  /** Stable id: `distro:{GUID}` or `docker:{file}`. */
+  id: string;
+  kind: VirtualDiskKind;
+  /** The distribution's name, or "Docker Desktop data". */
+  name: string;
+  /** The registered WSL distribution, when there is one. */
+  distro: string | null;
+  /** The .vhdx file. */
+  path: string;
+  fileBytes: number;
+  /** Space on the drive (less than fileBytes when sparse). */
+  allocatedBytes: number;
+  sparse: boolean;
+  /** null when not known (Docker disks, or WSL did not answer). */
+  running: boolean | null;
+  isDefault: boolean;
+  /** Space Linux uses inside, when it could be measured. */
+  usedBytes: number | null;
+  /** allocatedBytes minus usedBytes, when usedBytes is known. */
+  reclaimableBytes: number | null;
+  /** How usedBytes was found, or why it is unknown. */
+  usageNote: string;
+}
+
+export interface WslOverview {
+  /** false on macOS. */
+  supported: boolean;
+  disks: VirtualDisk[];
+  totalBytes: number;
+  reclaimableBytes: number;
+  message: string | null;
+}
+
+export type CompactMethod = "compact" | "sparse";
+export type CompactTool = "optimizeVhd" | "diskpart" | "wslManage";
+
+export interface CompactStep {
+  label: string;
+  /** Program and arguments exactly as run; `<script>` stands for the script file. */
+  command: string[];
+  /** Runs as administrator after a UAC prompt. */
+  elevated: boolean;
+  /** The script's full text, for an administrator step. */
+  script: string | null;
+}
+
+export interface CompactPreview {
+  id: string;
+  disk: VirtualDisk;
+  method: CompactMethod;
+  tool: CompactTool | null;
+  title: string;
+  steps: CompactStep[];
+  effects: string[];
+  warnings: string[];
+  /** Set when this cannot run; show the reason instead of a confirm button. */
+  blocked: string | null;
+  /** The name to type to confirm. */
+  confirmName: string;
+  beforeBytes: number;
+  estimatedReclaimBytes: number | null;
+}
+
+export interface CompactResult {
+  preview: CompactPreview;
+  succeeded: boolean;
+  beforeBytes: number;
+  afterBytes: number;
+  freedBytes: number;
+  output: string;
+  error: string | null;
+  record: CleanupRecord;
+}
+
 // ---- Developer tools analysis (src-tauri/src/devtools) ---------------------
 
 export type ItemState = "current" | "stale" | "orphaned" | "superseded" | "info";
@@ -608,7 +700,25 @@ export interface AppFootprint {
   dataBytes: number;
   dataModifiedMs: number | null;
   locations: AppDataLocation[];
+  /** Windows: the publisher from the uninstall entry; null on macOS. */
+  publisher: string | null;
+  /** Windows: the installed version; null on macOS. */
+  version: string | null;
+  /**
+   * Windows: the exact command Uninstall starts (the program's own
+   * uninstaller). Null when Uninstall opens Settings > Apps instead, and on macOS.
+   */
+  uninstallCommand: string | null;
+  /** Windows: a Microsoft Store app, which Windows removes when asked. */
+  storeApp: boolean;
 }
+
+/**
+ * What Uninstall did on Windows: started the program's uninstaller, removed
+ * the Store app, opened Settings at the Store app's own page (Windows would
+ * not remove it here), or opened Settings > Installed apps.
+ */
+export type UninstallOutcome = "uninstaller" | "removed" | "settingsApp" | "settings";
 
 /** Sandbox data named for an app that is no longer installed. */
 export interface Leftover {
@@ -701,6 +811,30 @@ export interface Schedule {
   rescan: "off" | "daily" | "weekly";
   reminder: boolean;
   lastReminderMs: number | null;
+}
+
+/** How completely a Windows system area could be measured without administrator rights. */
+export type Measured = "complete" | "partial" | "unavailable";
+
+/**
+ * A Windows system area DiskPilot reports but never removes (the hibernation
+ * file, Windows.old, the update cache, WinSxS…), with the Windows tool or
+ * command that reclaims it. From `get_system_extras`; empty on macOS.
+ */
+export interface SystemExtra {
+  id: string;
+  label: string;
+  paths: string[];
+  /** A lower bound when `measured` is "partial"; 0 when "unavailable". */
+  bytes: number;
+  measured: Measured;
+  explanation: string;
+  sizeNote: string | null;
+  howToReclaim: string;
+  command: string | null;
+  checkCommand: string | null;
+  settingsUri: string | null;
+  needsAdmin: boolean;
 }
 
 /** The email this Mac signed up with on first launch. */

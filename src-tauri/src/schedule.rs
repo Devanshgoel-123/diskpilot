@@ -64,23 +64,13 @@ pub struct Local {
     pub hour: u32,
 }
 
-/// `ms` in this Mac's time zone.
+/// `ms` in this computer's time zone.
 pub fn local(ms: i64) -> Local {
-    let secs = ms.div_euclid(1000) as libc::time_t;
-    // SAFETY: `tm` is plain data written by localtime_r; both pointers are
-    // valid for the call.
-    let tm = unsafe {
-        let mut tm: libc::tm = std::mem::zeroed();
-        libc::localtime_r(&secs, &mut tm);
-        tm
-    };
-    // `c_long` is 32 bits on some targets.
-    #[allow(clippy::useless_conversion)]
-    let offset_ms = i64::from(tm.tm_gmtoff) * 1000;
+    let (offset_secs, weekday, hour) = crate::platform::local_time(ms.div_euclid(1000));
     Local {
-        day: (ms + offset_ms).div_euclid(DAY_MS),
-        weekday: u32::try_from(tm.tm_wday).unwrap_or(0),
-        hour: u32::try_from(tm.tm_hour).unwrap_or(0),
+        day: (ms + offset_secs * 1000).div_euclid(DAY_MS),
+        weekday,
+        hour,
     }
 }
 
@@ -204,16 +194,17 @@ fn weeks(n: u32) -> &'static str {
     }
 }
 
-/// Decimal units, like Finder and the app's own formatBytes.
+/// The same units as the app: 1000 on macOS, 1024 on Windows.
 fn format_bytes(b: u64) -> String {
+    let base = crate::tray::BYTES_PER_UNIT as f64;
     const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
     let mut v = b as f64;
     let mut unit = "B";
     for u in UNITS {
-        if v < 1000.0 {
+        if v < base {
             break;
         }
-        v /= 1000.0;
+        v /= base;
         unit = u;
     }
     if unit == "B" {
@@ -266,7 +257,7 @@ fn tick(app: &tauri::AppHandle) {
     };
     if rescan_due(&s, last_finished, scanning, now_ms) {
         // The same read-only scan as the Rescan button, of the same folder.
-        if let Err(e) = crate::commands::start_scan(app.clone(), state.clone(), root) {
+        if let Err(e) = crate::commands::start_scan(app.clone(), state.clone(), root, None) {
             eprintln!("diskpilot: scheduled rescan did not start: {e}");
         }
     }
@@ -453,18 +444,21 @@ mod tests {
             weeks,
             cleared_this_week: cleared,
         };
+        // Sizes in the platform's own units (1000 on macOS, 1024 on Windows).
+        let unit = crate::tray::BYTES_PER_UNIT as f64;
+        let gb = |x: f64| (x * unit * unit * unit) as u64;
         assert_eq!(reminder_text(100_000_000, s(3, false)), None);
-        let (_, body) = reminder_text(23_200_000_000, s(6, false)).unwrap();
+        let (_, body) = reminder_text(gb(23.2), s(6, false)).unwrap();
         assert_eq!(
             body,
             "23.2 GB is likely safe to clear. Clean up this week to keep your 6-week streak."
         );
-        let (_, body) = reminder_text(1_500_000_000, s(1, true)).unwrap();
+        let (_, body) = reminder_text(gb(1.5), s(1, true)).unwrap();
         assert_eq!(
             body,
             "1.5 GB is likely safe to clear. You already cleaned up this week: 1 week in a row."
         );
-        let (_, body) = reminder_text(800_000_000, s(0, false)).unwrap();
+        let (_, body) = reminder_text((800.0 * unit * unit) as u64, s(0, false)).unwrap();
         assert_eq!(
             body,
             "800.0 MB is likely safe to clear. Review it in DiskPilot."

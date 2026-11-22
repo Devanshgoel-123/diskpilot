@@ -855,15 +855,27 @@ pub fn diagnostics(o: &DockerOverview, vm_disk: Option<(u64, u64)>) -> Vec<Diagn
     ));
 
     if let Some((allocated, logical)) = vm_disk {
-        f.push(finding(
-            Info,
-            format!("VM disk image uses {} on your Mac", human(allocated)),
-            &format!(
-                "Docker Desktop stores everything in one sparse disk image with a {} limit. Space freed inside Docker returns to macOS as the image is trimmed, which can take a few minutes.",
-                human(logical)
-            ),
-            Some(allocated),
-        ));
+        if cfg!(windows) {
+            f.push(finding(
+                Info,
+                format!("Docker's virtual disk uses {} on this PC", human(allocated)),
+                &format!(
+                    "Docker Desktop keeps everything in one WSL virtual disk ({} long). Space freed inside Docker stays in that file until the disk is compacted, which DiskPilot can do under WSL and Docker disks.",
+                    human(logical)
+                ),
+                Some(allocated),
+            ));
+        } else {
+            f.push(finding(
+                Info,
+                format!("VM disk image uses {} on your Mac", human(allocated)),
+                &format!(
+                    "Docker Desktop stores everything in one sparse disk image with a {} limit. Space freed inside Docker returns to macOS as the image is trimmed, which can take a few minutes.",
+                    human(logical)
+                ),
+                Some(allocated),
+            ));
+        }
     }
 
     let dangling: Vec<_> = o

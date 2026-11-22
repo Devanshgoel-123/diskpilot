@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Section } from "@/components/ui/section";
 import { formatCount, formatDate, formatDuration, formatRelative, tildify } from "@/lib/format";
 import type { ScanSummary } from "@/lib/types";
+import { isWindows } from "@/lib/platform";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -28,9 +29,17 @@ export function ScanDetails({ summary, home }: { summary: ScanSummary; home: str
         <Row label="Duration" value={formatDuration(summary.durationMs)} />
         <Row label="Files" value={formatCount(summary.fileCount)} />
         <Row label="Folders" value={formatCount(summary.dirCount)} />
-        <Row label="Symbolic links (not followed)" value={formatCount(summary.symlinkCount)} />
+        <Row
+          label={
+            isWindows() ? "Links and junctions (not followed)" : "Symbolic links (not followed)"
+          }
+          value={formatCount(summary.symlinkCount)}
+        />
         {summary.skippedVolumes > 0 ? (
-          <Row label="Other volumes skipped" value={formatCount(summary.skippedVolumes)} />
+          <Row
+            label={isWindows() ? "Other drives skipped" : "Other volumes skipped"}
+            value={formatCount(summary.skippedVolumes)}
+          />
         ) : null}
         <Row
           label="Unreadable items"
@@ -49,7 +58,9 @@ export function ScanDetails({ summary, home }: { summary: ScanSummary; home: str
       {summary.errorCount > 0 ? (
         <div className="border-t border-border py-2.5">
           <p className="text-2xs leading-snug text-subtle-foreground">
-            Usually folders protected by macOS privacy settings. Their sizes are not included.
+            {isWindows()
+              ? "Usually folders only administrators or the system can read. Their sizes are not included."
+              : "Usually folders protected by macOS privacy settings. Their sizes are not included."}
           </p>
           <Button
             variant="ghost"

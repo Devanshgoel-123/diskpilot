@@ -21,17 +21,14 @@ import type {
   DuplicateReport,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { basename, parentOf, separatorOf } from "@/lib/paths";
+import { isWindows, words } from "@/lib/platform";
 
 const MIN_SIZES = [
   { bytes: 1024 * 1024, label: "1 MB" },
   { bytes: 10 * 1024 * 1024, label: "10 MB" },
   { bytes: 100 * 1024 * 1024, label: "100 MB" },
 ];
-
-function parentOf(path: string): string {
-  const i = path.lastIndexOf("/");
-  return i > 0 ? path.slice(0, i) : "/";
-}
 
 /** The copy the user keeps in each group: their choice, else the suggestion. */
 function keptPath(group: DuplicateGroup, keep: Record<string, string>): string {
@@ -153,7 +150,11 @@ function GroupRow({
             <span className="block truncate text-[13px]">{group.name}</span>
             <span className="block truncate text-2xs text-subtle-foreground">
               {group.files.length} copies of {formatBytes(group.bytes)}
-              {group.sharesStorage ? " · some share storage (APFS clones)" : ""}
+              {group.sharesStorage
+                ? isWindows()
+                  ? " · some share storage"
+                  : " · some share storage (APFS clones)"
+                : ""}
             </span>
           </span>
         </button>
@@ -191,7 +192,7 @@ function GroupRow({
                   checked={selected.has(f.path)}
                   disabled={isKept}
                   onChange={(e) => onToggle(f.path, (e.nativeEvent as MouseEvent).shiftKey)}
-                  aria-label={`Move ${tildify(f.path, home)} to Trash`}
+                  aria-label={`Move ${tildify(f.path, home)} to ${words().trash}`}
                   className="size-3.5 shrink-0 accent-[var(--accent)] disabled:opacity-30"
                 />
                 <button
@@ -204,10 +205,9 @@ function GroupRow({
                   <FileThumbnail path={f.path} size={24} />
                 </button>
                 <span className="selectable min-w-0 flex-1 truncate font-mono text-2xs text-muted-foreground">
-                  {tildify(parentOf(f.path), home)}/
-                  <span className="text-foreground">
-                    {f.path.slice(parentOf(f.path).length + 1)}
-                  </span>
+                  {tildify(parentOf(f.path), home)}
+                  {separatorOf(f.path)}
+                  <span className="text-foreground">{basename(f.path)}</span>
                 </span>
                 <span className="w-24 shrink-0 text-2xs text-subtle-foreground">
                   {formatRelative(f.modifiedMs)}
@@ -237,8 +237,8 @@ function GroupRow({
                 <button
                   type="button"
                   onClick={() => void api.revealInFinder(f.path)}
-                  aria-label="Show in Finder"
-                  title="Show in Finder"
+                  aria-label={words().showInFileManager}
+                  title={words().showInFileManager}
                   className="shrink-0 text-subtle-foreground hover:text-foreground"
                 >
                   <FolderOpen className="size-3.5" aria-hidden />
@@ -270,24 +270,56 @@ export function DuplicatesPage() {
   /** The copy checkbox clicked last: where a Shift-click range starts. */
   const anchor = useRef<string | null>(null);
 
+  // A search started on an earlier visit to this page that is still going.
+  const [resumed, setResumed] = useState(false);
+
+  const showReport = (r: DuplicateReport) => {
+    clearThumbnails();
+    setReport(r);
+    setKeep({});
+    setSelected(new Set());
+    anchor.current = null;
+    setOpen(new Set(r.groups.slice(0, 3).map((g) => g.id)));
+  };
+
   useEffect(() => {
-    void api.getDuplicates().then((r) => r && setReport(r));
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const un = onDuplicatesProgress(setProgress);
-    return () => void un.then((f) => f());
+    void api.getDuplicates().then((r) => alive && r && setReport(r));
+    // Leaving the page does not stop a search, so pick it back up: show its
+    // progress and say so up front, rather than offering a button that fails.
+    let waiting = false;
+    const waitForSearch = async () => {
+      const busy = await api.duplicatesRunning().catch(() => false);
+      if (!alive) return;
+      if (busy) {
+        waiting = true;
+        setRunning(true);
+        setResumed(true);
+        timer = setTimeout(() => void waitForSearch(), 1000);
+      } else if (waiting) {
+        setRunning(false);
+        setResumed(false);
+        const r = await api.getDuplicates();
+        if (alive && r) showReport(r);
+      }
+    };
+    void waitForSearch();
+    return () => {
+      alive = false;
+      if (timer) clearTimeout(timer);
+      void un.then((f) => f());
+    };
   }, []);
 
   const search = async () => {
+    if (running) return;
     setRunning(true);
     setError(null);
     setProgress(null);
     try {
-      const r = await api.findDuplicates(minBytes);
-      clearThumbnails();
-      setReport(r);
-      setKeep({});
-      setSelected(new Set());
-      anchor.current = null;
-      setOpen(new Set(r.groups.slice(0, 3).map((g) => g.id)));
+      showReport(await api.findDuplicates(minBytes));
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -430,6 +462,10 @@ export function DuplicatesPage() {
         <p role="alert" className="border-b border-border px-6 py-2 text-xs text-critical">
           {error}
         </p>
+      ) : resumed ? (
+        <p role="status" className="border-b border-border px-6 py-2 text-xs text-muted-foreground">
+          A duplicate search is already running. Its results will show here when it finishes.
+        </p>
       ) : null}
       {running ? (
         <Progress progress={progress} />
@@ -438,7 +474,11 @@ export function DuplicatesPage() {
           className="flex-1 justify-center"
           icon={Copy}
           title="Find files you have more than once"
-          description="DiskPilot compares contents, not names: files match only when every byte is the same. Hidden folders, ~/Library, app bundles, dependency folders and package caches are skipped."
+          description={
+            isWindows()
+              ? "DiskPilot compares contents, not names: files match only when every byte is the same. Hidden folders, dependency folders and package caches are skipped, and files kept online only by OneDrive are never downloaded."
+              : "DiskPilot compares contents, not names: files match only when every byte is the same. Hidden folders, ~/Library, app bundles, dependency folders and package caches are skipped."
+          }
           action={
             <Button onClick={() => void search()}>
               <Layers aria-hidden /> Find duplicates
@@ -508,7 +548,7 @@ export function DuplicatesPage() {
           <div className="flex shrink-0 items-center gap-3 border-t border-border bg-panel px-4 py-2.5">
             <p className="text-xs text-muted-foreground">
               {chosen.length
-                ? `${formatCount(chosen.length)} ${chosen.length === 1 ? "copy" : "copies"} selected · about ${formatBytes(chosenBytes)} freed once the Trash is emptied`
+                ? `${formatCount(chosen.length)} ${chosen.length === 1 ? "copy" : "copies"} selected · about ${formatBytes(chosenBytes)} freed once the ${words().trash} is emptied`
                 : "Select the copies you no longer need. One copy in every set always stays."}
             </p>
             <Button

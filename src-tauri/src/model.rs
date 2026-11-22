@@ -81,6 +81,29 @@ pub struct DiskInfo {
     pub used_bytes: u64,
 }
 
+/// A drive the user can scan. On Windows: each fixed or removable drive with
+/// a file system. On macOS: the home folder's volume only.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DriveInfo {
+    /// Where the drive is mounted, such as `C:\` or `/`.
+    pub root: String,
+    /// The volume label, such as "Data"; empty when it has none.
+    pub label: String,
+    pub file_system: String,
+    pub total_bytes: u64,
+    pub available_bytes: u64,
+    pub used_bytes: u64,
+    pub kind: DriveKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DriveKind {
+    Fixed,
+    Removable,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppEnvironment {

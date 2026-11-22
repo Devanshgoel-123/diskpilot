@@ -61,7 +61,11 @@ impl From<rusqlite::Error> for AppError {
 pub fn describe_io_error(err: &std::io::Error) -> String {
     match err.kind() {
         std::io::ErrorKind::PermissionDenied => {
-            "Permission denied (macOS privacy protection or file permissions)".to_string()
+            if cfg!(windows) {
+                "Permission denied (file permissions, or a file is in use)".to_string()
+            } else {
+                "Permission denied (macOS privacy protection or file permissions)".to_string()
+            }
         }
         std::io::ErrorKind::NotFound => "No longer exists".to_string(),
         _ => err.to_string(),

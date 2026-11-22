@@ -615,8 +615,9 @@ mod tests {
         write(
             &home.join(".claude/plugins/installed_plugins.json"),
             &format!(
-                r#"{{"version":2,"plugins":{{"tools@mk":[{{"installPath":"{}","version":"1.2.0"}}]}}}}"#,
-                plugin_dir.display()
+                r#"{{"version":2,"plugins":{{"tools@mk":[{{"installPath":{},"version":"1.2.0"}}]}}}}"#,
+                // Escaped, so a Windows path's backslashes stay valid JSON.
+                Value::from(plugin_dir.display().to_string())
             ),
         );
         write(
@@ -714,14 +715,18 @@ mod tests {
         let lint = report.skills.iter().find(|s| s.name == "lint").unwrap();
         assert_eq!(lint.origin, SkillOrigin::Plugin);
 
-        assert!(recs.iter().any(|r| r.path.ends_with("skills/old-skill")));
-        assert!(recs.iter().any(|r| r.path.ends_with("tools/1.1.0")));
+        // Paths use backslashes on Windows.
+        let slash = |p: &str| p.replace('\\', "/");
+        assert!(recs
+            .iter()
+            .any(|r| slash(&r.path).ends_with("skills/old-skill")));
+        assert!(recs.iter().any(|r| slash(&r.path).ends_with("tools/1.1.0")));
         assert!(
-            !recs.iter().any(|r| r.path.ends_with("tools/1.2.0")),
+            !recs.iter().any(|r| slash(&r.path).ends_with("tools/1.2.0")),
             "the installed version is kept"
         );
         assert!(
-            !recs.iter().any(|r| r.path.contains("lint")),
+            !recs.iter().any(|r| slash(&r.path).contains("lint")),
             "plugin skills go with the plugin"
         );
     }

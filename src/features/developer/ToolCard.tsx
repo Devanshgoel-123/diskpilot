@@ -23,6 +23,8 @@ import { Panel } from "@/components/ui/panel";
 import { formatBytes, formatCount, formatRelative, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { ItemState, ToolReport } from "@/lib/types";
+import { joinPath } from "@/lib/paths";
+import { isWindows } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
 import { TOOL_MARKS } from "./toolMarks";
@@ -75,6 +77,16 @@ const TOOL_APP_PATH: Record<string, string> = {
   xcode: "Library/Developer/Xcode",
 };
 
+/** The same on Windows, relative to the user folder. */
+const TOOL_APP_PATH_WINDOWS: Record<string, string> = {
+  cursor: ".cursor",
+  vscode: ".vscode",
+  windsurf: ".windsurf",
+  "claude-code": ".claude",
+  "claude-desktop": "AppData\\Roaming\\Claude",
+  codex: ".codex",
+};
+
 const STATE_META: Record<ItemState, { label: string; color: string }> = {
   current: { label: "In use", color: "var(--tier-safe)" },
   stale: { label: "Inactive", color: "var(--tier-review)" },
@@ -96,23 +108,55 @@ function StatePill({ state }: { state: ItemState }) {
   );
 }
 
+/** A checkbox that shows a partial selection as a dash. */
+function Check({
+  checked,
+  partial = false,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  partial?: boolean;
+  onChange: () => void;
+  label: string;
+}) {
+  return (
+    <input
+      type="checkbox"
+      checked={checked}
+      ref={(el) => {
+        if (el) el.indeterminate = partial;
+      }}
+      onChange={onChange}
+      aria-label={label}
+      className="size-3.5 shrink-0 accent-[var(--accent)]"
+    />
+  );
+}
+
 export function ToolCard({
   tool,
   reviewable,
   onReview,
   defaultOpen = false,
+  selected,
+  onSelect,
 }: {
   tool: ToolReport;
   reviewable: Set<string>;
   onReview: (ids: string[]) => void;
   /** Start with the details shown, for a card that is the page's only content. */
   defaultOpen?: boolean;
+  /** Items picked for a combined review; with `onSelect`, rows get checkboxes. */
+  selected?: Set<string>;
+  /** Select (`on`) or clear these recommendation ids. */
+  onSelect?: (ids: string[], on: boolean) => void;
 }) {
   const home = useApp((s) => s.env?.homeDir);
   const [open, setOpen] = useState(defaultOpen);
   const Icon = TOOL_ICON[tool.id] ?? Wrench;
-  const rel = TOOL_APP_PATH[tool.id];
-  const appPath = !rel ? null : rel.startsWith("/") ? rel : home ? `${home}/${rel}` : null;
+  const rel = (isWindows() ? TOOL_APP_PATH_WINDOWS : TOOL_APP_PATH)[tool.id];
+  const appPath = !rel ? null : rel.startsWith("/") ? rel : home ? joinPath(home, rel) : null;
   const mark = TOOL_MARKS[tool.id];
   const color = TOOL_COLOR[tool.id] ?? "var(--accent)";
   const items = tool.sections.flatMap((s) => s.items);
@@ -203,62 +247,95 @@ export function ToolCard({
 
       {open ? (
         <div className="space-y-4 border-t border-border px-4 py-3">
-          {tool.sections.map((section) => (
-            <div key={section.title}>
-              <p className="text-xs font-medium">{section.title}</p>
-              <p className="mt-0.5 text-2xs leading-snug text-subtle-foreground">
-                {section.description}
-              </p>
-              <ul className="mt-2 max-h-80 divide-y divide-border overflow-y-auto rounded-md border border-border">
-                {section.items.map((item, idx) => {
-                  const canReview =
-                    !!item.recommendationId && reviewable.has(item.recommendationId);
-                  return (
-                    <li
-                      key={`${item.path ?? item.label}-${idx}`}
-                      className="flex items-center gap-3 px-3 py-1.5"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="flex min-w-0 items-center gap-2 text-xs">
-                          <span className="truncate">{item.label}</span>
-                          <StatePill state={item.state} />
-                        </p>
-                        <p
-                          className="truncate text-2xs text-subtle-foreground"
-                          title={item.path ?? undefined}
-                        >
-                          {item.detail
-                            ? tildify(item.detail, home)
-                            : item.path
-                              ? tildify(item.path, home)
-                              : ""}
-                        </p>
-                      </div>
-                      <span className="hidden w-24 shrink-0 text-right text-2xs text-subtle-foreground lg:block">
-                        {item.lastUsedMs ? formatRelative(item.lastUsedMs) : ""}
-                      </span>
-                      <span className="tabular w-20 shrink-0 text-right text-xs">
-                        {formatBytes(item.bytes)}
-                      </span>
-                      <span className="w-16 shrink-0 text-right">
-                        {canReview ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              item.recommendationId && onReview([item.recommendationId])
-                            }
-                          >
-                            Review
-                          </Button>
+          {tool.sections.map((section) => {
+            const ids = section.items
+              .map((i) => i.recommendationId)
+              .filter((id): id is string => !!id && reviewable.has(id));
+            const picked = selected ? ids.filter((id) => selected.has(id)).length : 0;
+            const checkable = !!selected && !!onSelect && ids.length > 0;
+            return (
+              <div key={section.title}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium">{section.title}</p>
+                    <p className="mt-0.5 text-2xs leading-snug text-subtle-foreground">
+                      {section.description}
+                    </p>
+                  </div>
+                  {checkable ? (
+                    <label className="flex shrink-0 cursor-pointer items-center gap-1.5 pt-0.5 text-2xs text-muted-foreground">
+                      <Check
+                        checked={picked === ids.length}
+                        partial={picked > 0 && picked < ids.length}
+                        onChange={() => onSelect(ids, picked < ids.length)}
+                        label={`Select all ${ids.length} in ${section.title}`}
+                      />
+                      Select all {ids.length}
+                    </label>
+                  ) : null}
+                </div>
+                <ul className="mt-2 max-h-80 divide-y divide-border overflow-y-auto rounded-md border border-border">
+                  {section.items.map((item, idx) => {
+                    const recId =
+                      item.recommendationId && reviewable.has(item.recommendationId)
+                        ? item.recommendationId
+                        : null;
+                    const isPicked = recId !== null && !!selected?.has(recId);
+                    return (
+                      <li
+                        key={`${item.path ?? item.label}-${idx}`}
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-1.5",
+                          isPicked && "bg-accent-soft/60",
+                        )}
+                      >
+                        {checkable ? (
+                          <span className="flex w-3.5 shrink-0 justify-center">
+                            {recId ? (
+                              <Check
+                                checked={isPicked}
+                                onChange={() => onSelect([recId], !isPicked)}
+                                label={`Select ${item.label}`}
+                              />
+                            ) : null}
+                          </span>
                         ) : null}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
+                        <div className="min-w-0 flex-1">
+                          <p className="flex min-w-0 items-center gap-2 text-xs">
+                            <span className="truncate">{item.label}</span>
+                            <StatePill state={item.state} />
+                          </p>
+                          <p
+                            className="truncate text-2xs text-subtle-foreground"
+                            title={item.path ?? undefined}
+                          >
+                            {item.detail
+                              ? tildify(item.detail, home)
+                              : item.path
+                                ? tildify(item.path, home)
+                                : ""}
+                          </p>
+                        </div>
+                        <span className="hidden w-24 shrink-0 text-right text-2xs text-subtle-foreground lg:block">
+                          {item.lastUsedMs ? formatRelative(item.lastUsedMs) : ""}
+                        </span>
+                        <span className="tabular w-20 shrink-0 text-right text-xs">
+                          {formatBytes(item.bytes)}
+                        </span>
+                        <span className="w-16 shrink-0 text-right">
+                          {recId ? (
+                            <Button variant="ghost" size="sm" onClick={() => onReview([recId])}>
+                              Review
+                            </Button>
+                          ) : null}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </Panel>

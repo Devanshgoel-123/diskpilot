@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   basename,
@@ -8,6 +8,11 @@ import {
   formatRelative,
   tildify,
 } from "./format";
+import { setOs } from "./platform";
+
+afterEach(() => {
+  setOs("macos");
+});
 
 describe("formatBytes", () => {
   it("uses decimal units like Finder", () => {
@@ -17,6 +22,22 @@ describe("formatBytes", () => {
     expect(formatBytes(1_500_000)).toBe("1.5 MB");
     expect(formatBytes(245_000_000_000)).toBe("245 GB");
     expect(formatBytes(2_000_000_000_000)).toBe("2.0 TB");
+  });
+  it("counts in 1024s on Windows, like File Explorer and Settings", () => {
+    setOs("windows");
+    // A tester's disk: 492 GB in Finder's units is what Windows calls 458 GB.
+    expect(formatBytes(491_800_000_000)).toBe("458 GB");
+    expect(formatBytes(38_100_000_000)).toBe("35.4 GB");
+    expect(formatBytes(1023)).toBe("1023 B");
+    expect(formatBytes(1024)).toBe("1.00 KB");
+  });
+  it("cuts off at three digits on Windows, as Settings does, rather than rounding", () => {
+    setOs("windows");
+    // A tester's C: drive: Settings says 358 GB used and 99.2 GB free.
+    expect(formatBytes(491_841_908_736 - 106_602_041_344)).toBe("358 GB");
+    expect(formatBytes(106_602_041_344)).toBe("99.2 GB");
+    expect(formatBytes(8_574_000_000)).toBe("7.98 GB");
+    expect(formatBytes(1.15 * 1024 ** 3)).toBe("1.15 GB");
   });
   it("shows a dash for unknown sizes", () => {
     expect(formatBytes(null)).toBe("—");

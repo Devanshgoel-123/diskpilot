@@ -48,6 +48,41 @@ pub enum Matcher {
         parent: &'static str,
         contains: &'static str,
     },
+    /// Exact path below one of several well-known roots (Windows rules use
+    /// `%LOCALAPPDATA%`, `%ProgramData%` and so on). A part ending in `*`
+    /// matches any folder whose name starts with the rest of the part.
+    Under(&'static [(Root, &'static [&'static str])]),
+    /// The path ends with one of these runs of folder names, wherever it is
+    /// (e.g. a Steam library's `steamapps/shadercache` on any drive).
+    Tail(&'static [&'static [&'static str]]),
+    /// Folder name, but only when the parent folder contains a file with one
+    /// of these extensions (e.g. `bin` next to `App.csproj`).
+    NameWithSiblingExt {
+        names: &'static [&'static str],
+        extensions: &'static [&'static str],
+    },
+}
+
+/// A well-known folder that [`Matcher::Under`] paths are relative to. On
+/// Windows they come from the environment (`%LOCALAPPDATA%` and so on).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Root {
+    /// The user's profile folder (`%USERPROFILE%`, `~` on macOS).
+    Home,
+    /// `%LOCALAPPDATA%`
+    LocalAppData,
+    /// `%APPDATA%`
+    RoamingAppData,
+    /// `%ProgramData%`
+    ProgramData,
+    /// `%SystemRoot%` (`C:\Windows`)
+    SystemRoot,
+    /// `%TEMP%`
+    Temp,
+    /// `%SystemDrive%` (`C:\`)
+    SystemDrive,
+    /// The root of any drive.
+    AnyDrive,
 }
 
 #[derive(Debug)]
@@ -73,6 +108,13 @@ pub struct FileRule {
     pub label: &'static str,
     pub explanation: &'static str,
     pub confidence: Confidence,
+}
+
+#[derive(Debug)]
+pub struct NamedFileRule {
+    /// File names, compared ignoring case.
+    pub names: &'static [&'static str],
+    pub rule: FileRule,
 }
 
 use Category::*;
@@ -109,6 +151,9 @@ macro_rules! container {
         }
     };
 }
+
+pub(crate) use container;
+pub(crate) use leaf;
 
 pub static DIR_RULES: &[DirRule] = &[
     // ---- Docker -----------------------------------------------------------

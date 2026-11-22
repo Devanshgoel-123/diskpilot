@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { splitNotes, withoutSection } from "@/lib/releaseNotes";
-import { type Shortcut, shortcutsNewIn, useShortcutsDialog } from "@/lib/shortcuts";
+import { type Shortcut, actionText, shortcutsNewIn, useShortcutsDialog } from "@/lib/shortcuts";
 
 /** Pages ⌘1 to ⌘8 as one row instead of eight. */
 function compact(list: Shortcut[]): { keys: string[]; action: string }[] {
@@ -43,7 +43,7 @@ function NewShortcuts({ list, onShowAll }: { list: Shortcut[]; onShowAll: () => 
       <dl className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
         {compact(list.filter((s) => s.command !== "help")).map((s) => (
           <div key={s.action} className="flex items-center justify-between gap-3 text-xs">
-            <dt className="text-foreground/85">{s.action}</dt>
+            <dt className="text-foreground/85">{actionText(s.action)}</dt>
             <dd>
               <Keys keys={s.keys} />
             </dd>
