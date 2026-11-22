@@ -40,7 +40,8 @@ export function RecommendationRow({
   max: number;
   selected: boolean;
   expanded: boolean;
-  onToggleSelect: () => void;
+  /** `shift` is true when Shift was held, to select or clear a range. */
+  onToggleSelect: (shift: boolean) => void;
   onToggleExpand: () => void;
 }) {
   const home = useApp((s) => s.env?.homeDir);
@@ -56,7 +57,7 @@ export function RecommendationRow({
             <input
               type="checkbox"
               checked={selected}
-              onChange={onToggleSelect}
+              onChange={(e) => onToggleSelect((e.nativeEvent as MouseEvent).shiftKey === true)}
               aria-label={`Select ${rec.title}`}
               className="size-3.5 accent-[var(--accent)]"
             />
