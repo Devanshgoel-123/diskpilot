@@ -16,7 +16,7 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
-import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -110,14 +110,45 @@ function StatePill({ state }: { state: ItemState }) {
   );
 }
 
+/** A checkbox that shows a partial selection as a dash. */
+function Check({
+  checked,
+  partial = false,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  partial?: boolean;
+  onChange: () => void;
+  label: string;
+}) {
+  return (
+    <input
+      type="checkbox"
+      checked={checked}
+      ref={(el) => {
+        if (el) el.indeterminate = partial;
+      }}
+      onChange={onChange}
+      aria-label={label}
+      className="size-3.5 shrink-0 accent-[var(--accent)]"
+    />
+  );
+}
+
 function ToolCard({
   tool,
   reviewable,
   onReview,
+  selected,
+  onSelect,
 }: {
   tool: ToolReport;
   reviewable: Set<string>;
   onReview: (ids: string[]) => void;
+  selected: Set<string>;
+  /** Select (`on`) or clear these recommendation ids. */
+  onSelect: (ids: string[], on: boolean) => void;
 }) {
   const home = useApp((s) => s.env?.homeDir);
   const [open, setOpen] = useState(false);
@@ -201,62 +232,102 @@ function ToolCard({
 
       {open ? (
         <div className="space-y-4 border-t border-border px-4 py-3">
-          {tool.sections.map((section) => (
-            <div key={section.title}>
-              <p className="text-xs font-medium">{section.title}</p>
-              <p className="mt-0.5 text-2xs leading-snug text-subtle-foreground">
-                {section.description}
-              </p>
-              <ul className="mt-2 max-h-80 divide-y divide-border overflow-y-auto rounded-md border border-border">
-                {section.items.map((item, idx) => {
-                  const canReview =
-                    !!item.recommendationId && reviewable.has(item.recommendationId);
-                  return (
-                    <li
-                      key={`${item.path ?? item.label}-${idx}`}
-                      className="flex items-center gap-3 px-3 py-1.5"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="flex min-w-0 items-center gap-2 text-xs">
-                          <span className="truncate">{item.label}</span>
-                          <StatePill state={item.state} />
-                        </p>
-                        <p
-                          className="truncate text-2xs text-subtle-foreground"
-                          title={item.path ?? undefined}
-                        >
-                          {item.detail
-                            ? tildify(item.detail, home)
-                            : item.path
-                              ? tildify(item.path, home)
-                              : ""}
-                        </p>
-                      </div>
-                      <span className="hidden w-24 shrink-0 text-right text-2xs text-subtle-foreground lg:block">
-                        {item.lastUsedMs ? formatRelative(item.lastUsedMs) : ""}
-                      </span>
-                      <span className="tabular w-20 shrink-0 text-right text-xs">
-                        {formatBytes(item.bytes)}
-                      </span>
-                      <span className="w-16 shrink-0 text-right">
-                        {canReview ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              item.recommendationId && onReview([item.recommendationId])
-                            }
-                          >
-                            Review
-                          </Button>
+          {tool.sections.map((section) => {
+            const ids = section.items
+              .map((i) => i.recommendationId)
+              .filter((id): id is string => !!id && reviewable.has(id));
+            const picked = ids.filter((id) => selected.has(id)).length;
+            const anyCheckable = ids.length > 0;
+            return (
+              <div key={section.title}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium">{section.title}</p>
+                    <p className="mt-0.5 text-2xs leading-snug text-subtle-foreground">
+                      {section.description}
+                    </p>
+                  </div>
+                  {anyCheckable ? (
+                    <label className="flex shrink-0 cursor-pointer items-center gap-1.5 pt-0.5 text-2xs text-muted-foreground">
+                      <Check
+                        checked={picked === ids.length}
+                        partial={picked > 0 && picked < ids.length}
+                        onChange={() => onSelect(ids, picked < ids.length)}
+                        label={`Select all ${ids.length} in ${section.title}`}
+                      />
+                      Select all {ids.length}
+                    </label>
+                  ) : null}
+                </div>
+                <ul className="mt-2 max-h-80 divide-y divide-border overflow-y-auto rounded-md border border-border">
+                  {section.items.map((item, idx) => {
+                    const recId =
+                      item.recommendationId && reviewable.has(item.recommendationId)
+                        ? item.recommendationId
+                        : null;
+                    const canReview = recId !== null;
+                    const isPicked = recId !== null && selected.has(recId);
+                    return (
+                      <li
+                        key={`${item.path ?? item.label}-${idx}`}
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-1.5",
+                          isPicked && "bg-accent-soft/60",
+                        )}
+                      >
+                        {anyCheckable ? (
+                          <span className="flex w-3.5 shrink-0 justify-center">
+                            {recId ? (
+                              <Check
+                                checked={isPicked}
+                                onChange={() => onSelect([recId], !isPicked)}
+                                label={`Select ${item.label}`}
+                              />
+                            ) : null}
+                          </span>
                         ) : null}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
+                        <div className="min-w-0 flex-1">
+                          <p className="flex min-w-0 items-center gap-2 text-xs">
+                            <span className="truncate">{item.label}</span>
+                            <StatePill state={item.state} />
+                          </p>
+                          <p
+                            className="truncate text-2xs text-subtle-foreground"
+                            title={item.path ?? undefined}
+                          >
+                            {item.detail
+                              ? tildify(item.detail, home)
+                              : item.path
+                                ? tildify(item.path, home)
+                                : ""}
+                          </p>
+                        </div>
+                        <span className="hidden w-24 shrink-0 text-right text-2xs text-subtle-foreground lg:block">
+                          {item.lastUsedMs ? formatRelative(item.lastUsedMs) : ""}
+                        </span>
+                        <span className="tabular w-20 shrink-0 text-right text-xs">
+                          {formatBytes(item.bytes)}
+                        </span>
+                        <span className="w-16 shrink-0 text-right">
+                          {canReview ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                item.recommendationId && onReview([item.recommendationId])
+                              }
+                            >
+                              Review
+                            </Button>
+                          ) : null}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </Panel>
@@ -294,12 +365,41 @@ export function DeveloperToolsPage() {
     [detected, reviewable],
   );
   // Same items as the "Review" buttons, so the totals always agree.
-  const reviewBytes = useMemo(() => {
-    const ids = new Set(reviewIds);
-    return recommendations
-      .filter((r) => ids.has(r.id))
-      .reduce((a, r) => a + r.estimatedReclaimBytes, 0);
-  }, [reviewIds, recommendations]);
+  const bytesOf = useCallback(
+    (ids: Iterable<string>) => {
+      const set = new Set(ids);
+      return recommendations
+        .filter((r) => set.has(r.id))
+        .reduce((a, r) => a + r.estimatedReclaimBytes, 0);
+    },
+    [recommendations],
+  );
+  const reviewBytes = useMemo(() => bytesOf(reviewIds), [bytesOf, reviewIds]);
+
+  // Pick items across tools, untick the ones to keep, then review the rest
+  // together. Ids that stop being reviewable (a new analysis) drop out.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const selected = useMemo(
+    () => new Set([...picked].filter((id) => reviewable.has(id))),
+    [picked, reviewable],
+  );
+  const select = useCallback(
+    (ids: string[], on: boolean) =>
+      setPicked((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) {
+          if (on) next.add(id);
+          else next.delete(id);
+        }
+        return next;
+      }),
+    [],
+  );
+  const allPicked = reviewIds.length > 0 && reviewIds.every((id) => selected.has(id));
+  const reviewSelected = () => {
+    reviewInRecommendations([...selected]);
+    setPicked(new Set());
+  };
 
   return (
     <>
@@ -355,9 +455,14 @@ export function DeveloperToolsPage() {
                     Analyzed {formatRelative(devtools.generatedAtMs)}
                   </p>
                   {reviewIds.length ? (
-                    <Button onClick={() => reviewInRecommendations(reviewIds)}>
-                      Review {reviewIds.length} items
-                    </Button>
+                    <>
+                      <Button variant="ghost" onClick={() => select(reviewIds, !allPicked)}>
+                        {allPicked ? "Clear selection" : "Select all"}
+                      </Button>
+                      <Button onClick={() => reviewInRecommendations(reviewIds)}>
+                        Review {reviewIds.length} items
+                      </Button>
+                    </>
                   ) : null}
                 </div>
               </div>
@@ -369,6 +474,8 @@ export function DeveloperToolsPage() {
                     tool={t}
                     reviewable={reviewable}
                     onReview={reviewInRecommendations}
+                    selected={selected}
+                    onSelect={select}
                   />
                 ))}
               </div>
@@ -392,6 +499,20 @@ export function DeveloperToolsPage() {
             </>
           )}
         </div>
+        {selected.size > 0 ? (
+          <div className="pointer-events-none sticky bottom-0 flex justify-center px-6 pb-4">
+            <div className="animate-in pointer-events-auto flex items-center gap-4 rounded-lg bg-panel-raised px-4 py-2.5 shadow-float">
+              <p className="text-[13px]">
+                <span className="tabular font-medium">{formatCount(selected.size)}</span> selected,{" "}
+                <span className="tabular font-medium">{formatBytes(bytesOf(selected))}</span>
+              </p>
+              <Button variant="ghost" size="sm" onClick={() => setPicked(new Set())}>
+                Clear selection
+              </Button>
+              <Button onClick={reviewSelected}>Review {formatCount(selected.size)} selected</Button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </>
   );

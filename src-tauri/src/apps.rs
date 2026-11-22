@@ -441,6 +441,9 @@ pub struct AppFootprint {
     /// uninstaller), shown before it runs. `None` when Uninstall opens
     /// Settings > Apps instead (Store apps, unusual entries), and on macOS.
     pub uninstall_command: Option<String>,
+    /// Windows: a Microsoft Store app, which Windows itself removes when
+    /// asked (no uninstaller of its own). False on macOS.
+    pub store_app: bool,
 }
 
 /// What Uninstall did on Windows.
@@ -449,6 +452,11 @@ pub struct AppFootprint {
 pub enum UninstallOutcome {
     /// The program's own uninstaller started; it asks its own questions.
     Uninstaller,
+    /// Windows removed the Store app for this user.
+    Removed,
+    /// Windows would not remove the Store app here, so Settings opened at
+    /// that app's own page, which has its Uninstall button.
+    SettingsApp,
     /// Settings > Apps > Installed apps opened.
     Settings,
 }
@@ -567,13 +575,14 @@ fn footprint(
         })
         .max();
     #[cfg(windows)]
-    let (publisher, version, uninstall_command) = (
+    let (publisher, version, uninstall_command, store_app) = (
         app.win.publisher.clone(),
         app.win.version.clone(),
         app.win.uninstaller.as_ref().and_then(|u| u.command()),
+        app.win.store,
     );
     #[cfg(not(windows))]
-    let (publisher, version, uninstall_command) = (None, None, None);
+    let (publisher, version, uninstall_command, store_app) = (None, None, None, false);
     AppFootprint {
         name: app.name.clone(),
         bundle_id: app.bundle_id.clone(),
@@ -585,6 +594,7 @@ fn footprint(
         publisher,
         version,
         uninstall_command,
+        store_app,
     }
 }
 

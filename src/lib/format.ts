@@ -19,8 +19,22 @@ export function formatBytes(bytes: number | null | undefined, digits = 1): strin
     value /= base;
     unit += 1;
   }
+  if (isWindows()) return `${windowsDigits(value)} ${UNITS[unit]}`;
   const fixed = value >= 100 ? 0 : digits;
   return `${value.toFixed(fixed)} ${UNITS[unit]}`;
+}
+
+/**
+ * Three significant digits, cut off rather than rounded, as Settings and File
+ * Explorer show them: 358.78 GB used reads "358 GB" and 99.28 GB free reads
+ * "99.2 GB" there, so rounding to "359 GB" and "99.3 GB" would disagree with
+ * the numbers people check against.
+ */
+function windowsDigits(value: number): string {
+  const decimals = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  const scale = 10 ** decimals;
+  // The small nudge keeps 1.15 (stored as 1.1499…) from cutting to 1.14.
+  return (Math.floor(value * scale + 1e-9) / scale).toFixed(decimals);
 }
 
 export function formatCount(n: number | null | undefined): string {

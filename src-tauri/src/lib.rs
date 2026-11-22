@@ -181,6 +181,7 @@ pub fn run() {
             commands::find_duplicates,
             commands::cancel_find_duplicates,
             commands::get_duplicates,
+            commands::duplicates_running,
             commands::plan_duplicate_cleanup,
             commands::plan_file_kind_cleanup,
             commands::analyze_dev_tools,

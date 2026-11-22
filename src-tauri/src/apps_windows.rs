@@ -589,11 +589,20 @@ mod imp {
             Some(e) => uninstaller(&e),
             None => {
                 let (store, _) = store_apps();
-                if store.iter().any(|a| a.bundle_id == id) {
-                    Uninstaller::Settings
-                } else {
+                if !store.iter().any(|a| a.bundle_id == id) {
                     return Err("This program is no longer installed.".into());
                 }
+                // Ask Windows to remove it, as Settings would. Windows decides:
+                // apps that are part of Windows, or that it will not remove
+                // for this user, are left alone and their own page in
+                // Settings opens instead, so there is nothing to search for.
+                return match remove_store_app(id) {
+                    Ok(()) => Ok(UninstallOutcome::Removed),
+                    Err(why) => {
+                        eprintln!("diskpilot: Windows did not remove {id}: {why}");
+                        open_app_settings(id).map(|()| UninstallOutcome::SettingsApp)
+                    }
+                };
             }
         };
         match how {
@@ -865,6 +874,101 @@ mod imp {
     pub fn open_apps_settings() -> Result<(), String> {
         winshell::shell_open("ms-settings:appsfeatures".as_ref(), None, true)
             .map_err(|e| format!("Windows could not open Settings: {}", e.message()))
+    }
+
+    /// Settings at one Store app's own page (Advanced options), which has
+    /// its Uninstall button.
+    fn open_app_settings(family: &str) -> Result<(), String> {
+        if !valid_family(family) {
+            return open_apps_settings();
+        }
+        let uri = format!("ms-settings:appsfeatures-app?{family}");
+        winshell::shell_open(uri.as_ref(), None, true).or_else(|_| open_apps_settings())
+    }
+
+    /// Remove a Store app for the current user through Windows' package
+    /// manager, the way Settings does. Frameworks and apps signed as part of
+    /// Windows are refused here; Windows refuses anything else it will not
+    /// remove, and its reason is returned.
+    fn remove_store_app(family: &str) -> Result<(), String> {
+        // Its own thread in the multithreaded apartment: waiting for Windows
+        // to finish must not block a thread that shell (STA) calls may use.
+        let family = family.to_string();
+        std::thread::spawn(move || {
+            use windows::Win32::System::Com::{
+                CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED,
+            };
+            // SAFETY: no reserved pointer; balanced below when it succeeded.
+            let com = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }.is_ok();
+            let result = remove_store_app_now(&family);
+            if com {
+                // SAFETY: balances the successful CoInitializeEx above.
+                unsafe { CoUninitialize() };
+            }
+            result
+        })
+        .join()
+        .unwrap_or_else(|_| Err("removal stopped unexpectedly".into()))
+    }
+
+    fn remove_store_app_now(family: &str) -> Result<(), String> {
+        use windows::core::HSTRING;
+        use windows::ApplicationModel::PackageSignatureKind;
+        use windows::Management::Deployment::PackageManager;
+
+        if !valid_family(family) {
+            return Err("not a package family name".into());
+        }
+        let manager = PackageManager::new().map_err(|e| e.message())?;
+        // An empty user id means the current user, which needs no admin rights.
+        let packages = manager
+            .FindPackagesByUserSecurityIdPackageFamilyName(&HSTRING::new(), &HSTRING::from(family))
+            .map_err(|e| e.message())?;
+        let mut removed = 0;
+        for package in packages {
+            if package.IsFramework().unwrap_or(true)
+                || package.SignatureKind().ok() == Some(PackageSignatureKind::System)
+            {
+                return Err("part of Windows".into());
+            }
+            let full = package
+                .Id()
+                .and_then(|id| id.FullName())
+                .map_err(|e| e.message())?;
+            // Waits for Windows to finish; this runs off the UI thread.
+            let result = manager
+                .RemovePackageAsync(&full)
+                .and_then(|op| op.join())
+                .map_err(|e| e.message())?;
+            let code = result.ExtendedErrorCode().map_err(|e| e.message())?;
+            if code.is_err() {
+                let text = result
+                    .ErrorText()
+                    .map(|t| t.to_string())
+                    .unwrap_or_default();
+                return Err(if text.is_empty() {
+                    code.message()
+                } else {
+                    text
+                });
+            }
+            removed += 1;
+        }
+        if removed == 0 {
+            return Err("no package found for this user".into());
+        }
+        Ok(())
+    }
+
+    /// `Name_PublisherId`: letters, digits, dots and dashes, one underscore.
+    fn valid_family(family: &str) -> bool {
+        let mut parts = family.split('_');
+        let ok = |s: &str| {
+            !s.is_empty()
+                && s.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+        };
+        matches!((parts.next(), parts.next(), parts.next()), (Some(a), Some(b), None) if ok(a) && ok(b))
     }
 }
 

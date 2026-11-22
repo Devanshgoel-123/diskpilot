@@ -104,6 +104,23 @@ pub fn build_plan(
     }
 }
 
+/// Move items a running program is using (a project's dev server, say) to
+/// `rejected`, with what to stop. `blocker` says why an item is in use.
+pub fn exclude_in_use(plan: &mut CleanupPlan, blocker: impl Fn(&Path) -> Option<String>) {
+    let items = std::mem::take(&mut plan.items);
+    for item in items {
+        match blocker(Path::new(&item.path)) {
+            None => plan.items.push(item),
+            Some(reason) => plan.rejected.push(PlanRejection {
+                recommendation_id: item.recommendation_id,
+                path: item.path,
+                reason,
+            }),
+        }
+    }
+    plan.total_bytes = plan.items.iter().map(|i| i.bytes).sum();
+}
+
 /// Results older than this are re-measured when a preview is built.
 pub const REMEASURE_AFTER_MS: i64 = 10 * 60 * 1000;
 
@@ -264,6 +281,36 @@ mod tests {
         );
         assert!(plan.items.is_empty(), "{:?}", plan.items);
         assert_eq!(plan.rejected.len(), 2);
+    }
+
+    #[test]
+    fn items_in_use_are_refused_with_what_to_stop() {
+        let (_d, home) = fixture();
+        let nm = home.join("proj/node_modules").display().to_string();
+        let cache = home.join("Library/Caches/com.x").display().to_string();
+        let recs = vec![
+            rec(&nm, "node.node-modules", vec![CleanupMethod::Trash]),
+            rec(&cache, "library.caches", vec![CleanupMethod::Trash]),
+        ];
+        let ids = vec![nm.clone(), cache.clone()];
+        let mut plan = build_plan(
+            "p".into(),
+            &recs,
+            &ids,
+            CleanupMethod::Trash,
+            &home,
+            &home,
+            0,
+        );
+        exclude_in_use(&mut plan, |p| {
+            (p == Path::new(&nm)).then(|| "node.exe (process 7) is running".to_string())
+        });
+        assert_eq!(plan.items.len(), 1);
+        assert_eq!(plan.items[0].path, cache);
+        assert_eq!(plan.total_bytes, 100);
+        assert_eq!(plan.rejected.len(), 1);
+        assert_eq!(plan.rejected[0].path, nm);
+        assert!(plan.rejected[0].reason.contains("node.exe"));
     }
 
     #[test]

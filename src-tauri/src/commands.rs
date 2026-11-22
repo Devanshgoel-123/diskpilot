@@ -877,15 +877,20 @@ pub async fn create_cleanup_plan(
         &state.home,
         now,
     );
-    if scanned_at.is_none_or(|at| now - at > planner::REMEASURE_AFTER_MS) {
-        plan = blocking(move || {
+    let remeasure = scanned_at.is_none_or(|at| now - at > planner::REMEASURE_AFTER_MS);
+    plan = blocking(move || {
+        // Refuse up front what a running dev server or program is using, so
+        // the preview says what to stop instead of failing halfway.
+        let running = crate::cleanup::inuse::Snapshot::take();
+        planner::exclude_in_use(&mut plan, |p| running.blocker(p));
+        if remeasure {
             planner::refresh_sizes(&mut plan, |p| {
                 p.symlink_metadata().ok().map(|_| scanner::measure(p))
             });
-            Ok(plan)
-        })
-        .await?;
-    }
+        }
+        Ok(plan)
+    })
+    .await?;
     let mut plans = state.plans();
     plans.retain(|_, p| now - p.created_at_ms < planner::PLAN_TTL_MS);
     plans.insert(plan.id.clone(), plan.clone());
@@ -1078,6 +1083,13 @@ pub fn cancel_find_duplicates(state: State<'_, AppState>) -> bool {
         }
         None => false,
     }
+}
+
+/// Whether a duplicate search is under way, so a page opened mid-search shows
+/// its progress instead of offering to start another.
+#[tauri::command]
+pub fn duplicates_running(state: State<'_, AppState>) -> bool {
+    state.duplicates().running.is_some()
 }
 
 /// The last duplicate search, if any, so the page survives navigation.

@@ -135,6 +135,7 @@ export const api = {
   findDuplicates: (minBytes: number) => invoke<DuplicateReport>("find_duplicates", { minBytes }),
   cancelFindDuplicates: () => invoke<boolean>("cancel_find_duplicates"),
   getDuplicates: () => invoke<DuplicateReport | null>("get_duplicates"),
+  duplicatesRunning: () => invoke<boolean>("duplicates_running"),
   planDuplicateCleanup: (paths: string[]) =>
     invoke<CleanupPlan>("plan_duplicate_cleanup", { paths }),
   planFileKindCleanup: (paths: string[]) =>
