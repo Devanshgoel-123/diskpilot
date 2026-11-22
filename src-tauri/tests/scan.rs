@@ -378,6 +378,8 @@ fn app_containers_measured_last_give_identical_final_results() {
     assert_eq!(progress.containers_done, 3);
 }
 
+// Partial results come from deferring macOS app containers.
+#[cfg(target_os = "macos")]
 #[test]
 fn key_files_are_in_both_partial_and_final_results() {
     let f = fixture();
