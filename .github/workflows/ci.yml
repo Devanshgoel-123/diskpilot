@@ -229,6 +229,8 @@ jobs:
       - name: UI benchmark
         env:
           CACHED: ${{ steps.base-cache.outputs.cache-hit }}
+          # Diagnostic run: startup stages and a CPU profile per side (perf/ui.mjs).
+          PERF_DIAGNOSE: "1"
         run: |
           if [ "$CACHED" = true ]; then
             (cd ../base && PERF_RUNS=1 PERF_SKIP_BUILD=1 node "$GITHUB_WORKSPACE/perf/ui.mjs" "$RUNNER_TEMP/ui-base-0.json")
@@ -239,7 +241,8 @@ jobs:
           fi
           pnpm build >/dev/null && PERF_RUNS=1 node perf/ui.mjs "$RUNNER_TEMP/ui-head-0.json"
           # Alternate further rounds, reusing each side's build.
-          for round in 1 2; do
+          # Diagnostic run: 9 rounds per side instead of 3.
+          for round in 1 2 3 4 5 6 7 8; do
             for side in base head; do
               dir=$([ "$side" = head ] && echo . || echo ../base)
               (cd "$dir" && PERF_RUNS=1 PERF_SKIP_BUILD=1 node "$GITHUB_WORKSPACE/perf/ui.mjs" "$RUNNER_TEMP/ui-$side-$round.json")
@@ -275,7 +278,10 @@ jobs:
         if: always()
         with:
           name: perf-results
-          path: ${{ runner.temp }}/perf-*.json
+          path: |
+            ${{ runner.temp }}/perf-*.json
+            ${{ runner.temp }}/ui-*.json
+            ${{ runner.temp }}/ui-*.cpuprofile
           retention-days: 30
       - name: Fail on a regression
         if: steps.compare.outputs.status != '0'

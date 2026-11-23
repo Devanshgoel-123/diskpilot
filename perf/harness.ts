@@ -5,7 +5,9 @@ import { mockIPC } from "@tauri-apps/api/mocks";
 import { HOME, makeFixture } from "./fixture";
 
 const t0 = performance.now();
+performance.mark("harness-start");
 const fx = makeFixture();
+performance.mark("fixture-ready");
 // File types carry their totals and listed count, and their files come on
 // request (get_file_kind_files). The files stay in the summary too, so CI can
 // run this harness against a base branch from before that change.
@@ -74,5 +76,13 @@ mockIPC(
 );
 
 await import("../src/main");
+performance.mark("app-imported");
 const { useApp } = await import("../src/lib/store");
+// Startup stages for perf/ui.mjs: when the store has loaded its data.
+const markReady = () => {
+  if (useApp.getState().ready && !performance.getEntriesByName("store-ready").length)
+    performance.mark("store-ready");
+};
+markReady();
+useApp.subscribe(markReady);
 Object.assign(window, { __perf: { useApp, t0 } });

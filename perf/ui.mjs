@@ -41,7 +41,8 @@ const page = await ctx.newPage();
 // Slow the CPU down (4x by default) to stand in for older Macs and make
 // regressions visible above the noise.
 const THROTTLE = Number(process.env.PERF_CPU_THROTTLE ?? 4);
-await (await ctx.newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: THROTTLE });
+const cdp = await ctx.newCDPSession(page);
+await cdp.send("Emulation.setCPUThrottlingRate", { rate: THROTTLE });
 
 // Runs inside the page: navigates and reports when the DOM has settled
 // (no changes for three frames), measured from the call.
@@ -64,6 +65,7 @@ new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__longTa
   .observe({ type: "longtask", buffered: true });`;
 
 const results = {
+  startupStages: [],
   firstRenderMs: [],
   pageSwitchMs: {},
   scrollFps: {},
@@ -87,6 +89,7 @@ const PAGES = [
 await page.goto(url, { waitUntil: "load" });
 await page.waitForFunction(() => window.__perf, null, { polling: "raf", timeout: 20_000 });
 
+const DIAGNOSE = !!process.env.PERF_DIAGNOSE;
 for (let run = 0; run < RUNS; run++) {
   await page.goto(url, { waitUntil: "load" });
   await page.evaluate(SETTLE);
@@ -104,6 +107,31 @@ for (let run = 0; run < RUNS; run++) {
     { polling: "raf", timeout: 20_000 },
   );
   results.firstRenderMs.push(await first.jsonValue());
+  // Where the first render's time went, for diagnosing slow runners.
+  results.startupStages.push(
+    await page.evaluate(
+      (rendered) => {
+        const nav = performance.getEntriesByType("navigation")[0];
+        const mark = (n) => performance.getEntriesByName(n)[0]?.startTime ?? null;
+        const scripts = performance
+          .getEntriesByType("resource")
+          .filter((r) => r.name.endsWith(".js"))
+          .map((r) => ({ name: r.name.split("/").pop(), start: r.startTime, end: r.responseEnd }));
+        return {
+          responseEnd: nav?.responseEnd ?? null,
+          domContentLoaded: nav?.domContentLoadedEventEnd ?? null,
+          harnessStart: mark("harness-start"),
+          fixtureReady: mark("fixture-ready"),
+          appImported: mark("app-imported"),
+          storeReady: mark("store-ready"),
+          rendered,
+          longTasks: window.__longTasks.slice(),
+          scripts,
+        };
+      },
+      await first.jsonValue(),
+    ),
+  );
   await page.waitForFunction(() => window.__perf, null, { polling: "raf" });
 
   for (const p of PAGES) {
@@ -199,6 +227,22 @@ for (let run = 0; run < RUNS; run++) {
   await page.keyboard.press("Escape");
 }
 
+// PERF_DIAGNOSE=1: a CPU profile of one more startup. It is not counted:
+// profiling slows the page down.
+if (DIAGNOSE) {
+  await cdp.send("Profiler.enable");
+  await cdp.send("Profiler.setSamplingInterval", { interval: 200 });
+  await cdp.send("Profiler.start");
+  await page.goto(url, { waitUntil: "load" });
+  await page.waitForFunction(
+    () => /used of/.test(document.querySelector("main")?.textContent ?? ""),
+    null,
+    { polling: "raf", timeout: 20_000 },
+  );
+  const { profile } = await cdp.send("Profiler.stop");
+  writeFileSync(OUT.replace(/\.json$/, ".cpuprofile"), JSON.stringify(profile));
+}
+
 // The app's own build (pnpm build), not the harness build.
 const js = readdirSync("dist/assets")
   .filter((f) => f.endsWith(".js"))
@@ -222,6 +266,12 @@ const summary = {
   longTasksPerRun: median(results.longTasks),
 };
 writeFileSync(OUT, JSON.stringify(summary, null, 2) + "\n");
+// PERF_DIAGNOSE=1: every run's startup stages next to the results.
+if (process.env.PERF_DIAGNOSE)
+  writeFileSync(
+    OUT.replace(/\.json$/, ".stages.json"),
+    JSON.stringify(results.startupStages, null, 2),
+  );
 console.log(JSON.stringify(summary, null, 2));
 // Closing can hang on a throttled page; the results are already written.
 const quit = (ms) => new Promise((r) => setTimeout(r, ms));
