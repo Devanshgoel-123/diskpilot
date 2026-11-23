@@ -1,3 +1,5 @@
+import { currentOs, type Os } from "./platform";
+
 /** Release notes from docs/releases, bundled so "What's new" works offline. */
 const files = import.meta.glob<string>("../../docs/releases/*.md", {
   query: "?raw",
@@ -28,9 +30,15 @@ export function inAppNotes(markdown: string): string {
   return out.join("\n").trim();
 }
 
-/** Notes for a version such as "0.5.1", or null if none were bundled. */
-export function releaseNotes(version: string): string | null {
-  const entry = Object.entries(files).find(([path]) => path.endsWith(`/v${version}.md`));
+/**
+ * Notes for a version such as "0.5.1", or null if none were bundled. On
+ * Windows, `v0.5.1-windows.md` is used when there is one, since the shared
+ * notes may describe only the Mac.
+ */
+export function releaseNotes(version: string, os: Os = currentOs()): string | null {
+  const find = (name: string) => Object.entries(files).find(([path]) => path.endsWith(`/${name}`));
+  const entry =
+    (os === "windows" ? find(`v${version}-windows.md`) : undefined) ?? find(`v${version}.md`);
   // A Windows checkout may have turned the files' line endings into CRLF.
   return entry ? inAppNotes(entry[1].replace(/\r\n/g, "\n")) : null;
 }

@@ -59,6 +59,17 @@ describe("release notes", () => {
   it("has nothing for an unknown version", () => {
     expect(releaseNotes("9.9.9")).toBeNull();
   });
+
+  it("uses the Windows notes on Windows, and the shared ones elsewhere", () => {
+    const windows = releaseNotes("0.6.7", "windows") ?? "";
+    expect(windows).toContain("on your PC");
+    expect(windows).not.toMatch(/\bMac\b|Finder|Keychain|⌘|Homebrew/);
+    expect(releaseNotes("0.6.7", "macos")).toContain("on your Mac");
+  });
+
+  it("falls back to the shared notes on Windows when there are no Windows notes", () => {
+    expect(releaseNotes("0.5.1", "windows")).toBe(releaseNotes("0.5.1", "macos"));
+  });
 });
 
 describe("isNewerVersion", () => {
