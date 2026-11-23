@@ -238,15 +238,17 @@ jobs:
             cp -R ../base/dist ../base/dist-perf "$RUNNER_TEMP/base-build/"
           fi
           pnpm build >/dev/null && PERF_RUNS=1 node perf/ui.mjs "$RUNNER_TEMP/ui-head-0.json"
-          # Alternate further rounds, reusing each side's build.
-          for round in 1 2; do
+          # Alternate further rounds, reusing each side's build. Nine page loads
+          # per side, scored by their median (perf/merge.mjs): on this runner
+          # the same build's first render ranges from about 190 to 500 ms.
+          for round in 1 2 3 4 5 6 7 8; do
             for side in base head; do
               dir=$([ "$side" = head ] && echo . || echo ../base)
               (cd "$dir" && PERF_RUNS=1 PERF_SKIP_BUILD=1 node "$GITHUB_WORKSPACE/perf/ui.mjs" "$RUNNER_TEMP/ui-$side-$round.json")
             done
           done
           for side in base head; do
-            node perf/merge.mjs "$RUNNER_TEMP/ui-$side.json" "$RUNNER_TEMP"/ui-$side-*.json
+            node perf/merge.mjs --median "$RUNNER_TEMP/ui-$side.json" "$RUNNER_TEMP"/ui-$side-*.json
           done
       - name: Compare
         id: compare
