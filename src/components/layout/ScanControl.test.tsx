@@ -83,7 +83,8 @@ describe("Fast scan", () => {
   it("is offered for a whole drive when not administrator, and restarts after confirming", async () => {
     setOs("windows");
     renderControl();
-    fireEvent.click(screen.getByRole("button", { name: /Faster whole-drive scan/ }));
+    // Windows-only parts load on first use.
+    fireEvent.click(await screen.findByRole("button", { name: /Faster whole-drive scan/ }));
     expect(screen.getByText(/dragging files in from File Explorer may not work/)).toBeVisible();
     relaunchElevated.mockRejectedValue(new Error("Administrator rights were not granted."));
     await act(async () => {
@@ -93,10 +94,12 @@ describe("Fast scan", () => {
     expect(screen.getByText("Administrator rights were not granted.")).toBeInTheDocument();
   });
 
-  it("is not offered for the user folder", () => {
+  it("is not offered for the user folder", async () => {
     setOs("windows");
     useApp.setState({ scanRoot: null });
     renderControl();
+    // Once the Windows-only parts have loaded, so the check means something.
+    await screen.findByRole("button", { name: /What to scan/ });
     expect(screen.queryByRole("button", { name: /Faster whole-drive scan/ })).toBeNull();
   });
 
@@ -104,6 +107,7 @@ describe("Fast scan", () => {
     setOs("windows");
     useApp.setState({ elevated: true });
     renderControl();
+    await screen.findByRole("button", { name: /What to scan/ });
     expect(screen.queryByRole("button", { name: /Faster whole-drive scan/ })).toBeNull();
     expect(screen.getByText("Fast scan")).toBeInTheDocument();
     await act(async () => {

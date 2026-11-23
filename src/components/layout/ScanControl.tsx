@@ -1,5 +1,4 @@
 import { Loader2, RefreshCw, ScanSearch, Square, Zap } from "lucide-react";
-import { lazy, Suspense } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { Button } from "@/components/ui/button";
@@ -11,12 +10,7 @@ import { isWindows } from "@/lib/platform";
 import { ariaKeys, keysText } from "@/lib/shortcuts";
 import { useApp } from "@/lib/store";
 
-import { FastScanOffer } from "./FastScanDialog";
-
-// Windows only, so it loads on first use and never on macOS.
-const DrivePicker = lazy(() =>
-  import("@/components/shared/DrivePicker").then((m) => ({ default: m.DrivePicker })),
-);
+import { DrivePicker, FastScanOffer } from "@/features/windows/lazy";
 
 /** Global scan button / live progress, shown in every page header. */
 export function ScanControl() {
@@ -104,11 +98,7 @@ export function ScanControl() {
   const rescan =
     !!summary && (!isWindows() || samePath(summary.root, scanRoot ?? env?.homeDir ?? ""));
   const picker =
-    isWindows() && (page === "overview" || page === "explorer") ? (
-      <Suspense fallback={null}>
-        <DrivePicker />
-      </Suspense>
-    ) : null;
+    isWindows() && (page === "overview" || page === "explorer") ? <DrivePicker /> : null;
   // Windows: a whole drive can be read from its file table, as administrator.
   const wholeDrive = isWindows() && isDriveRoot(scanRoot, drives);
   const fast = wholeDrive && elevated;

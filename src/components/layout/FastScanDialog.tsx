@@ -1,5 +1,6 @@
 import { Loader2, ShieldCheck, Zap } from "lucide-react";
 import { useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -79,7 +80,14 @@ export function FastScanDialog({ onClose }: { onClose: () => void }) {
  * covers a whole drive and DiskPilot is not administrator. Nothing otherwise.
  */
 export function FastScanOffer({ size = "default" }: { size?: "default" | "lg" }) {
-  const { drives, scanRoot, elevated, scanning } = useApp();
+  const { drives, scanRoot, elevated, scanning } = useApp(
+    useShallow((s) => ({
+      drives: s.drives,
+      scanRoot: s.scanRoot,
+      elevated: s.elevated,
+      scanning: s.scanning,
+    })),
+  );
   const [open, setOpen] = useState(false);
   if (!isWindows() || elevated || scanning || !isDriveRoot(scanRoot, drives)) return null;
   return (

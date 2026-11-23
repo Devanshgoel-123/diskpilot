@@ -1,4 +1,5 @@
 import { HardDrive, Usb } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/ui/section";
@@ -13,7 +14,14 @@ import { useApp } from "@/lib/store";
  * macOS lists just the home volume, which the storage strip already shows.
  */
 export function DriveList() {
-  const { drives, scanning, summary, scanFolder } = useApp();
+  const { drives, scanning, summary, scanFolder } = useApp(
+    useShallow((s) => ({
+      drives: s.drives,
+      scanning: s.scanning,
+      summary: s.summary,
+      scanFolder: s.scanFolder,
+    })),
+  );
   if (!isWindows() || drives.length < 2) return null;
 
   return (

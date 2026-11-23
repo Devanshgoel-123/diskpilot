@@ -1,4 +1,5 @@
 import { Check, ChevronDown, HardDrive, House, Usb } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 
 import { Button } from "@/components/ui/button";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
@@ -14,7 +15,15 @@ import { useApp } from "@/lib/store";
  * not start a scan.
  */
 export function DrivePicker() {
-  const { drives, scanRoot, setScanRoot, scanning, env } = useApp();
+  const { drives, scanRoot, setScanRoot, scanning, env } = useApp(
+    useShallow((s) => ({
+      drives: s.drives,
+      scanRoot: s.scanRoot,
+      setScanRoot: s.setScanRoot,
+      scanning: s.scanning,
+      env: s.env,
+    })),
+  );
   if (!isWindows() || drives.length === 0) return null;
 
   const home = env?.homeDir;
