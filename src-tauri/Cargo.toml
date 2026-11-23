@@ -60,6 +60,8 @@ windows-sys = { version = "0.61", features = [
   "Win32_System_IO",
   "Win32_System_Time",
   "Win32_Security",
+  # Keys & secrets: who can read a key file, and making it private.
+  "Win32_Security_Authorization",
   "Win32_System_Threading",
   "Win32_System_Ioctl",
   "Win32_UI_Shell",

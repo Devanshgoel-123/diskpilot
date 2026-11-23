@@ -565,9 +565,14 @@ pub fn remove_from_file(home: &Path, path: &Path, now: i64) -> Result<u64, Remov
             count += redact_line(&line, &mut redacted);
             out.write_all(&redacted)?;
         }
+        // Close both files before the move: Windows may refuse to replace an
+        // open one.
+        drop(reader);
         let file = out.into_inner().map_err(|e| e.into_error())?;
-        crate::fsmode::set_file_mode(&file, crate::fsmode::mode(&before))?;
         file.sync_all()?;
+        drop(file);
+        // The same mode (Mac) or access list (Windows) as the transcript.
+        crate::fsmode::copy_access(path, &before, &tmp)?;
         // An agent that appended meanwhile would lose those lines.
         if stamp(&path.metadata()?) != stamp(&before) {
             return Err(RemoveError::Changed);
@@ -683,9 +688,7 @@ mod tests {
             "{{\"t\":\"use {key} now\"}}\n{{\"t\":\"clean\"}}\n{{\"k\":\"{pem}\",\"n\":1}}\n"
         );
         let log = transcript(&home, &body);
-        #[cfg(unix)]
-        std::fs::set_permissions(&log, std::os::unix::fs::PermissionsExt::from_mode(0o600))
-            .unwrap();
+        crate::fsmode::make_private(&log).unwrap();
 
         assert_eq!(remove_from_file(&home, &log, LATER).unwrap(), 2);
         let after = std::fs::read_to_string(&log).unwrap();
@@ -696,12 +699,10 @@ mod tests {
         for l in after.lines() {
             serde_json::from_str::<serde_json::Value>(l).unwrap();
         }
-        #[cfg(unix)]
-        {
-            let mode =
-                std::os::unix::fs::PermissionsExt::mode(&log.metadata().unwrap().permissions());
-            assert_eq!(mode & 0o777, 0o600);
-        }
+        assert!(
+            !crate::fsmode::others_can_read(&log, &log.metadata().unwrap()),
+            "the transcript keeps who can read it"
+        );
         assert!(scan_file(&log, &AtomicBool::new(false)).is_empty());
     }
 

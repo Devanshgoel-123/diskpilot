@@ -40,10 +40,15 @@ import { formatCount, formatRelative, tildify } from "@/lib/format";
 import { useApp } from "@/lib/store";
 import type { KeyFile, KeyKind } from "@/lib/types";
 import { usePage } from "@/lib/usePage";
-import { words } from "@/lib/platform";
+import { isWindows, words } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
 import { useKeys } from "./keysStore";
+
+/** Where the key that encrypts the list is kept, used after "in". */
+function keyStore(): string {
+  return isWindows() ? "Windows Credential Manager" : "your Keychain";
+}
 
 // ---- Pieces ---------------------------------------------------------------------
 
@@ -383,8 +388,10 @@ function KeyRow({
                 can open this file.
               </p>
               <p>
-                Make private lets only your account read and change it (permissions 600). The file
-                stays where it is and its contents don’t change.
+                {isWindows()
+                  ? "Make private lets only your account, SYSTEM and Administrators read and change it, and stops it taking permissions from its folder."
+                  : "Make private lets only your account read and change it (permissions 600)."}{" "}
+                The file stays where it is and its contents don’t change.
               </p>
             </TooltipContent>
           </Tooltip>
@@ -558,8 +565,7 @@ export function KeysPage() {
                 <div className="flex max-w-[340px] items-start gap-2 pt-1 text-xs leading-relaxed text-muted-foreground">
                   <Lock className="mt-0.5 size-3.5 shrink-0 text-tier-safe" aria-hidden />
                   <p>
-                    Contents are never shown or sent. Saved encrypted, with the key in your
-                    Keychain.{" "}
+                    Contents are never shown or sent. Saved encrypted, with the key in {keyStore()}.{" "}
                     <button
                       type="button"
                       aria-expanded={howItWorks}
@@ -576,7 +582,7 @@ export function KeysPage() {
                   Files are found by their names during a scan. DiskPilot reads at most the first
                   512 bytes of a file to tell a key from a certificate, never shows what is inside,
                   and never sends anything. This list and your labels are saved encrypted, with the
-                  key in your Keychain. There is no export, by design.
+                  key in {keyStore()}. There is no export, by design.
                 </p>
               ) : null}
 

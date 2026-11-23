@@ -64,7 +64,7 @@ pub struct RealFileOps;
 /// trashItemAtURL). Finder is not asked: it played its Trash sound on every
 /// request and made each one wait on an Apple event. The item lands in the
 /// Trash as with Finder, though Finder may not offer "Put Back" for it.
-fn move_to_trash(path: &Path) -> io::Result<()> {
+pub(crate) fn move_to_trash(path: &Path) -> io::Result<()> {
     #[cfg(target_os = "macos")]
     {
         use trash::macos::{DeleteMethod, TrashContextExtMacos};
