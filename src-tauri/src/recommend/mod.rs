@@ -53,7 +53,7 @@ pub fn recommend(
         let path = PathBuf::from(&loc.path);
         match policy.expand {
             Expand::Whole => {
-                if loc.bytes >= policy.min_bytes {
+                if loc.bytes >= policy.min_bytes && !node_modules_outside_a_project(policy, &path) {
                     candidates.push(Candidate {
                         path,
                         bytes: loc.bytes,
@@ -244,6 +244,18 @@ pub fn backup_info(backup: &Path) -> Option<BackupInfo> {
     })
 }
 
+/// A `node_modules` with no package.json or lockfile beside it is not a
+/// project's dependencies: it is npm's global packages (`%APPDATA%\npm`,
+/// `~/.npm-global/lib`), a Node install's own, or similar. Removing it takes
+/// away command-line tools that no project lockfile brings back, so it is
+/// never offered.
+fn node_modules_outside_a_project(policy: &Policy, path: &Path) -> bool {
+    policy.rule_id == "node.node-modules"
+        && path
+            .parent()
+            .is_none_or(|project| project_activity_ms(project).is_none())
+}
+
 /// Most recent modification among a project's dependency manifests.
 fn project_activity_ms(project: &Path) -> Option<i64> {
     [
@@ -388,8 +400,19 @@ mod tests {
         recommend(s, index, &Classifier::macos(HOME), 0)
     }
 
+    /// A project folder on disk with a package.json, so its node_modules is
+    /// a project's dependencies. Returns the node_modules path.
+    fn project_node_modules(dir: &tempfile::TempDir) -> String {
+        let project = dir.path().join("code").join("a");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::write(project.join("package.json"), "{}").unwrap();
+        project.join("node_modules").display().to_string()
+    }
+
     #[test]
     fn maps_rules_to_tiers_and_methods() {
+        let dir = crate::test_support::sandbox();
+        let nm = project_node_modules(&dir);
         let s = summary(
             vec![
                 loc(
@@ -397,11 +420,7 @@ mod tests {
                     2_000_000_000,
                     "xcode.derived-data",
                 ),
-                loc(
-                    "/Users/test/code/a/node_modules",
-                    300_000_000,
-                    "node.node-modules",
-                ),
+                loc(&nm, 300_000_000, "node.node-modules"),
                 loc(
                     "/Users/test/Library/Containers/com.docker.docker",
                     9_000_000_000,
@@ -517,16 +536,17 @@ mod tests {
 
     #[test]
     fn nested_actionable_items_are_not_double_counted() {
+        let dir = crate::test_support::sandbox();
+        let nm = project_node_modules(&dir);
+        let inner = Path::new(&nm).join("x");
+        std::fs::create_dir_all(&inner).unwrap();
+        std::fs::write(inner.join("package.json"), "{}").unwrap();
         let s = summary(
             vec![
                 loc("/Users/test/.cache", 3_000_000_000, "xdg.cache"),
+                loc(&nm, 300_000_000, "node.node-modules"),
                 loc(
-                    "/Users/test/code/a/node_modules",
-                    300_000_000,
-                    "node.node-modules",
-                ),
-                loc(
-                    "/Users/test/code/a/node_modules/x/node_modules",
+                    &inner.join("node_modules").display().to_string(),
                     200_000_000,
                     "node.node-modules",
                 ),
@@ -535,7 +555,30 @@ mod tests {
         );
         let recs = run(&s, &DirIndex::new());
         assert_eq!(recs.len(), 1);
-        assert_eq!(recs[0].path, "/Users/test/code/a/node_modules");
+        assert_eq!(recs[0].path, nm);
+    }
+
+    #[test]
+    fn node_modules_outside_a_project_is_never_offered() {
+        // npm's global packages: no package.json or lockfile beside them.
+        let dir = crate::test_support::sandbox();
+        let global = dir.path().join("AppData").join("Roaming").join("npm");
+        std::fs::create_dir_all(global.join("node_modules")).unwrap();
+        let project = project_node_modules(&dir);
+        let s = summary(
+            vec![
+                loc(
+                    &global.join("node_modules").display().to_string(),
+                    1_100_000_000,
+                    "node.node-modules",
+                ),
+                loc(&project, 300_000_000, "node.node-modules"),
+            ],
+            vec![],
+        );
+        let recs = run(&s, &DirIndex::new());
+        let paths: Vec<&str> = recs.iter().map(|r| r.path.as_str()).collect();
+        assert_eq!(paths, vec![project.as_str()]);
     }
 
     #[test]

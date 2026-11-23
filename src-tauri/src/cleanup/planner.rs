@@ -80,6 +80,44 @@ pub fn build_plan(
         });
     }
 
+    // Dependencies of a project worked on recently: it stops running until
+    // they are reinstalled, so name each one before anything is moved.
+    let active: Vec<String> = items
+        .iter()
+        .filter_map(|i| recommendations.iter().find(|r| r.id == i.recommendation_id))
+        .filter(|r| r.classification.rule_id == "node.node-modules")
+        .filter_map(|r| {
+            let days = (now_ms - r.last_activity_ms?) / crate::devtools::DAY_MS;
+            (days < crate::devtools::STALE_DAYS).then(|| {
+                let project = Path::new(&r.path)
+                    .parent()
+                    .and_then(Path::file_name)
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| r.path.clone());
+                match days {
+                    0 => format!("{project} (today)"),
+                    1 => format!("{project} (yesterday)"),
+                    d => format!("{project} ({d} days ago)"),
+                }
+            })
+        })
+        .collect();
+    if !active.is_empty() {
+        let (n, them) = if active.len() == 1 {
+            ("1 project".to_string(), "It stops")
+        } else {
+            (format!("{} projects", active.len()), "They stop")
+        };
+        warnings.insert(
+            0,
+            format!(
+                "Still in use? The package files of {n} changed in the last {} days: {}. {them} running until you reinstall their dependencies (npm install).",
+                crate::devtools::STALE_DAYS,
+                active.join(", ")
+            ),
+        );
+    }
+
     match method {
         CleanupMethod::Trash => warnings.push(if cfg!(windows) {
             "Items go to the Recycle Bin. Their space is freed only when you empty the Recycle Bin; until then you can restore them."
@@ -189,6 +227,52 @@ mod tests {
         std::fs::create_dir_all(home.join("proj/node_modules")).unwrap();
         std::fs::create_dir_all(home.join("Library/Caches/com.x")).unwrap();
         (dir, home)
+    }
+
+    #[test]
+    fn names_recently_active_projects_before_anything_moves() {
+        let (_d, home) = fixture();
+        let day = crate::devtools::DAY_MS;
+        let now = 1_000 * day;
+        let mut recs = Vec::new();
+        for (name, days_ago) in [("app", 12), ("old", 200)] {
+            let nm = home.join(name).join("node_modules");
+            std::fs::create_dir_all(&nm).unwrap();
+            let mut r = rec(
+                &nm.display().to_string(),
+                "node.node-modules",
+                vec![CleanupMethod::Trash],
+            );
+            r.last_activity_ms = Some(now - days_ago * day);
+            recs.push(r);
+        }
+        let ids: Vec<String> = recs.iter().map(|r| r.id.clone()).collect();
+        let plan = build_plan(
+            "p".into(),
+            &recs,
+            &ids,
+            CleanupMethod::Trash,
+            &home,
+            &home,
+            now,
+        );
+        assert_eq!(plan.items.len(), 2, "still allowed, only warned about");
+        let first = &plan.warnings[0];
+        assert!(first.starts_with("Still in use?"), "{first}");
+        assert!(first.contains("app (12 days ago)"), "{first}");
+        assert!(!first.contains("old"), "inactive projects are not named");
+
+        // Only inactive projects: no such warning.
+        let plan = build_plan(
+            "p".into(),
+            &recs,
+            &ids[1..],
+            CleanupMethod::Trash,
+            &home,
+            &home,
+            now,
+        );
+        assert!(!plan.warnings.iter().any(|w| w.starts_with("Still in use?")));
     }
 
     #[test]
