@@ -15,11 +15,10 @@ import { formatBytes, formatCount, tildify } from "@/lib/format";
 import { isWindows, words } from "@/lib/platform";
 import { useApp } from "@/lib/store";
 import { WindowsSections } from "@/features/windows/sections";
-import { FastScanOffer } from "@/components/layout/FastScanDialog";
+import { DriveList, FastScanOffer } from "@/features/windows/lazy";
 
 import { AssistantPrompt } from "./AssistantPrompt";
 import { CategoryList } from "./CategoryList";
-import { DriveList } from "./DriveList";
 import { LocationList } from "./LocationList";
 import { PrivateFoldersNotice } from "./PrivateFoldersNotice";
 import { TrashWaitingNotice } from "./TrashWaitingNotice";

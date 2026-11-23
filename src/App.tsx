@@ -2,6 +2,7 @@ import { AlertCircle, MonitorX, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
+import { CategoryIconSprite } from "@/components/shared/CategoryBadge";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
@@ -166,6 +167,7 @@ export function App() {
         </main>
       </div>
       <ScanSounds />
+      <CategoryIconSprite />
       <EmptyTrashDialog />
       <WhatsNewAfterUpdate />
       <ShortcutsDialog open={shortcuts.open} onOpenChange={shortcuts.setOpen} />
