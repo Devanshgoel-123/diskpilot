@@ -60,7 +60,10 @@ const checked = () =>
   screen
     .getAllByRole("checkbox")
     .filter((b) => (b as HTMLInputElement).checked)
-    .map((b) => b.getAttribute("aria-label")?.replace("Select ", ""));
+    .map((b) => b.getAttribute("aria-label") ?? "")
+    // The section headers' own "Select all" boxes.
+    .filter((label) => !label.startsWith("Select all"))
+    .map((label) => label.replace("Select ", ""));
 
 beforeEach(() => {
   useApp.setState({
@@ -130,5 +133,35 @@ describe("shift-click range selection", () => {
     // The shift-click itself set a new anchor.
     shiftClick("s1");
     expect(checked()).toEqual(["s1", "s2", "s3"]);
+  });
+});
+
+describe("selecting a whole section", () => {
+  const all = (name: string) => screen.getByRole("checkbox", { name }) as HTMLInputElement;
+
+  it("selects every item of the section from its header, then clears them", () => {
+    fireEvent.click(all("Select all 4 likely safe"));
+    expect(checked()).toEqual(["s1", "s2", "s3", "s4"]);
+    expect(all("Select all 4 likely safe").checked).toBe(true);
+
+    fireEvent.click(all("Select all 4 likely safe"));
+    expect(checked()).toEqual([]);
+  });
+
+  it("shows a dash when only some are selected, and leaves other sections alone", () => {
+    click("r3");
+    click("s1");
+    const safe = all("Select all 4 likely safe");
+    expect(safe.checked).toBe(false);
+    expect(safe.indeterminate).toBe(true);
+
+    fireEvent.click(safe);
+    expect(checked()).toEqual(["s1", "s2", "s3", "s4", "r3"]);
+  });
+
+  it("counts only items that can be removed", () => {
+    // r2 has no automated action, and Keep has none at all.
+    expect(all("Select all 3 review first")).toBeVisible();
+    expect(screen.queryByRole("checkbox", { name: /Select all .* keep/ })).toBeNull();
   });
 });

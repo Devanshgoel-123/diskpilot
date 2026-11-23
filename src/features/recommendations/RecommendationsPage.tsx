@@ -129,6 +129,19 @@ export function RecommendationsPage() {
     setAnchor(null);
   };
 
+  /** Select (`on`) or clear every item of one section, keeping the rest. */
+  const selectSection = (ids: string[], on: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (on) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+    setAnchor(null);
+  };
+
   const selectAllSafe = () =>
     setSelected(new Set(byTier.likelySafe.filter((r) => r.methods.length).map((r) => r.id)));
 
@@ -291,15 +304,38 @@ export function RecommendationsPage() {
                       </Button>
                     ) : null}
                   </header>
-                  <div
-                    className="hidden items-center gap-3 border-b border-border px-2 py-1.5 text-xs text-subtle-foreground md:flex"
-                    aria-hidden
-                  >
-                    <span className="w-5 shrink-0" />
-                    <span className="min-w-0 flex-1">Item</span>
-                    <span className="w-[140px] shrink-0">Category</span>
-                    <span className="w-32 shrink-0 text-right">Size</span>
-                    <span className="w-3.5 shrink-0" />
+                  <div className="hidden items-center gap-3 border-b border-border px-2 py-1.5 text-xs text-subtle-foreground md:flex">
+                    <span className="flex w-5 shrink-0 justify-center">
+                      {(() => {
+                        const ids = byTier[tier].filter((r) => r.methods.length).map((r) => r.id);
+                        if (!ids.length) return null;
+                        const picked = ids.filter((id) => liveSelection.has(id)).length;
+                        const all = picked === ids.length;
+                        return (
+                          <input
+                            type="checkbox"
+                            checked={all}
+                            ref={(el) => {
+                              if (el) el.indeterminate = picked > 0 && !all;
+                            }}
+                            onChange={() => selectSection(ids, !all)}
+                            aria-label={`Select all ${ids.length} ${TIER_META[tier].label.toLowerCase()}`}
+                            title={all ? "Clear selection" : `Select all ${ids.length}`}
+                            className="size-3.5 accent-[var(--accent)]"
+                          />
+                        );
+                      })()}
+                    </span>
+                    <span className="min-w-0 flex-1" aria-hidden>
+                      Item
+                    </span>
+                    <span className="w-[140px] shrink-0" aria-hidden>
+                      Category
+                    </span>
+                    <span className="w-32 shrink-0 text-right" aria-hidden>
+                      Size
+                    </span>
+                    <span className="w-3.5 shrink-0" aria-hidden />
                   </div>
                   <ul>
                     {byTier[tier].map((r) => (
