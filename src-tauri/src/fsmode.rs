@@ -137,7 +137,6 @@ pub fn make_private(path: &Path) -> io::Result<()> {
 mod windows {
     use std::ffi::c_void;
     use std::io;
-    use std::os::windows::ffi::OsStrExt;
     use std::path::Path;
     use std::ptr::{null, null_mut};
 
@@ -179,7 +178,7 @@ mod windows {
     }
 
     fn wide(path: &Path) -> Vec<u16> {
-        path.as_os_str().encode_wide().chain([0]).collect()
+        crate::platform::wide(path.as_os_str())
     }
 
     fn check(err: u32) -> io::Result<()> {

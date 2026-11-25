@@ -45,11 +45,6 @@ import { cn } from "@/lib/utils";
 
 import { useKeys } from "./keysStore";
 
-/** Where the key that encrypts the list is kept, used after "in". */
-function keyStore(): string {
-  return isWindows() ? "Windows Credential Manager" : "your Keychain";
-}
-
 // ---- Pieces ---------------------------------------------------------------------
 
 const KIND_ICON: Record<KeyKind, LucideIcon> = {
@@ -565,7 +560,8 @@ export function KeysPage() {
                 <div className="flex max-w-[340px] items-start gap-2 pt-1 text-xs leading-relaxed text-muted-foreground">
                   <Lock className="mt-0.5 size-3.5 shrink-0 text-tier-safe" aria-hidden />
                   <p>
-                    Contents are never shown or sent. Saved encrypted, with the key in {keyStore()}.{" "}
+                    Contents are never shown or sent. Saved encrypted, with the key in{" "}
+                    {words().keyStore}.{" "}
                     <button
                       type="button"
                       aria-expanded={howItWorks}
@@ -582,7 +578,7 @@ export function KeysPage() {
                   Files are found by their names during a scan. DiskPilot reads at most the first
                   512 bytes of a file to tell a key from a certificate, never shows what is inside,
                   and never sends anything. This list and your labels are saved encrypted, with the
-                  key in {keyStore()}. There is no export, by design.
+                  key in {words().keyStore}. There is no export, by design.
                 </p>
               ) : null}
 

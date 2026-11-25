@@ -10,6 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::classifier::{Classifier, FsProbe};
+use crate::devtools::node::project_activity_ms;
 use crate::model::{Classification, Recommendation, ScanSummary, Tier};
 use crate::scanner::{to_ms, DirIndex};
 use policies::{
@@ -254,21 +255,6 @@ fn node_modules_outside_a_project(policy: &Policy, path: &Path) -> bool {
         && path
             .parent()
             .is_none_or(|project| project_activity_ms(project).is_none())
-}
-
-/// Most recent modification among a project's dependency manifests.
-fn project_activity_ms(project: &Path) -> Option<i64> {
-    [
-        "package.json",
-        "package-lock.json",
-        "pnpm-lock.yaml",
-        "yarn.lock",
-        "bun.lockb",
-    ]
-    .iter()
-    .filter_map(|f| project.join(f).symlink_metadata().ok())
-    .filter_map(|m| m.modified().ok().and_then(to_ms))
-    .max()
 }
 
 /// Large installers and archives sitting in ~/Downloads.

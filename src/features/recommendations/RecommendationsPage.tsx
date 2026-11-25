@@ -20,6 +20,7 @@ import { words } from "@/lib/platform";
 import { CleanupDialog } from "./CleanupDialog";
 import { RecommendationRow } from "./RecommendationRow";
 import { isSmallToolItem, SMALL_TOOL_ITEM_BYTES } from "./smallItems";
+import { PartialCheckbox } from "@/components/shared/PartialCheckbox";
 
 type Filter = Tier | "all";
 
@@ -312,16 +313,12 @@ export function RecommendationsPage() {
                         const picked = ids.filter((id) => liveSelection.has(id)).length;
                         const all = picked === ids.length;
                         return (
-                          <input
-                            type="checkbox"
+                          <PartialCheckbox
                             checked={all}
-                            ref={(el) => {
-                              if (el) el.indeterminate = picked > 0 && !all;
-                            }}
+                            partial={picked > 0}
                             onChange={() => selectSection(ids, !all)}
-                            aria-label={`Select all ${ids.length} ${TIER_META[tier].label.toLowerCase()}`}
+                            label={`Select all ${ids.length} ${TIER_META[tier].label.toLowerCase()}`}
                             title={all ? "Clear selection" : `Select all ${ids.length}`}
-                            className="size-3.5 accent-[var(--accent)]"
                           />
                         );
                       })()}

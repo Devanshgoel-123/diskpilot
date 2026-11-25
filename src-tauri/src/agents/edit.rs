@@ -124,10 +124,12 @@ fn write_atomic(path: &Path, bytes: &[u8], mode: u32) -> Result<()> {
         f.write_all(bytes).map_err(|e| AppError::io(&tmp, &e))?;
         f.sync_all().map_err(|e| AppError::io(&tmp, &e))?;
         crate::fsmode::set_mode(&tmp, mode).map_err(|e| AppError::io(&tmp, &e))?;
-        // Windows has no mode: carry the file's own access list over, so a
-        // config only you could read stays that way.
+        // Windows has no mode (it reads as 0): a rewritten config keeps its
+        // own access list, so one only you could read stays that way.
+        // DiskPilot's own files (600) were just made private and keep that,
+        // even over an older copy that was not.
         #[cfg(windows)]
-        if let Ok(meta) = path.metadata() {
+        if let (0, Ok(meta)) = (mode, path.metadata()) {
             crate::fsmode::copy_access(path, &meta, &tmp).map_err(|e| AppError::io(&tmp, &e))?;
         }
         std::fs::rename(&tmp, path).map_err(|e| AppError::io(path, &e))
