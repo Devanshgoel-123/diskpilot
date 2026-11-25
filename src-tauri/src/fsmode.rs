@@ -148,10 +148,10 @@ mod windows {
     };
     use windows_sys::Win32::Security::{
         CreateWellKnownSid, EqualSid, GetAce, GetSecurityDescriptorControl, GetTokenInformation,
-        TokenUser, WinBuiltinAdministratorsSid, WinCreatorOwnerSid, WinLocalSystemSid, ACL,
-        DACL_SECURITY_INFORMATION, NO_INHERITANCE, OWNER_SECURITY_INFORMATION,
+        TokenOwner, TokenUser, WinBuiltinAdministratorsSid, WinCreatorOwnerSid, WinLocalSystemSid,
+        ACL, DACL_SECURITY_INFORMATION, NO_INHERITANCE, OWNER_SECURITY_INFORMATION,
         PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, SE_DACL_PROTECTED,
-        SUB_CONTAINERS_AND_OBJECTS_INHERIT, TOKEN_QUERY, TOKEN_USER,
+        SUB_CONTAINERS_AND_OBJECTS_INHERIT, TOKEN_INFORMATION_CLASS, TOKEN_QUERY,
         UNPROTECTED_DACL_SECURITY_INFORMATION, WELL_KNOWN_SID_TYPE,
     };
     use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
@@ -255,30 +255,32 @@ mod windows {
         Ok(Sid(buf))
     }
 
-    /// The account DiskPilot runs as. Owns the buffer GetTokenInformation
-    /// filled: the TOKEN_USER's SID pointer points into that same buffer, so
-    /// it must never be copied elsewhere. u64 storage keeps it aligned.
-    struct Me(Vec<u64>);
+    /// A SID read from DiskPilot's process token. Owns the buffer
+    /// GetTokenInformation filled: the SID pointer points into that same
+    /// buffer, so it must never be copied elsewhere. u64 storage keeps the
+    /// TOKEN_USER / TOKEN_OWNER at its start aligned.
+    struct TokenSid(Vec<u64>);
 
-    impl Me {
+    impl TokenSid {
         fn sid(&self) -> PSID {
-            unsafe { (*(self.0.as_ptr() as *const TOKEN_USER)).User.Sid }
+            // TOKEN_USER starts with its SID_AND_ATTRIBUTES, whose first
+            // field is the SID; TOKEN_OWNER's only field is the SID.
+            unsafe { *(self.0.as_ptr() as *const PSID) }
         }
     }
 
-    fn me() -> io::Result<Me> {
+    fn token_sid(class: TOKEN_INFORMATION_CLASS) -> io::Result<TokenSid> {
         let mut token: HANDLE = null_mut();
         if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {
             return Err(io::Error::last_os_error());
         }
         let mut len = 0u32;
-        unsafe { GetTokenInformation(token, TokenUser, null_mut(), 0, &mut len) };
-        // u64 storage keeps TOKEN_USER aligned.
+        unsafe { GetTokenInformation(token, class, null_mut(), 0, &mut len) };
         let mut buf = vec![0u64; (len as usize).div_ceil(8).max(1)];
         let ok = unsafe {
             GetTokenInformation(
                 token,
-                TokenUser,
+                class,
                 buf.as_mut_ptr() as *mut c_void,
                 (buf.len() * 8) as u32,
                 &mut len,
@@ -289,17 +291,30 @@ mod windows {
         if ok == 0 {
             return Err(err);
         }
-        Ok(Me(buf))
+        Ok(TokenSid(buf))
+    }
+
+    /// The account DiskPilot runs as.
+    fn me() -> io::Result<TokenSid> {
+        token_sid(TokenUser)
     }
 
     fn equal(a: PSID, b: PSID) -> bool {
         unsafe { EqualSid(a, b) != 0 }
     }
 
+    /// Owned by your account, or by the owner your files get by default.
+    /// Run as administrator, new files are owned by Administrators rather
+    /// than by you, and they are still yours to change.
     pub fn is_mine(path: &Path) -> io::Result<bool> {
         let d = descriptor(path, OWNER_SECURITY_INFORMATION)?;
-        let me = me()?;
-        Ok(!d.owner.is_null() && equal(d.owner, me.sid()))
+        if d.owner.is_null() {
+            return Ok(false);
+        }
+        if equal(d.owner, me()?.sid()) {
+            return Ok(true);
+        }
+        Ok(equal(d.owner, token_sid(TokenOwner)?.sid()))
     }
 
     pub fn others_can_read(path: &Path) -> io::Result<bool> {
