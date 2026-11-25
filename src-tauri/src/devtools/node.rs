@@ -95,15 +95,17 @@ pub fn analyze(ctx: &Ctx) -> (ToolReport, Vec<Recommendation>) {
                 detail: match days {
                     Some(d) if stale => format!("Package files unchanged for {d} days"),
                     Some(d) => format!("Package files changed {d} days ago"),
-                    None => "No package manifest found next to it".into(),
+                    // Global packages or a Node install's own: not offered
+                    // for cleanup (see recommend::node_modules_outside_a_project).
+                    None => "Not a project: no package.json beside it, such as npm's global packages. Not removed by DiskPilot.".into(),
                 },
-                state: if stale {
-                    ItemState::Stale
-                } else {
-                    ItemState::Current
+                state: match days {
+                    None => ItemState::Info,
+                    Some(_) if stale => ItemState::Stale,
+                    Some(_) => ItemState::Current,
                 },
                 last_used_ms: activity,
-                recommendation_id: Some(path.display().to_string()),
+                recommendation_id: activity.map(|_| path.display().to_string()),
             }
         })
         .collect();

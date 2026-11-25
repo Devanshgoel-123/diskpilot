@@ -124,6 +124,14 @@ fn write_atomic(path: &Path, bytes: &[u8], mode: u32) -> Result<()> {
         f.write_all(bytes).map_err(|e| AppError::io(&tmp, &e))?;
         f.sync_all().map_err(|e| AppError::io(&tmp, &e))?;
         crate::fsmode::set_mode(&tmp, mode).map_err(|e| AppError::io(&tmp, &e))?;
+        // Windows has no mode (it reads as 0): a rewritten config keeps its
+        // own access list, so one only you could read stays that way.
+        // DiskPilot's own files (600) were just made private and keep that,
+        // even over an older copy that was not.
+        #[cfg(windows)]
+        if let (0, Ok(meta)) = (mode, path.metadata()) {
+            crate::fsmode::copy_access(path, &meta, &tmp).map_err(|e| AppError::io(&tmp, &e))?;
+        }
         std::fs::rename(&tmp, path).map_err(|e| AppError::io(path, &e))
     })();
     if result.is_err() {
@@ -349,11 +357,11 @@ pub fn forget(data_dir: Option<&Path>, id: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
+    fn private(path: &Path) -> bool {
+        !crate::fsmode::others_can_read(path, &path.metadata().unwrap())
+    }
 
     #[test]
-    #[cfg(unix)]
     fn json_edits_keep_key_order_permissions_and_a_backup() {
         let dir = crate::test_support::sandbox();
         let data = dir.path().join("data");
@@ -363,7 +371,7 @@ mod tests {
             "{\n  \"z\": 1,\n  \"mcpServers\": {\n    \"b\": {\"type\": \"stdio\", \"command\": \"x\", \"env\": {\"TOKEN\": \"s\"}},\n    \"a\": {\"type\": \"http\", \"url\": \"https://h\"}\n  },\n  \"m\": true\n}\n",
         )
         .unwrap();
-        std::fs::set_permissions(&cfg, std::fs::Permissions::from_mode(0o600)).unwrap();
+        crate::fsmode::make_private(&cfg).unwrap();
 
         disconnect_json(
             Some(&data),
@@ -379,19 +387,13 @@ mod tests {
         assert!(text.find("\"z\"").unwrap() < text.find("\"mcpServers\"").unwrap());
         assert!(!text.contains("\"b\""));
         assert!(text.ends_with("}\n"));
-        assert_eq!(
-            std::fs::metadata(&cfg).unwrap().permissions().mode() & 0o777,
-            0o600
-        );
+        assert!(private(&cfg), "the config keeps who can read it");
         let backups: Vec<_> = std::fs::read_dir(data.join("agent-config-backups"))
             .unwrap()
             .collect();
         assert_eq!(backups.len(), 1);
         let stash = data.join(STASH_FILE);
-        assert_eq!(
-            std::fs::metadata(&stash).unwrap().permissions().mode() & 0o777,
-            0o600
-        );
+        assert!(private(&stash));
 
         let items = stashed(&data);
         assert_eq!(items.len(), 1);

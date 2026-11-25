@@ -28,6 +28,7 @@ import { isWindows } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
 import { TOOL_MARKS } from "./toolMarks";
+import { PartialCheckbox } from "@/components/shared/PartialCheckbox";
 
 const TOOL_ICON: Record<string, LucideIcon> = {
   cursor: MousePointer2,
@@ -105,32 +106,6 @@ function StatePill({ state }: { state: ItemState }) {
     >
       {meta.label}
     </span>
-  );
-}
-
-/** A checkbox that shows a partial selection as a dash. */
-function Check({
-  checked,
-  partial = false,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  partial?: boolean;
-  onChange: () => void;
-  label: string;
-}) {
-  return (
-    <input
-      type="checkbox"
-      checked={checked}
-      ref={(el) => {
-        if (el) el.indeterminate = partial;
-      }}
-      onChange={onChange}
-      aria-label={label}
-      className="size-3.5 shrink-0 accent-[var(--accent)]"
-    />
   );
 }
 
@@ -264,7 +239,7 @@ export function ToolCard({
                   </div>
                   {checkable ? (
                     <label className="flex shrink-0 cursor-pointer items-center gap-1.5 pt-0.5 text-2xs text-muted-foreground">
-                      <Check
+                      <PartialCheckbox
                         checked={picked === ids.length}
                         partial={picked > 0 && picked < ids.length}
                         onChange={() => onSelect(ids, picked < ids.length)}
@@ -292,7 +267,7 @@ export function ToolCard({
                         {checkable ? (
                           <span className="flex w-3.5 shrink-0 justify-center">
                             {recId ? (
-                              <Check
+                              <PartialCheckbox
                                 checked={isPicked}
                                 onChange={() => onSelect([recId], !isPicked)}
                                 label={`Select ${item.label}`}

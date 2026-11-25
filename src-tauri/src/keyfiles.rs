@@ -1,5 +1,5 @@
 //! Keys & secrets: private keys, certificate bundles, `.env` files and cloud
-//! credentials found on this Mac, with what makes each one risky, and labels
+//! credentials found on this computer, with what makes each one risky, and labels
 //! the person adds (which provider a key is for) so they can find it later.
 //!
 //! How it is kept safe:
@@ -8,18 +8,18 @@
 //!   [`HEADER_BYTES`] bytes are read. Nothing read is stored, logged, shown or
 //!   sent anywhere; only the conclusion ("private key") is kept.
 //! - The list and the labels are saved **encrypted** (AES-256-GCM) in
-//!   DiskPilot's data folder, with the key in the macOS Keychain, so the
+//!   DiskPilot's data folder, with the key in the macOS Keychain (Windows
+//!   Credential Manager on Windows), so the
 //!   saved file alone does not reveal where keys are.
 //! - Nothing here is a recommendation, so key files never appear in the
 //!   Cleanup list or in anything the Assistant sees.
-//! - There is no export. Actions are: show in Finder, copy the path, make the
-//!   file readable only by you, and move it to the Trash.
+//! - There is no export. Actions are: show in Finder (File Explorer), copy the
+//!   path, make the file readable only by you, and move it to the Trash (the
+//!   Recycle Bin).
 
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsStr;
 use std::io::Read;
-#[cfg(unix)]
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -35,6 +35,18 @@ const DAY_MS: i64 = 86_400_000;
 const STORE_FILE: &str = "keyfiles.bin";
 const KEYCHAIN_SERVICE: &str = "dev.diskpilot.app";
 const KEYCHAIN_ACCOUNT: &str = "keys-index";
+const COMPUTER: &str = if cfg!(windows) { "PC" } else { "Mac" };
+const BIN: &str = if cfg!(windows) {
+    "Recycle Bin"
+} else {
+    "Trash"
+};
+/// Where the encryption key is kept, for messages.
+const KEY_STORE: &str = if cfg!(windows) {
+    "Windows Credential Manager"
+} else {
+    "Keychain"
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -344,23 +356,24 @@ fn in_git_project(path: &Path, home: &Path) -> Option<PathBuf> {
 }
 
 /// Whether git would ignore the file, or None when git cannot be asked
-/// without prompting to install developer tools.
+/// (not installed, or on a Mac not without prompting to install developer
+/// tools) or fails.
 fn git_ignored(repo: &Path, path: &Path) -> Option<bool> {
-    let tools = Path::new("/Library/Developer/CommandLineTools/usr/bin/git").exists()
-        || Path::new("/Applications/Xcode.app").exists();
-    if !tools {
-        return None;
-    }
+    let git = git_program()?;
     // The repository may not be the user's own (an unzipped download, say),
     // and git runs commands named in a repository's config, such as
     // core.fsmonitor, when it reads the index. So: never read the index
     // (--no-index), turn those settings off, and ignore system config.
-    let mut cmd = std::process::Command::new("/usr/bin/git");
+    let mut cmd = std::process::Command::new(git);
     cmd.args([
         "-c",
         "core.fsmonitor=false",
         "-c",
-        "core.hooksPath=/dev/null",
+        if cfg!(windows) {
+            "core.hooksPath=NUL"
+        } else {
+            "core.hooksPath=/dev/null"
+        },
         "-c",
         "core.untrackedCache=false",
         "-C",
@@ -374,11 +387,20 @@ fn git_ignored(repo: &Path, path: &Path) -> Option<bool> {
     cmd.stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
+    crate::devtools::hide_console(&mut cmd);
     let mut child = cmd.spawn().ok()?;
     let start = std::time::Instant::now();
     loop {
         match child.try_wait() {
-            Ok(Some(status)) => return Some(status.code() == Some(0)),
+            // 0: ignored, 1: not ignored. Anything else is git failing, which
+            // must not be reported as "could be committed".
+            Ok(Some(status)) => {
+                return match status.code() {
+                    Some(0) => Some(true),
+                    Some(1) => Some(false),
+                    _ => None,
+                }
+            }
             Ok(None) if start.elapsed() > std::time::Duration::from_secs(2) => {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -387,6 +409,38 @@ fn git_ignored(repo: &Path, path: &Path) -> Option<bool> {
             Ok(None) => std::thread::sleep(std::time::Duration::from_millis(2)),
             Err(_) => return None,
         }
+    }
+}
+
+/// The git to ask. On a Mac, only when the developer tools are installed, so
+/// /usr/bin/git does not offer to install them. On Windows, Git for Windows
+/// in its usual places; never a `git.exe` from the current folder or PATH,
+/// which a downloaded project could provide.
+fn git_program() -> Option<PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        let tools = Path::new("/Library/Developer/CommandLineTools/usr/bin/git").exists()
+            || Path::new("/Applications/Xcode.app").exists();
+        tools.then(|| PathBuf::from("/usr/bin/git"))
+    }
+    #[cfg(windows)]
+    {
+        let mut roots: Vec<PathBuf> = ["ProgramFiles", "ProgramFiles(x86)"]
+            .iter()
+            .filter_map(std::env::var_os)
+            .map(|p| PathBuf::from(p).join("Git"))
+            .collect();
+        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            roots.push(PathBuf::from(local).join("Programs").join("Git"));
+        }
+        roots
+            .into_iter()
+            .map(|r| r.join("cmd").join("git.exe"))
+            .find(|p| p.is_file())
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        Some(PathBuf::from("/usr/bin/git"))
     }
 }
 
@@ -410,8 +464,6 @@ pub fn report(
     now_ms: i64,
     scanned_at_ms: Option<i64>,
 ) -> (KeysReport, Vec<Found>) {
-    #[cfg(unix)]
-    let uid = unsafe { libc::getuid() };
     struct Item {
         found: Found,
         meta: std::fs::Metadata,
@@ -462,11 +514,11 @@ pub fn report(
         let path = &i.found.path;
         let kind = i.found.kind;
         let mut risks = Vec::new();
-        let others_read = others_can_read(&i.meta);
-        if kind.secret() && others_read {
+        let others_read = kind.secret() && crate::fsmode::others_can_read(path, &i.meta);
+        if others_read {
             risks.push(Risk {
                 kind: RiskKind::OthersCanRead,
-                text: "Other accounts on this Mac can read it.".into(),
+                text: format!("Other accounts on this {COMPUTER} can read it."),
                 serious: true,
             });
         }
@@ -478,6 +530,9 @@ pub fn report(
                     text: match place {
                         "Downloads" => {
                             "In Downloads, where files get shared and uploaded by mistake.".into()
+                        }
+                        _ if cfg!(windows) => {
+                            format!("On {place}, which OneDrive can sync to your other devices.")
                         }
                         _ => format!("On {place}, which iCloud can sync to your other devices."),
                     },
@@ -501,7 +556,7 @@ pub fn report(
         if let Some(n) = i.hash.and_then(|h| copies.get(&h)).filter(|n| **n > 1) {
             risks.push(Risk {
                 kind: RiskKind::Copies,
-                text: format!("{n} identical copies on this Mac."),
+                text: format!("{n} identical copies on this {COMPUTER}."),
                 serious: false,
             });
         }
@@ -530,10 +585,7 @@ pub fn report(
             bytes: i.meta.len(),
             modified_ms,
             label: labels.get(&key).cloned(),
-            #[cfg(unix)]
-            can_fix_permissions: kind.secret() && others_read && i.meta.uid() == uid,
-            #[cfg(not(unix))]
-            can_fix_permissions: false,
+            can_fix_permissions: others_read && crate::fsmode::is_mine(path, &i.meta),
             risks,
             path: key,
         });
@@ -579,16 +631,16 @@ pub struct Keychain;
 impl KeySource for Keychain {
     fn key(&self, create: bool) -> Result<Option<[u8; 32]>, AppError> {
         use base64::Engine;
-        let keychain = |e: keyring::Error| AppError::Other(format!("Keychain error: {e}"));
+        let keychain = |e: keyring::Error| AppError::Other(format!("{KEY_STORE} error: {e}"));
         let entry = keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT).map_err(keychain)?;
         match entry.get_password() {
             Ok(text) => {
                 let raw = base64::engine::general_purpose::STANDARD
                     .decode(text.trim())
-                    .map_err(|_| AppError::Other("The key in the Keychain is damaged.".into()))?;
+                    .map_err(|_| AppError::Other(format!("The key in {KEY_STORE} is damaged.")))?;
                 let key: [u8; 32] = raw
                     .try_into()
-                    .map_err(|_| AppError::Other("The key in the Keychain is damaged.".into()))?;
+                    .map_err(|_| AppError::Other(format!("The key in {KEY_STORE} is damaged.")))?;
                 Ok(Some(key))
             }
             Err(keyring::Error::NoEntry) if create => {
@@ -651,17 +703,18 @@ pub fn save(data_dir: &Path, keys: &dyn KeySource, store: &Store) -> Result<(), 
     {
         use std::io::Write;
         let _ = std::fs::remove_file(&tmp);
-        let mut options = std::fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut f = options.open(&tmp).map_err(|e| AppError::io(&tmp, &e))?;
+        let mut f = crate::fsmode::create_with(
+            std::fs::OpenOptions::new().write(true).create_new(true),
+            0o600,
+        )
+        .open(&tmp)
+        .map_err(|e| AppError::io(&tmp, &e))?;
         f.write_all(&blob).map_err(|e| AppError::io(&tmp, &e))?;
         f.sync_all().map_err(|e| AppError::io(&tmp, &e))?;
     }
+    // Windows has no mode to create it with: make it private now. The user
+    // folder is not always private to the account.
+    crate::fsmode::set_mode(&tmp, 0o600).map_err(|e| AppError::io(&tmp, &e))?;
     std::fs::rename(&tmp, &path).map_err(|e| AppError::io(&path, &e))
 }
 
@@ -738,51 +791,30 @@ pub fn set_label(store: &mut Store, path: &str, label: Option<Label>) -> Result<
     Ok(())
 }
 
-/// Whether accounts other than the owner may read the file. On Windows,
-/// files in the user folder are private to the account by default and
-/// their access lists are not checked here.
-#[cfg(unix)]
-fn others_can_read(meta: &std::fs::Metadata) -> bool {
-    meta.permissions().mode() & 0o044 != 0
-}
-#[cfg(not(unix))]
-fn others_can_read(_meta: &std::fs::Metadata) -> bool {
-    false
-}
-
-/// Make a key readable only by its owner (mode 600). Only regular files the
-/// user owns, never through a link.
-#[cfg(not(unix))]
-pub fn make_private(store: &Store, path: &str) -> Result<(), AppError> {
-    listed(store, path)?;
-    Err(AppError::Other(
-        "Changing permissions is not available on Windows.".into(),
-    ))
-}
-
-/// See the other `make_private`.
-#[cfg(unix)]
+/// Make a key readable only by its owner (mode 600 on a Mac; on Windows only
+/// you, SYSTEM and Administrators). Only regular files the user owns, never
+/// through a link.
 pub fn make_private(store: &Store, path: &str) -> Result<(), AppError> {
     let f = listed(store, path)?;
     let meta = f
         .path
         .symlink_metadata()
         .map_err(|e| AppError::io(&f.path, &e))?;
-    if !meta.is_file() || meta.uid() != unsafe { libc::getuid() } {
+    if !meta.is_file() || !crate::fsmode::is_mine(&f.path, &meta) {
         return Err(AppError::Other(
             "Only your own files can be changed.".into(),
         ));
     }
-    std::fs::set_permissions(&f.path, std::fs::Permissions::from_mode(0o600))
-        .map_err(|e| AppError::io(&f.path, &e))
+    crate::fsmode::make_private(&f.path).map_err(|e| AppError::io(&f.path, &e))
 }
 
-/// Move a key file to the Trash, through the same safety gate as cleanups.
+/// Move a key file to the Trash (the Recycle Bin), through the same safety
+/// gate and the same move as cleanups.
 pub fn move_to_trash(store: &mut Store, path: &str, home: &Path) -> Result<(), AppError> {
     listed(store, path)?;
     let checked = crate::safety::authorize_destructive(path, home, home)?;
-    trash::delete(&checked)
-        .map_err(|e| AppError::Other(format!("Could not move it to the Trash: {e}")))?;
+    crate::cleanup::executor::move_to_trash(&checked)
+        .map_err(|e| AppError::Other(format!("Could not move it to the {BIN}: {e}")))?;
     store
         .files
         .retain(|f| f.path.as_os_str() != OsStr::new(path));
@@ -799,6 +831,25 @@ mod tests {
         fn key(&self, _create: bool) -> Result<Option<[u8; 32]>, AppError> {
             Ok(Some(self.0))
         }
+    }
+
+    /// Let other accounts read the file: mode 644 on a Mac, an Everyone
+    /// entry on Windows (as a file unzipped from elsewhere may have).
+    fn share(path: &Path) {
+        #[cfg(unix)]
+        crate::fsmode::set_mode(path, 0o644).unwrap();
+        #[cfg(windows)]
+        assert!(std::process::Command::new("icacls")
+            .arg(path)
+            .args(["/grant", "*S-1-1-0:R"])
+            .stdout(std::process::Stdio::null())
+            .status()
+            .unwrap()
+            .success());
+    }
+
+    fn private(path: &Path) -> bool {
+        !crate::fsmode::others_can_read(path, &path.metadata().unwrap())
     }
 
     fn c(name: &str, parent: &str) -> Option<KeyKind> {
@@ -889,7 +940,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
     fn report_flags_readable_shared_copied_and_never_includes_contents() {
         let dir = crate::test_support::sandbox();
         let home = dir.path().canonicalize().unwrap();
@@ -900,8 +950,8 @@ mod tests {
         std::fs::create_dir_all(ssh.parent().unwrap()).unwrap();
         std::fs::write(&dl, secret).unwrap();
         std::fs::write(&ssh, secret).unwrap();
-        std::fs::set_permissions(&dl, std::fs::Permissions::from_mode(0o644)).unwrap();
-        std::fs::set_permissions(&ssh, std::fs::Permissions::from_mode(0o600)).unwrap();
+        share(&dl);
+        crate::fsmode::make_private(&ssh).unwrap();
         let found = vec![
             Found {
                 path: dl.clone(),
@@ -967,14 +1017,7 @@ mod tests {
             memchr::memmem::find(&raw, b"AWS").is_none(),
             "no label in plain text"
         );
-        #[cfg(unix)]
-        {
-            let mode = std::fs::metadata(dir.path().join(STORE_FILE))
-                .unwrap()
-                .permissions()
-                .mode();
-            assert_eq!(mode & 0o777, 0o600);
-        }
+        assert!(private(&dir.path().join(STORE_FILE)));
 
         assert_eq!(load(dir.path(), &TestKey([7; 32])).unwrap(), store);
         assert!(
@@ -993,13 +1036,13 @@ mod tests {
 
     #[test]
     fn checking_gitignore_never_runs_commands_from_the_repository() {
-        if git_ignored(Path::new("/"), Path::new("/x")).is_none() {
-            return; // No developer tools on this Mac: git is never run.
-        }
+        let Some(git) = git_program() else {
+            return; // No git on this computer: git is never run.
+        };
         let dir = crate::test_support::sandbox();
         let repo = dir.path().join("downloaded");
         std::fs::create_dir_all(&repo).unwrap();
-        let ok = std::process::Command::new("/usr/bin/git")
+        let ok = std::process::Command::new(&git)
             .args(["init", "-q"])
             .current_dir(&repo)
             .status()
@@ -1007,9 +1050,10 @@ mod tests {
             .success();
         assert!(ok);
         let marker = dir.path().join("PWNED");
+        // Forward slashes: git config reads a backslash as an escape.
         let config = format!(
             "[core]\n\tfsmonitor = \"touch '{}'; false\"\n",
-            marker.display()
+            marker.display().to_string().replace('\\', "/")
         );
         let mut f = std::fs::OpenOptions::new()
             .append(true)
@@ -1020,7 +1064,7 @@ mod tests {
         std::fs::write(repo.join(".env"), "A=1\n").unwrap();
         // Make an index exist, as in a real repository.
         std::fs::write(repo.join("README"), "x").unwrap();
-        let _ = std::process::Command::new("/usr/bin/git")
+        let _ = std::process::Command::new(&git)
             .args(["-c", "core.fsmonitor=false", "add", "README"])
             .current_dir(&repo)
             .status();
@@ -1033,12 +1077,12 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
     fn permissions_are_fixed_only_for_listed_files() {
         let dir = crate::test_support::sandbox();
         let f = dir.path().join("k.pem");
         std::fs::write(&f, "x").unwrap();
-        std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o644)).unwrap();
+        share(&f);
+        assert!(!private(&f));
         let store = Store {
             files: vec![Found {
                 path: f.clone(),
@@ -1047,10 +1091,7 @@ mod tests {
             ..Default::default()
         };
         make_private(&store, &f.display().to_string()).unwrap();
-        assert_eq!(
-            std::fs::metadata(&f).unwrap().permissions().mode() & 0o777,
-            0o600
-        );
+        assert!(private(&f));
         assert!(make_private(&store, "/etc/hosts").is_err());
     }
 }

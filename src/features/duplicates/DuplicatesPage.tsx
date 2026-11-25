@@ -23,6 +23,7 @@ import type {
 import { cn } from "@/lib/utils";
 import { basename, parentOf, separatorOf } from "@/lib/paths";
 import { isWindows, words } from "@/lib/platform";
+import { PartialCheckbox } from "@/components/shared/PartialCheckbox";
 
 const MIN_SIZES = [
   { bytes: 1024 * 1024, label: "1 MB" },
@@ -96,15 +97,11 @@ function GroupRow({
   return (
     <li className="border-b border-border">
       <div className="flex items-center gap-3 px-4 py-2">
-        <input
-          type="checkbox"
+        <PartialCheckbox
           checked={chosen === extras.length}
-          ref={(el) => {
-            if (el) el.indeterminate = chosen > 0 && chosen < extras.length;
-          }}
+          partial={chosen > 0}
           onChange={onToggleGroup}
-          aria-label={`Select extra copies of ${group.name}`}
-          className="size-3.5 shrink-0 accent-[var(--accent)]"
+          label={`Select extra copies of ${group.name}`}
         />
         <button
           type="button"
