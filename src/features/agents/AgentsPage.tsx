@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Panel } from "@/components/ui/panel";
 import { formatBytes, formatCount, formatRelative } from "@/lib/format";
+import { joinPath } from "@/lib/paths";
 import { useApp } from "@/lib/store";
 import type { AgentReport } from "@/lib/types";
 import { isWindows, words } from "@/lib/platform";
@@ -50,10 +51,22 @@ const AGENT_APP: Record<string, string> = {
   "claude-desktop": "/Applications/Claude.app",
 };
 
+/**
+ * Windows has no app bundles: the agent's data folder, relative to the user
+ * folder, resolves to the installed program, whose own icon is used. Codex has
+ * no desktop app on Windows.
+ */
+const AGENT_APP_WINDOWS: Record<string, string> = {
+  cursor: ".cursor",
+  antigravity: "AppData\\Roaming\\Antigravity",
+  "claude-desktop": "AppData\\Roaming\\Claude",
+};
+
 const REPO_ISSUES = "https://github.com/Devanshgoel-123/diskpilot/issues/new";
 const REQUESTABLE = ["Windsurf", "GitHub Copilot", "Gemini CLI", "Cline", "Zed", "Kiro"];
 
 export function AgentLogo({ id, size = "md" }: { id: string; size?: "sm" | "md" | "lg" }) {
+  const home = useApp((s) => s.env?.homeDir);
   const box =
     size === "lg" ? "size-10 rounded-xl" : size === "md" ? "size-8 rounded-lg" : "size-5 rounded";
   const mark = size === "lg" ? "size-5" : size === "md" ? "size-4" : "size-3";
@@ -74,7 +87,11 @@ export function AgentLogo({ id, size = "md" }: { id: string; size?: "sm" | "md" 
         )}
     </span>
   );
-  const app = isWindows() ? undefined : AGENT_APP[id];
+  const app = isWindows()
+    ? home && AGENT_APP_WINDOWS[id]
+      ? joinPath(home, AGENT_APP_WINDOWS[id])
+      : undefined
+    : AGENT_APP[id];
   if (!app) return fallback;
   return <AppIcon path={app} className={cn("shrink-0", box)} fallback={fallback} />;
 }
