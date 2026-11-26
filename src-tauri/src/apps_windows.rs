@@ -1252,6 +1252,37 @@ mod tests {
         }
     }
 
+    /// The AI Agents page asks for these data folders to show each agent's
+    /// own program icon (`AGENT_APP_WINDOWS` in AgentsPage.tsx).
+    #[cfg(windows)]
+    #[test]
+    fn agent_data_folders_resolve_to_their_programs() {
+        let mut index = crate::apps::AppIndex::default();
+        index.add(app(
+            "Cursor",
+            Some(r"C:\Users\me\AppData\Local\Programs\cursor"),
+        ));
+        index.add(app(
+            "Antigravity",
+            Some(r"C:\Users\me\AppData\Local\Programs\Antigravity"),
+        ));
+        index.add(app(
+            "Claude",
+            Some(r"C:\Users\me\AppData\Local\AnthropicClaude"),
+        ));
+        let home = Path::new(r"C:\Users\me");
+        let name = |p: &str| index.resolve(home, Path::new(p)).map(|a| a.name.clone());
+        assert_eq!(name(r"C:\Users\me\.cursor").as_deref(), Some("Cursor"));
+        assert_eq!(
+            name(r"C:\Users\me\AppData\Roaming\Antigravity").as_deref(),
+            Some("Antigravity")
+        );
+        assert_eq!(
+            name(r"C:\Users\me\AppData\Roaming\Claude").as_deref(),
+            Some("Claude")
+        );
+    }
+
     /// Reads this PC's real registry: the runner has many programs installed.
     #[cfg(windows)]
     #[test]
